@@ -23,6 +23,7 @@ export function loadServerConfig(filePath: string): ServerConfig {
       host: (server.host as string) ?? "0.0.0.0",
       localPort: (server.localPort as number) ?? 9901,
       rateLimit: (server.rateLimit as string) ?? "100/hour",
+      streamTimeoutSeconds: (server.streamTimeoutSeconds as number) ?? 300,
     },
     agents: Object.fromEntries(
       Object.entries(agents).map(([name, cfg]) => [

@@ -15,6 +15,8 @@ import { MdnsProvider } from "../src/discovery/mdns-provider.js";
 import { DirectoryProvider } from "../src/discovery/directory-provider.js";
 import { DiscoveryRegistry } from "../src/discovery/registry.js";
 import type { DiscoveryProvider } from "../src/discovery/types.js";
+import { buildStatusOutput } from "../src/status.js";
+import { pingAgent, formatPingResult } from "../src/ping.js";
 
 const DEFAULT_CONFIG_DIR = path.join(
   process.env.HOME ?? "~",
@@ -363,6 +365,69 @@ program
 
     console.log("To approve, run:");
     console.log('  claw-connect friends add --handle "<name>" --fingerprint "<fingerprint>"');
+  });
+
+program
+  .command("status")
+  .description("Show server status, registered agents, friend count")
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .action((opts) => {
+    const configDir = opts.dir;
+    const serverTomlPath = path.join(configDir, "server.toml");
+
+    if (!fs.existsSync(serverTomlPath)) {
+      console.error("Not initialized. Run 'claw-connect init' first.");
+      process.exit(1);
+    }
+
+    const serverConfig = loadServerConfig(serverTomlPath);
+    const friendsConfig = loadFriendsConfig(
+      path.join(configDir, "friends.toml"),
+    );
+
+    console.log(buildStatusOutput(serverConfig, friendsConfig));
+  });
+
+program
+  .command("ping <target>")
+  .description(
+    "Check if a remote agent is reachable (by handle or Agent Card URL)",
+  )
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .action(async (target, opts) => {
+    let agentCardUrl: string;
+
+    if (target.startsWith("http://") || target.startsWith("https://")) {
+      agentCardUrl = target;
+    } else {
+      const configDir = opts.dir;
+      const serverTomlPath = path.join(configDir, "server.toml");
+
+      if (!fs.existsSync(serverTomlPath)) {
+        console.error("Not initialized. Run 'claw-connect init' first.");
+        process.exit(1);
+      }
+
+      const serverConfig = loadServerConfig(serverTomlPath);
+      const peer = serverConfig.discovery.static?.peers?.[target];
+
+      if (peer?.agentCardUrl) {
+        agentCardUrl = peer.agentCardUrl;
+      } else {
+        console.error(
+          `Unknown handle "${target}". Use a full Agent Card URL or add the peer to static discovery config.`,
+        );
+        process.exit(1);
+      }
+    }
+
+    console.log(`Pinging ${agentCardUrl} ...`);
+    const result = await pingAgent(agentCardUrl);
+    console.log(formatPingResult(agentCardUrl, result));
+
+    if (!result.reachable) {
+      process.exit(1);
+    }
   });
 
 program

@@ -70,6 +70,57 @@ interface BuildRemoteOpts {
   description: string;
 }
 
+export async function fetchRemoteAgentCard(
+  url: string,
+): Promise<AgentCard | null> {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as any;
+
+    if (!data.name || !data.url) return null;
+
+    return data as AgentCard;
+  } catch {
+    return null;
+  }
+}
+
+interface BuildRichRemoteOpts {
+  remote: RemoteAgent;
+  localUrl: string;
+  remoteCard: AgentCard | null;
+}
+
+export function buildRichRemoteAgentCard(opts: BuildRichRemoteOpts): AgentCard {
+  const { remote, localUrl, remoteCard } = opts;
+
+  if (!remoteCard) {
+    return buildRemoteAgentCard({
+      remote,
+      localUrl,
+      description: `Remote agent: ${remote.localHandle}`,
+    });
+  }
+
+  return {
+    name: remote.localHandle,
+    description: remoteCard.description,
+    url: `${localUrl}/${remote.localHandle}`,
+    version: remoteCard.version,
+    skills: remoteCard.skills,
+    defaultInputModes: remoteCard.defaultInputModes,
+    defaultOutputModes: remoteCard.defaultOutputModes,
+    capabilities: remoteCard.capabilities,
+    securitySchemes: {},
+    securityRequirements: [],
+  };
+}
+
 export function buildRemoteAgentCard(opts: BuildRemoteOpts): AgentCard {
   return {
     name: opts.remote.localHandle,

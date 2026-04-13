@@ -26,6 +26,8 @@ import {
   agentTimeoutResponse,
   type A2AErrorResponse,
 } from "./errors.js";
+import { proxySSEStream, buildFailedEvent, initSSEResponse } from "./streaming.js";
+import { fetchRemoteAgentCard, buildRichRemoteAgentCard } from "./agent-card.js";
 import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
@@ -250,9 +252,43 @@ function createPublicApp(
         return;
       }
 
-      // --- Step 7: Forward to local agent with timeout ---
+      // --- Step 7: Forward to local agent ---
       const targetUrl = `${agent.localEndpoint}/${action}`;
       const timeoutMs = agent.timeoutSeconds * 1000;
+
+      // Streaming branch
+      if (action === "message:stream") {
+        const streamTimeoutMs = config.server.streamTimeoutSeconds * 1000;
+        const taskId = req.body?.message?.messageId ?? uuidv4();
+
+        try {
+          const upstreamResponse = await fetch(targetUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(req.body),
+          });
+
+          if (!upstreamResponse.ok || !upstreamResponse.body) {
+            const sse = initSSEResponse(res);
+            sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
+            sse.end();
+            return;
+          }
+
+          await proxySSEStream({
+            upstreamResponse,
+            downstream: res,
+            timeoutMs: streamTimeoutMs,
+            taskId,
+            contextId: `ctx-${taskId}`,
+          });
+        } catch {
+          if (!res.headersSent) {
+            sendA2AError(res, agentTimeoutResponse(tenant, agent.timeoutSeconds));
+          }
+        }
+        return;
+      }
 
       try {
         const controller = new AbortController();
@@ -318,15 +354,19 @@ function createLocalApp(
   });
 
   // Per-tenant Agent Card (remote agents)
-  app.get("/:tenant/.well-known/agent-card.json", (req, res) => {
+  app.get("/:tenant/.well-known/agent-card.json", async (req, res) => {
     const { tenant } = req.params;
     const remote = mapLocalTenantToRemote(remoteAgents, tenant);
 
     if (remote) {
-      const card = buildRemoteAgentCard({
+      // Try to fetch the remote agent's actual Agent Card for rich metadata
+      const agentCardUrl = `${remote.remoteEndpoint}/${remote.remoteTenant}/.well-known/agent-card.json`;
+      const remoteCard = await fetchRemoteAgentCard(agentCardUrl);
+
+      const card = buildRichRemoteAgentCard({
         remote,
         localUrl: `http://127.0.0.1:${config.server.localPort}`,
-        description: `Remote agent: ${remote.localHandle}`,
+        remoteCard,
       });
       res.json(card);
       return;
@@ -352,13 +392,48 @@ function createLocalApp(
   app.post("/:tenant/:action", async (req, res) => {
     const { tenant, action } = req.params;
     const remote = mapLocalTenantToRemote(remoteAgents, tenant);
+    const streamTimeoutMs = config.server.streamTimeoutSeconds * 1000;
+    const isStream = action === "message:stream";
 
     if (!remote) {
       // Not a remote agent — could be forwarding to local agent (passthrough)
       const agent = config.agents[tenant];
       if (agent) {
+        const targetUrl = `${agent.localEndpoint}/${action}`;
+
+        if (isStream) {
+          const taskId = req.body?.message?.messageId ?? uuidv4();
+          try {
+            const upstreamResponse = await fetch(targetUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(req.body),
+            });
+
+            if (!upstreamResponse.ok || !upstreamResponse.body) {
+              const sse = initSSEResponse(res);
+              sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
+              sse.end();
+              return;
+            }
+
+            await proxySSEStream({
+              upstreamResponse,
+              downstream: res,
+              timeoutMs: streamTimeoutMs,
+              taskId,
+              contextId: `ctx-${taskId}`,
+            });
+          } catch {
+            if (!res.headersSent) {
+              res.status(504).json({ error: "Local agent unreachable" });
+            }
+          }
+          return;
+        }
+
         try {
-          const response = await fetch(`${agent.localEndpoint}/${action}`, {
+          const response = await fetch(targetUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(req.body),
@@ -404,9 +479,35 @@ function createLocalApp(
         dispatcher,
       });
 
+      if (isStream) {
+        const taskId = req.body?.message?.messageId ?? uuidv4();
+        if (!response.ok || !response.body) {
+          const sse = initSSEResponse(res);
+          sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Remote agent returned non-streaming response"));
+          sse.end();
+          return;
+        }
+
+        await proxySSEStream({
+          upstreamResponse: response,
+          downstream: res,
+          timeoutMs: streamTimeoutMs,
+          taskId,
+          contextId: `ctx-${taskId}`,
+        });
+        return;
+      }
+
       const data = await response.json();
       res.status(response.status).json(data);
     } catch {
+      if (isStream && !res.headersSent) {
+        const taskId = req.body?.message?.messageId ?? uuidv4();
+        const sse = initSSEResponse(res);
+        sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Remote agent unreachable"));
+        sse.end();
+        return;
+      }
       res.status(504).json({
         id: uuidv4(),
         status: { state: "TASK_STATE_FAILED" },
