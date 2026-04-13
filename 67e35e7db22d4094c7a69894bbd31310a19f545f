@@ -1,0 +1,49 @@
+claw-connect/test/errors.test.ts
+  1c601e1d01f588af 1-60
+claw-connect/src/config.ts
+  1c601e1d01f588af 34
+claw-connect/src/middleware.ts
+  1c601e1d01f588af 2-3,77-84
+claw-connect/src/server.ts
+  1c601e1d01f588af 20-28,31-36,52-74,131-132,159,165-172,176,180,226,230,233,237-244,247,249,253,255,258-260,265,268-269,273
+claw-connect/test/rate-limiter.test.ts
+  1c601e1d01f588af 1-103
+claw-connect/src/types.ts
+  1c601e1d01f588af 20
+claw-connect/src/rate-limiter.ts
+  1c601e1d01f588af 1-81
+claw-connect/src/errors.ts
+  1c601e1d01f588af 1-82
+claw-connect/fixtures/server.toml
+  1c601e1d01f588af 11,17
+claw-connect/test/middleware.test.ts
+  1c601e1d01f588af 8,10,32,117-137
+claw-connect/test/config.test.ts
+  1c601e1d01f588af 23-24
+claw-connect/test/e2e-rate-limit.test.ts
+  1c601e1d01f588af 1-280
+claw-connect/bin/cli.ts
+  1c601e1d01f588af 124
+claw-connect/test/e2e-handshake.test.ts
+  1c601e1d01f588af 153-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "67e35e7db22d4094c7a69894bbd31310a19f545f",
+  "prompts": {
+    "1c601e1d01f588af": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b4e579a-c68a-47c3-a589-90d89961f42f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 728,
+      "total_deletions": 27,
+      "accepted_lines": 733,
+      "overriden_lines": 0
+    }
+  }
+}
