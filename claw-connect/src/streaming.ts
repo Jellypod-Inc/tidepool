@@ -106,25 +106,35 @@ export async function proxySSEStream(opts: {
   let closed = false;
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
+  // Promise that resolves when closing — used to interrupt a blocked reader.read()
+  // via Promise.race. Without this, a hung upstream would keep the read pending
+  // even after we call reader.cancel().
+  let closeResolve: () => void = () => {};
+  const closePromise = new Promise<{ done: true; value: undefined }>(
+    (resolve) => {
+      closeResolve = () => resolve({ done: true, value: undefined });
+    },
+  );
+
+  const timeoutCtrl = createTimeoutController(timeoutMs, () => {
+    if (closed) return;
+    const failEvent = buildFailedEvent(taskId, contextId, "Stream timed out — no data received within timeout period");
+    sse.write(failEvent);
+    cleanup();
+  });
+
   function cleanup() {
     if (closed) return;
     closed = true;
-    timeout.clear();
-    // Cancel the reader so blocked reads return
+    timeoutCtrl.clear();
     if (reader) {
       reader.cancel().catch(() => {
         // ignore cancellation errors
       });
     }
     sse.end();
+    closeResolve();
   }
-
-  const timeout = createTimeoutController(timeoutMs, () => {
-    if (closed) return;
-    const failEvent = buildFailedEvent(taskId, contextId, "Stream timed out — no data received within timeout period");
-    sse.write(failEvent);
-    cleanup();
-  });
 
   downstream.on("close", () => {
     cleanup();
@@ -139,42 +149,13 @@ export async function proxySSEStream(opts: {
   }
 
   reader = body.getReader();
+  const activeReader = reader;
   const decoder = new TextDecoder();
   let buffer = "";
 
-  // Promise that resolves when cleanup is called — used to interrupt reader.read()
-  let closeResolve: () => void = () => {};
-  const closePromise = new Promise<{ done: true; value: undefined }>(
-    (resolve) => {
-      closeResolve = () => resolve({ done: true, value: undefined });
-    },
-  );
-
-  // Override timeout callback to also unblock the read race
-  timeout.clear();
-  const timeoutCtrl = createTimeoutController(timeoutMs, () => {
-    if (closed) return;
-    const failEvent = buildFailedEvent(taskId, contextId, "Stream timed out — no data received within timeout period");
-    sse.write(failEvent);
-    closed = true;
-    timeoutCtrl.clear();
-    if (reader) {
-      reader.cancel().catch(() => {});
-    }
-    sse.end();
-    closeResolve();
-  });
-
-  downstream.on("close", () => {
-    if (closed) return;
-    closed = true;
-    timeoutCtrl.clear();
-    closeResolve();
-  });
-
   try {
     while (!closed) {
-      const result = await Promise.race([reader.read(), closePromise]);
+      const result = await Promise.race([activeReader.read(), closePromise]);
       if (result.done) break;
 
       timeoutCtrl.reset();
@@ -199,14 +180,10 @@ export async function proxySSEStream(opts: {
     }
   } finally {
     try {
-      reader.releaseLock();
+      activeReader.releaseLock();
     } catch {
       // already released
     }
-    if (!closed) {
-      closed = true;
-      timeoutCtrl.clear();
-      sse.end();
-    }
+    cleanup();
   }
 }

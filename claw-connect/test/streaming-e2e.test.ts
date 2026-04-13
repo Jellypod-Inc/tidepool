@@ -74,6 +74,10 @@ function createHangingMockAgent(port: number): http.Server {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
+    // flushHeaders forces headers onto the wire so fetch() can return the
+    // Response. Without this, writeHead buffers and the client's fetch hangs.
+    res.flushHeaders();
+    // Never write a body — the proxy's stream timeout should fire.
   });
 
   return app.listen(port, "127.0.0.1");
@@ -268,7 +272,7 @@ describe("e2e: SSE stream timeout", () => {
     fs.rmSync(tmpDir, { recursive: true });
   });
 
-  it.skip("sends TASK_STATE_FAILED when stream times out with no data", async () => {
+  it("sends TASK_STATE_FAILED when stream times out with no data", async () => {
     const response = await fetch(
       "http://127.0.0.1:59911/slow-agent/message:stream",
       {

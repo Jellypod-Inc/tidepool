@@ -1,6 +1,4 @@
 import forge from "node-forge";
-import { TokenBucket } from "./rate-limiter.js";
-import type { ConsumeResult } from "./rate-limiter.js";
 import type {
   FriendsConfig,
   FriendEntry,
@@ -8,7 +6,8 @@ import type {
   AgentConfig,
 } from "./types.js";
 
-const EXTENSION_URL = "https://clawconnect.dev/ext/connection/v1";
+export const CONNECTION_EXTENSION_URL =
+  "https://clawconnect.dev/ext/connection/v1";
 
 interface FriendLookup {
   handle: string;
@@ -65,21 +64,12 @@ export function isConnectionRequest(body: unknown): boolean {
   const extensions = message.extensions as string[] | undefined;
   if (!extensions || !Array.isArray(extensions)) return false;
 
-  if (!extensions.includes(EXTENSION_URL)) return false;
+  if (!extensions.includes(CONNECTION_EXTENSION_URL)) return false;
 
   const parts = message.parts as Array<Record<string, string>> | undefined;
   if (!parts || !Array.isArray(parts) || parts.length === 0) return false;
 
   return parts[0].text === "CONNECTION_REQUEST";
-}
-
-/**
- * Creates a rate limit check function bound to a token bucket.
- */
-export function createRateLimitChecker(
-  bucket: TokenBucket,
-): () => ConsumeResult {
-  return () => bucket.consume();
 }
 
 /**
@@ -92,7 +82,7 @@ export function extractConnectionMetadata(
   const metadata = msg.metadata as Record<string, Record<string, string>> | undefined;
   if (!metadata) return null;
 
-  const ext = metadata[EXTENSION_URL];
+  const ext = metadata[CONNECTION_EXTENSION_URL];
   if (!ext || ext.type !== "request") return null;
 
   return {

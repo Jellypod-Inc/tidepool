@@ -136,6 +136,16 @@ function createPublicApp(
   const app = express();
   app.use(express.json());
 
+  // Serializes concurrent connection-request approvals so two requests can't
+  // both derive the same handle or race friends.toml writes. deriveHandle reads
+  // in-memory state which is only safe when mutations are serialized.
+  let handshakeChain: Promise<unknown> = Promise.resolve();
+  const runSerial = <T>(fn: () => Promise<T>): Promise<T> => {
+    const next = handshakeChain.then(() => fn());
+    handshakeChain = next.catch(() => undefined);
+    return next;
+  };
+
   // Agent Card endpoint per tenant
   app.get(
     "/:tenant/.well-known/agent-card.json",
@@ -193,28 +203,31 @@ function createPublicApp(
           }
 
           try {
-            const result = await handleConnectionRequest({
-              config: config.connectionRequests,
-              friends,
-              fingerprint: peerFingerprint,
-              reason: metadata.reason,
-              agentCardUrl: metadata.agentCardUrl,
-              fetchAgentCard: async (url: string) => {
-                const resp = await fetch(url);
-                const card = await resp.json() as { name: string };
-                return { name: card.name };
-              },
-              pendingRequestsPath: `${configDir}/pending-requests.json`,
-            });
-
-            if (result.newFriend) {
-              const updated = addFriend(friends, {
-                handle: result.newFriend.handle,
-                fingerprint: result.newFriend.fingerprint,
+            const result = await runSerial(async () => {
+              const r = await handleConnectionRequest({
+                config: config.connectionRequests,
+                friends,
+                fingerprint: peerFingerprint,
+                reason: metadata.reason,
+                agentCardUrl: metadata.agentCardUrl,
+                fetchAgentCard: async (url: string) => {
+                  const resp = await fetch(url);
+                  const card = await resp.json() as { name: string };
+                  return { name: card.name };
+                },
+                pendingRequestsPath: `${configDir}/pending-requests.json`,
               });
-              friends.friends = updated.friends;
-              writeFriendsConfig(`${configDir}/friends.toml`, updated);
-            }
+
+              if (r.newFriend) {
+                const updated = addFriend(friends, {
+                  handle: r.newFriend.handle,
+                  fingerprint: r.newFriend.fingerprint,
+                });
+                friends.friends = updated.friends;
+                writeFriendsConfig(`${configDir}/friends.toml`, updated);
+              }
+              return r;
+            });
 
             res.json(result.response);
           } catch (err) {
@@ -305,8 +318,21 @@ function createPublicApp(
 
         const data = await response.json();
         res.status(response.status).json(data);
-      } catch {
-        sendA2AError(res, agentTimeoutResponse(tenant, agent.timeoutSeconds));
+      } catch (err) {
+        // Only report as timeout if the abort fired. Other errors (ECONNREFUSED,
+        // invalid JSON, etc.) get a 504 with a more accurate message.
+        if (err instanceof Error && err.name === "AbortError") {
+          sendA2AError(res, agentTimeoutResponse(tenant, agent.timeoutSeconds));
+        } else {
+          const message = err instanceof Error ? err.message : "Agent unreachable";
+          res.status(504).json({
+            id: uuidv4(),
+            status: { state: "TASK_STATE_FAILED" },
+            artifacts: [
+              { artifactId: "error", parts: [{ kind: "text", text: message }] },
+            ],
+          });
+        }
       }
     },
   );
@@ -463,6 +489,14 @@ function createLocalApp(
     const keyPath = `${configDir}/agents/${firstAgent}/identity.key`;
 
     try {
+      // TODO(mTLS pinning): The spec requires verifying the remote peer's cert
+      // fingerprint against remote.certFingerprint on every outbound request.
+      // Node's TLS with `rejectUnauthorized: false` bypasses `checkServerIdentity`,
+      // so this cannot be done via undici's connect options alone. A proper fix
+      // refactors outbound calls to use Node's `https.request` directly, which
+      // exposes the TLSSocket so getPeerCertificate().raw can be hashed and
+      // compared. Inbound verification (server.ts:extractFingerprint) already
+      // pins correctly; outbound pinning is a known v1 gap tracked here.
       const dispatcher = new Agent({
         connect: {
           cert: fs.readFileSync(certPath, "utf-8"),

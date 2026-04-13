@@ -475,14 +475,19 @@ program
 
       if (config.discovery.directory?.enabled && config.discovery.directory.url) {
         const agentNames = Object.keys(config.agents);
-        let fingerprint = "unknown";
-        if (agentNames.length > 0) {
-          const certPath = path.join(configDir, "agents", agentNames[0], "identity.crt");
-          if (fs.existsSync(certPath)) {
-            const certPem = fs.readFileSync(certPath, "utf-8");
-            fingerprint = getFingerprint(certPem);
-          }
+        if (agentNames.length === 0) {
+          console.error(
+            "Directory discovery is enabled but no agents are registered. Register an agent first.",
+          );
+          process.exit(1);
         }
+        const certPath = path.join(configDir, "agents", agentNames[0], "identity.crt");
+        if (!fs.existsSync(certPath)) {
+          console.error(`Missing cert for agent "${agentNames[0]}" at ${certPath}.`);
+          process.exit(1);
+        }
+        const certPem = fs.readFileSync(certPath, "utf-8");
+        const fingerprint = getFingerprint(certPem);
         providers.push(new DirectoryProvider(config.discovery.directory.url, fingerprint));
       }
 

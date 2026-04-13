@@ -38,9 +38,15 @@ export class DirectoryProvider implements DiscoveryProvider {
   }
 
   async search(query: { query?: string; handle?: string }): Promise<DiscoveredAgent[]> {
+    // Exact handle lookups hit /v1/agents/:handle instead of doing a substring
+    // search + client-side filter.
+    if (query.handle) {
+      const resolved = await this.resolve(query.handle);
+      return resolved ? [resolved] : [];
+    }
+
     const params = new URLSearchParams();
     if (query.query) params.set("q", query.query);
-    if (query.handle) params.set("q", query.handle);
 
     const url = `${this.directoryUrl}/v1/agents/search?${params.toString()}`;
     const res = await fetch(url);
@@ -48,11 +54,6 @@ export class DirectoryProvider implements DiscoveryProvider {
     if (!res.ok) return [];
 
     const data = (await res.json()) as { agents: DiscoveredAgent[] };
-
-    if (query.handle) {
-      return data.agents.filter((a) => a.handle === query.handle);
-    }
-
     return data.agents;
   }
 

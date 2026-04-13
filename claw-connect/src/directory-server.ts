@@ -13,6 +13,12 @@ interface DirectoryEntry {
 
 const HEARTBEAT_TIMEOUT_MS = 60_000;
 
+function withFreshStatus(entry: DirectoryEntry): DirectoryEntry {
+  const isStale = Date.now() - entry.lastSeen > HEARTBEAT_TIMEOUT_MS;
+  if (!isStale) return entry;
+  return { ...entry, status: "offline" };
+}
+
 export class DirectoryStore {
   private entries = new Map<string, DirectoryEntry>();
 
@@ -60,14 +66,10 @@ export class DirectoryStore {
   }
 
   search(query?: string, status?: string): DirectoryEntry[] {
-    let results = Array.from(this.entries.values());
-
-    const now = Date.now();
-    for (const entry of results) {
-      if (now - entry.lastSeen > HEARTBEAT_TIMEOUT_MS) {
-        entry.status = "offline";
-      }
-    }
+    // Project a view with freshness-based status without mutating stored entries.
+    let results = Array.from(this.entries.values()).map((e) =>
+      withFreshStatus(e),
+    );
 
     if (query) {
       const q = query.toLowerCase();
@@ -86,13 +88,17 @@ export class DirectoryStore {
   }
 
   getByHandle(handle: string): DirectoryEntry | null {
-    const entry = this.entries.get(handle) ?? null;
-    if (entry) {
-      if (Date.now() - entry.lastSeen > HEARTBEAT_TIMEOUT_MS) {
-        entry.status = "offline";
-      }
-    }
-    return entry;
+    return this.entries.get(handle) ?? null;
+  }
+
+  /**
+   * Like getByHandle but returns a view with `status` recomputed from lastSeen
+   * freshness. Does not mutate the stored entry.
+   */
+  getByHandleFresh(handle: string): DirectoryEntry | null {
+    const entry = this.entries.get(handle);
+    if (!entry) return null;
+    return withFreshStatus(entry);
   }
 
   clear(): void {
@@ -142,7 +148,7 @@ export function createDirectoryApp(): { app: express.Application; store: Directo
   });
 
   app.get("/v1/agents/:handle", (req, res) => {
-    const entry = store.getByHandle(req.params.handle);
+    const entry = store.getByHandleFresh(req.params.handle);
     if (!entry) {
       res.status(404).json({ error: "Agent not found" });
       return;

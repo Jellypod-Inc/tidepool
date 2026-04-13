@@ -1,12 +1,11 @@
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
+import { CONNECTION_EXTENSION_URL } from "./middleware.js";
 import type {
   ConnectionRequestConfig,
   ConnectionRequest,
   FriendsConfig,
 } from "./types.js";
-
-const EXTENSION_URL = "https://clawconnect.dev/ext/connection/v1";
 
 interface ConnectionResponse {
   id: string;
@@ -53,7 +52,7 @@ export function buildAcceptedResponse(): ConnectionResponse {
         artifactId: "connection-result",
         parts: [{ kind: "text", text: "Connection accepted" }],
         metadata: {
-          [EXTENSION_URL]: {
+          [CONNECTION_EXTENSION_URL]: {
             type: "accepted",
           },
         },
@@ -71,7 +70,7 @@ export function buildDeniedResponse(reason: string): ConnectionResponse {
         artifactId: "connection-result",
         parts: [{ kind: "text", text: "Connection denied" }],
         metadata: {
-          [EXTENSION_URL]: {
+          [CONNECTION_EXTENSION_URL]: {
             type: "denied",
             reason,
           },
