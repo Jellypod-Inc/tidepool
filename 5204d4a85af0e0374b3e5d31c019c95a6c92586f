@@ -1,0 +1,37 @@
+claw-connect/src/middleware.ts
+  1c601e1d01f588af 9-10,67,85
+claw-connect/test/streaming-e2e.test.ts
+  1c601e1d01f588af 77-80,275
+claw-connect/src/discovery/directory-provider.ts
+  1c601e1d01f588af 41-47
+claw-connect/src/streaming.ts
+  1c601e1d01f588af 109-125,129,136,152,158,183,187
+claw-connect/src/handshake.ts
+  1c601e1d01f588af 3,55,73
+claw-connect/bin/cli.ts
+  1c601e1d01f588af 478-482,484-490
+claw-connect/src/directory-server.ts
+  1c601e1d01f588af 16-21,69-72,91-101,151
+claw-connect/src/server.ts
+  1c601e1d01f588af 139-148,206-218,220-230,321-335,492-499
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "5204d4a85af0e0374b3e5d31c019c95a6c92586f",
+  "prompts": {
+    "1c601e1d01f588af": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b4e579a-c68a-47c3-a589-90d89961f42f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 2382,
+      "total_deletions": 2553,
+      "accepted_lines": 144,
+      "overriden_lines": 0
+    }
+  }
+}
