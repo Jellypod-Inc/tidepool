@@ -50,6 +50,34 @@ export function loadServerConfig(filePath: string): ServerConfig {
     discovery: {
       providers: (discovery.providers as string[]) ?? ["static"],
       cacheTtlSeconds: (discovery.cacheTtlSeconds as number) ?? 300,
+      mdns: discovery.mdns
+        ? { enabled: (discovery.mdns as Record<string, unknown>).enabled as boolean }
+        : undefined,
+      directory: discovery.directory
+        ? {
+            enabled: (discovery.directory as Record<string, unknown>).enabled as boolean,
+            url: (discovery.directory as Record<string, unknown>).url as string,
+          }
+        : undefined,
+      static: discovery.static
+        ? {
+            peers: Object.fromEntries(
+              Object.entries(
+                ((discovery.static as Record<string, unknown>).peers ?? {}) as Record<
+                  string,
+                  Record<string, unknown>
+                >,
+              ).map(([name, peer]) => [
+                name,
+                {
+                  endpoint: peer.endpoint as string,
+                  agentCardUrl: (peer.agentCardUrl ?? peer.agent_card_url) as string,
+                  description: peer.description as string | undefined,
+                },
+              ]),
+            ),
+          }
+        : undefined,
     },
   };
 }

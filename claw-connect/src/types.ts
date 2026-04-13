@@ -7,9 +7,27 @@ export interface ServerConfig {
   };
   agents: Record<string, AgentConfig>;
   connectionRequests: ConnectionRequestConfig;
-  discovery: {
-    providers: string[];
-    cacheTtlSeconds: number;
+  discovery: DiscoveryConfig;
+}
+
+export interface StaticPeer {
+  endpoint: string;
+  agentCardUrl: string;
+  description?: string;
+}
+
+export interface DiscoveryConfig {
+  providers: string[];
+  cacheTtlSeconds: number;
+  mdns?: {
+    enabled: boolean;
+  };
+  directory?: {
+    enabled: boolean;
+    url: string;
+  };
+  static?: {
+    peers: Record<string, StaticPeer>;
   };
 }
 

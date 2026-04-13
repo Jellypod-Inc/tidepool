@@ -7,8 +7,14 @@ import { Agent as UndiciAgent } from "undici";
 import { generateIdentity } from "../src/identity.js";
 import { buildLocalAgentCard } from "../src/agent-card.js";
 import { startServer } from "../src/server.js";
-import { loadFriendsConfig } from "../src/config.js";
+import { loadFriendsConfig, loadServerConfig } from "../src/config.js";
 import { addFriend, removeFriend, listFriends, writeFriendsConfig } from "../src/friends.js";
+import { getFingerprint } from "../src/identity.js";
+import { StaticProvider } from "../src/discovery/static-provider.js";
+import { MdnsProvider } from "../src/discovery/mdns-provider.js";
+import { DirectoryProvider } from "../src/discovery/directory-provider.js";
+import { DiscoveryRegistry } from "../src/discovery/registry.js";
+import type { DiscoveryProvider } from "../src/discovery/types.js";
 
 const DEFAULT_CONFIG_DIR = path.join(
   process.env.HOME ?? "~",
@@ -369,6 +375,86 @@ program
 
     console.log("Starting Claw Connect...");
     await startServer({ configDir });
+  });
+
+program
+  .command("search [query]")
+  .description("Search for agents via discovery providers")
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .option("--local", "mDNS only (local network)", false)
+  .action(async (query: string | undefined, opts) => {
+    const configDir = opts.dir;
+    const serverTomlPath = path.join(configDir, "server.toml");
+
+    if (!fs.existsSync(serverTomlPath)) {
+      console.error("Not initialized. Run 'claw-connect init' first.");
+      process.exit(1);
+    }
+
+    const config = loadServerConfig(serverTomlPath);
+
+    const providers: DiscoveryProvider[] = [];
+
+    if (opts.local) {
+      const mdns = new MdnsProvider();
+      providers.push(mdns);
+      console.log("Searching local network (mDNS)...\n");
+    } else {
+      if (config.discovery.static?.peers) {
+        providers.push(new StaticProvider(config.discovery.static.peers));
+      }
+
+      if (config.discovery.mdns?.enabled) {
+        providers.push(new MdnsProvider());
+      }
+
+      if (config.discovery.directory?.enabled && config.discovery.directory.url) {
+        const agentNames = Object.keys(config.agents);
+        let fingerprint = "unknown";
+        if (agentNames.length > 0) {
+          const certPath = path.join(configDir, "agents", agentNames[0], "identity.crt");
+          if (fs.existsSync(certPath)) {
+            const certPem = fs.readFileSync(certPath, "utf-8");
+            fingerprint = getFingerprint(certPem);
+          }
+        }
+        providers.push(new DirectoryProvider(config.discovery.directory.url, fingerprint));
+      }
+
+      const providerNames = providers.map((p) => p.name).join(", ");
+      console.log(`Searching via: ${providerNames}...\n`);
+    }
+
+    if (providers.length === 0) {
+      console.log("No discovery providers configured. Add providers to server.toml [discovery] section.");
+      process.exit(0);
+    }
+
+    const registry = new DiscoveryRegistry(providers, config.discovery.cacheTtlSeconds);
+    const results = await registry.search(query ? { query } : {});
+
+    if (results.length === 0) {
+      console.log("No agents found.");
+    } else {
+      console.log(`Found ${results.length} agent(s):\n`);
+      for (const agent of results) {
+        const statusIcon = agent.status === "online" ? "[online]" : "[offline]";
+        console.log(`  ${agent.handle} ${statusIcon}`);
+        console.log(`    ${agent.description}`);
+        console.log(`    Endpoint: ${agent.endpoint}`);
+        console.log(`    Agent Card: ${agent.agentCardUrl}`);
+        console.log();
+      }
+
+      console.log("To connect to an agent:");
+      console.log("  claw-connect connect <agent-card-url>");
+    }
+
+    for (const provider of providers) {
+      if (provider instanceof MdnsProvider) {
+        provider.destroy();
+      }
+    }
   });
 
 program.parse();
