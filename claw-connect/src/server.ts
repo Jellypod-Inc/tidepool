@@ -5,10 +5,18 @@ import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { Agent } from "undici";
 import { loadServerConfig, loadFriendsConfig } from "./config.js";
-import { getFingerprint } from "./identity.js";
-import { checkFriend, checkAgentScope, resolveTenant } from "./middleware.js";
+import {
+  checkFriend,
+  checkAgentScope,
+  resolveTenant,
+  extractFingerprint,
+  isConnectionRequest,
+  extractConnectionMetadata,
+} from "./middleware.js";
 import { mapLocalTenantToRemote, buildOutboundUrl } from "./proxy.js";
 import { buildLocalAgentCard, buildRemoteAgentCard } from "./agent-card.js";
+import { handleConnectionRequest } from "./handshake.js";
+import { addFriend, writeFriendsConfig } from "./friends.js";
 import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
 
 export interface StartServerOpts {
@@ -25,7 +33,7 @@ export async function startServer(opts: StartServerOpts) {
   );
   const remoteAgents = opts.remoteAgents ?? [];
 
-  const publicApp = createPublicApp(serverConfig, friendsConfig);
+  const publicApp = createPublicApp(serverConfig, friendsConfig, opts.configDir);
   const localApp = createLocalApp(serverConfig, remoteAgents, opts.configDir);
 
   // Public interface: mTLS
@@ -81,6 +89,7 @@ function buildTlsOptions(configDir: string, agentNames: string[]) {
 function createPublicApp(
   config: ServerConfig,
   friends: FriendsConfig,
+  configDir: string,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -115,18 +124,60 @@ function createPublicApp(
 
       // 1. Extract peer cert fingerprint
       const peerCert = (req.socket as any).getPeerCertificate?.();
-      if (!peerCert || !peerCert.raw) {
+      const peerFingerprint = extractFingerprint(peerCert?.raw);
+      if (!peerFingerprint) {
         res.status(401).json({ error: "No client certificate" });
         return;
       }
 
-      const peerFingerprint = getFingerprint(
-        `-----BEGIN CERTIFICATE-----\n${peerCert.raw.toString("base64")}\n-----END CERTIFICATE-----`,
-      );
-
       // 2. Check friends list
       const friendLookup = checkFriend(friends, peerFingerprint);
       if (!friendLookup) {
+        // Not a friend — check if this is a CONNECTION_REQUEST
+        if (isConnectionRequest(req.body)) {
+          const metadata = extractConnectionMetadata(
+            req.body as Record<string, unknown>,
+          );
+          if (!metadata) {
+            res.status(400).json({ error: "Malformed connection request" });
+            return;
+          }
+
+          try {
+            const result = await handleConnectionRequest({
+              config: config.connectionRequests,
+              friends,
+              fingerprint: peerFingerprint,
+              reason: metadata.reason,
+              agentCardUrl: metadata.agentCardUrl,
+              fetchAgentCard: async (url: string) => {
+                const resp = await fetch(url);
+                const card = await resp.json() as { name: string };
+                return { name: card.name };
+              },
+              pendingRequestsPath: `${configDir}/pending-requests.json`,
+            });
+
+            // If approved, persist the new friend
+            if (result.newFriend) {
+              const updated = addFriend(friends, {
+                handle: result.newFriend.handle,
+                fingerprint: result.newFriend.fingerprint,
+              });
+              // Mutate the in-memory friends config so subsequent requests see the new friend
+              friends.friends = updated.friends;
+              writeFriendsConfig(`${configDir}/friends.toml`, updated);
+            }
+
+            res.json(result.response);
+          } catch (err) {
+            const message =
+              err instanceof Error ? err.message : "Handshake failed";
+            res.status(500).json({ error: message });
+          }
+          return;
+        }
+
         res.status(401).json({ error: "Not a friend" });
         return;
       }

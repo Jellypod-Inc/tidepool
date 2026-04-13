@@ -28,6 +28,26 @@ describe("loadServerConfig", () => {
   });
 });
 
+describe("loadServerConfig — auto mode", () => {
+  it("parses connectionRequests.auto config", () => {
+    const config = loadServerConfig(path.join(fixturesDir, "server-auto.toml"));
+
+    expect(config.connectionRequests.mode).toBe("auto");
+    expect(config.connectionRequests.auto).toBeDefined();
+    expect(config.connectionRequests.auto!.model).toBe("your-model-id");
+    expect(config.connectionRequests.auto!.apiKeyEnv).toBe("YOUR_PROVIDER_API_KEY");
+    expect(config.connectionRequests.auto!.policy).toBe(
+      "Accept connections from agents who have a clear reason.",
+    );
+  });
+
+  it("has no auto config when mode is deny", () => {
+    const config = loadServerConfig(path.join(fixturesDir, "server.toml"));
+    expect(config.connectionRequests.mode).toBe("deny");
+    expect(config.connectionRequests.auto).toBeUndefined();
+  });
+});
+
 describe("loadFriendsConfig", () => {
   it("loads and parses friends.toml", () => {
     const config = loadFriendsConfig(path.join(fixturesDir, "friends.toml"));

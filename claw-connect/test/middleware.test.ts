@@ -3,6 +3,8 @@ import {
   checkFriend,
   checkAgentScope,
   resolveTenant,
+  extractFingerprint,
+  isConnectionRequest,
 } from "../src/middleware.js";
 import type { FriendsConfig, ServerConfig } from "../src/types.js";
 
@@ -69,5 +71,84 @@ describe("resolveTenant", () => {
   it("returns null for unknown tenant", () => {
     const result = resolveTenant(serverConfig, "unknown-agent");
     expect(result).toBeNull();
+  });
+});
+
+describe("extractFingerprint", () => {
+  it("returns fingerprint from a raw cert buffer", async () => {
+    const forge = (await import("node-forge")).default;
+    const keys = forge.pki.rsa.generateKeyPair(2048);
+    const cert = forge.pki.createCertificate();
+    cert.publicKey = keys.publicKey;
+    cert.serialNumber = "01";
+    cert.validity.notBefore = new Date();
+    cert.validity.notAfter = new Date();
+    cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
+    const attrs = [{ name: "commonName", value: "test" }];
+    cert.setSubject(attrs);
+    cert.setIssuer(attrs);
+    cert.sign(keys.privateKey, forge.md.sha256.create());
+
+    const certPem = forge.pki.certificateToPem(cert);
+    const der = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
+    const rawBuffer = Buffer.from(der, "binary");
+
+    const fingerprint = extractFingerprint(rawBuffer);
+    expect(fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/);
+
+    const { getFingerprint } = await import("../src/identity.js");
+    expect(fingerprint).toBe(getFingerprint(certPem));
+  });
+
+  it("returns null for undefined input", () => {
+    const fingerprint = extractFingerprint(undefined);
+    expect(fingerprint).toBeNull();
+  });
+
+  it("returns null for empty buffer", () => {
+    const fingerprint = extractFingerprint(Buffer.alloc(0));
+    expect(fingerprint).toBeNull();
+  });
+});
+
+describe("isConnectionRequest", () => {
+  it("returns true for a valid CONNECTION_REQUEST body", () => {
+    const body = {
+      message: {
+        parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
+        extensions: ["https://clawconnect.dev/ext/connection/v1"],
+        metadata: {
+          "https://clawconnect.dev/ext/connection/v1": {
+            type: "request",
+            reason: "Want to learn Rust",
+            agent_card_url: "https://example.com/.well-known/agent-card.json",
+          },
+        },
+      },
+    };
+    expect(isConnectionRequest(body)).toBe(true);
+  });
+
+  it("returns false for a normal A2A message", () => {
+    const body = {
+      message: {
+        parts: [{ kind: "text", text: "Hello, how do you handle errors in Rust?" }],
+      },
+    };
+    expect(isConnectionRequest(body)).toBe(false);
+  });
+
+  it("returns false for missing extension", () => {
+    const body = {
+      message: {
+        parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
+      },
+    };
+    expect(isConnectionRequest(body)).toBe(false);
+  });
+
+  it("returns false for null body", () => {
+    expect(isConnectionRequest(null)).toBe(false);
+    expect(isConnectionRequest(undefined)).toBe(false);
   });
 });

@@ -1,10 +1,14 @@
 import { Command } from "commander";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import TOML from "@iarna/toml";
+import { Agent as UndiciAgent } from "undici";
 import { generateIdentity } from "../src/identity.js";
 import { buildLocalAgentCard } from "../src/agent-card.js";
 import { startServer } from "../src/server.js";
+import { loadFriendsConfig } from "../src/config.js";
+import { addFriend, removeFriend, listFriends, writeFriendsConfig } from "../src/friends.js";
 
 const DEFAULT_CONFIG_DIR = path.join(
   process.env.HOME ?? "~",
@@ -149,6 +153,209 @@ program
     for (const [name, cfg] of Object.entries(agents)) {
       console.log(`  ${name} → ${cfg.localEndpoint} (${cfg.description})`);
     }
+  });
+
+const friendsCmd = program
+  .command("friends")
+  .description("Manage friends list");
+
+friendsCmd
+  .command("list")
+  .description("List all friends")
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .action((opts) => {
+    const friendsPath = path.join(opts.dir, "friends.toml");
+    const config = loadFriendsConfig(friendsPath);
+    const friends = listFriends(config);
+
+    if (friends.length === 0) {
+      console.log("No friends yet.");
+      return;
+    }
+
+    for (const f of friends) {
+      const scope = f.agents ? ` (agents: ${f.agents.join(", ")})` : " (all agents)";
+      console.log(`  ${f.handle} — ${f.fingerprint}${scope}`);
+    }
+  });
+
+friendsCmd
+  .command("add")
+  .description("Add a friend manually")
+  .requiredOption("--handle <handle>", "Local handle for the friend")
+  .requiredOption("--fingerprint <fingerprint>", "Friend's cert fingerprint (sha256:...)")
+  .option("--agents <agents...>", "Scope to specific agents")
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .action((opts) => {
+    const friendsPath = path.join(opts.dir, "friends.toml");
+    const config = loadFriendsConfig(friendsPath);
+
+    try {
+      const updated = addFriend(config, {
+        handle: opts.handle,
+        fingerprint: opts.fingerprint,
+        agents: opts.agents,
+      });
+
+      writeFriendsConfig(friendsPath, updated);
+      const scope = opts.agents ? ` (agents: ${opts.agents.join(", ")})` : " (all agents)";
+      console.log(`Added friend "${opts.handle}" — ${opts.fingerprint}${scope}`);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : "Failed to add friend");
+      process.exit(1);
+    }
+  });
+
+friendsCmd
+  .command("remove")
+  .description("Remove a friend")
+  .argument("<handle>", "Handle of the friend to remove")
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .action((handle, opts) => {
+    const friendsPath = path.join(opts.dir, "friends.toml");
+    const config = loadFriendsConfig(friendsPath);
+
+    try {
+      const updated = removeFriend(config, handle);
+      writeFriendsConfig(friendsPath, updated);
+      console.log(`Removed friend "${handle}"`);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : "Failed to remove friend");
+      process.exit(1);
+    }
+  });
+
+program
+  .command("connect")
+  .description("Send a connection request to a remote agent")
+  .argument("<agent-card-url>", "URL of the remote agent's Agent Card")
+  .requiredOption("--as <agent>", "Which local agent identity to use for the request")
+  .option("--reason <reason>", "Reason for connecting", "Would like to connect")
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .action(async (agentCardUrl, opts) => {
+    const configDir = opts.dir;
+    const agentName = opts.as;
+    const reason = opts.reason;
+
+    const certPath = path.join(configDir, "agents", agentName, "identity.crt");
+    const keyPath = path.join(configDir, "agents", agentName, "identity.key");
+
+    if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+      console.error(`Agent "${agentName}" not found. Run 'claw-connect register' first.`);
+      process.exit(1);
+    }
+
+    console.log(`Fetching agent card from ${agentCardUrl}...`);
+    let remoteCard: { name: string; url: string };
+    try {
+      const cardResp = await fetch(agentCardUrl);
+      remoteCard = (await cardResp.json()) as { name: string; url: string };
+    } catch (err) {
+      console.error(`Failed to fetch agent card: ${err instanceof Error ? err.message : err}`);
+      process.exit(1);
+    }
+
+    console.log(`Remote agent: ${remoteCard.name} at ${remoteCard.url}`);
+
+    const messageUrl = `${remoteCard.url}/message:send`;
+    const body = {
+      message: {
+        messageId: crypto.randomUUID(),
+        role: "ROLE_USER",
+        parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
+        extensions: ["https://clawconnect.dev/ext/connection/v1"],
+        metadata: {
+          "https://clawconnect.dev/ext/connection/v1": {
+            type: "request",
+            reason,
+            agent_card_url: agentCardUrl,
+          },
+        },
+      },
+    };
+
+    console.log(`Sending connection request to ${messageUrl}...`);
+
+    try {
+      const cert = fs.readFileSync(certPath);
+      const key = fs.readFileSync(keyPath);
+
+      const response = await fetch(messageUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        // @ts-expect-error — Node fetch supports dispatcher for custom TLS
+        dispatcher: new UndiciAgent({
+          connect: { cert, key, rejectUnauthorized: false },
+        }),
+      });
+
+      const result = (await response.json()) as Record<string, unknown>;
+
+      const status = result.status as { state: string } | undefined;
+      if (status?.state === "TASK_STATE_COMPLETED") {
+        console.log("Connection accepted!");
+        console.log(`Remote agent "${remoteCard.name}" is now a friend on their server.`);
+        console.log(`\nTo add them as a friend on YOUR server, run:`);
+        console.log(
+          `  claw-connect friends add --handle "${remoteCard.name}" --fingerprint <their-fingerprint>`,
+        );
+      } else if (status?.state === "TASK_STATE_REJECTED") {
+        const artifacts = result.artifacts as Array<{
+          metadata?: Record<string, Record<string, string>>;
+        }>;
+        const ext =
+          artifacts?.[0]?.metadata?.["https://clawconnect.dev/ext/connection/v1"];
+        const denyReason = ext?.reason ?? "No reason given";
+        console.log(`Connection denied: ${denyReason}`);
+      } else {
+        console.log("Unexpected response:", JSON.stringify(result, null, 2));
+      }
+    } catch (err) {
+      console.error(
+        `Connection request failed: ${err instanceof Error ? err.message : err}`,
+      );
+      process.exit(1);
+    }
+  });
+
+program
+  .command("requests")
+  .description("View pending inbound connection requests (mode=deny only)")
+  .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
+  .action((opts) => {
+    const pendingPath = path.join(opts.dir, "pending-requests.json");
+
+    if (!fs.existsSync(pendingPath)) {
+      console.log("No pending connection requests.");
+      return;
+    }
+
+    const pending = JSON.parse(fs.readFileSync(pendingPath, "utf-8")) as {
+      requests: Array<{
+        fingerprint: string;
+        reason: string;
+        agentCardUrl: string;
+        receivedAt: string;
+      }>;
+    };
+
+    if (pending.requests.length === 0) {
+      console.log("No pending connection requests.");
+      return;
+    }
+
+    console.log(`${pending.requests.length} pending request(s):\n`);
+    for (const req of pending.requests) {
+      console.log(`  Fingerprint: ${req.fingerprint}`);
+      console.log(`  Reason:      ${req.reason}`);
+      console.log(`  Agent Card:  ${req.agentCardUrl}`);
+      console.log(`  Received:    ${req.receivedAt}`);
+      console.log();
+    }
+
+    console.log("To approve, run:");
+    console.log('  claw-connect friends add --handle "<name>" --fingerprint "<fingerprint>"');
   });
 
 program

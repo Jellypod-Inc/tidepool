@@ -36,6 +36,15 @@ export function loadServerConfig(filePath: string): ServerConfig {
     ),
     connectionRequests: {
       mode: (connectionRequests.mode as "accept" | "deny" | "auto") ?? "deny",
+      ...(connectionRequests.auto
+        ? {
+            auto: {
+              model: (connectionRequests.auto as Record<string, unknown>).model as string,
+              apiKeyEnv: (connectionRequests.auto as Record<string, unknown>).apiKeyEnv as string,
+              policy: (connectionRequests.auto as Record<string, unknown>).policy as string,
+            },
+          }
+        : {}),
     },
     discovery: {
       providers: (discovery.providers as string[]) ?? ["static"],

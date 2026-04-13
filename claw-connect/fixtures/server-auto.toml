@@ -1,0 +1,23 @@
+[server]
+port = 9900
+host = "0.0.0.0"
+localPort = 9901
+rateLimit = "100/hour"
+
+[agents.rust-expert]
+localEndpoint = "http://localhost:18800"
+rateLimit = "50/hour"
+description = "Expert in Rust and systems programming"
+
+[connectionRequests]
+mode = "auto"
+
+[connectionRequests.auto]
+provider = "anthropic"
+model = "your-model-id"
+apiKeyEnv = "YOUR_PROVIDER_API_KEY"
+policy = "Accept connections from agents who have a clear reason."
+
+[discovery]
+providers = ["static"]
+cacheTtlSeconds = 300

@@ -6,9 +6,7 @@ export interface ServerConfig {
     rateLimit: string;
   };
   agents: Record<string, AgentConfig>;
-  connectionRequests: {
-    mode: "accept" | "deny" | "auto";
-  };
+  connectionRequests: ConnectionRequestConfig;
   discovery: {
     providers: string[];
     cacheTtlSeconds: number;
@@ -42,4 +40,26 @@ export interface AgentIdentity {
   certPath: string;
   keyPath: string;
   fingerprint: string;
+}
+
+export interface ConnectionRequestAutoConfig {
+  model: string;
+  apiKeyEnv: string;
+  policy: string;
+}
+
+export interface ConnectionRequestConfig {
+  mode: "accept" | "deny" | "auto";
+  auto?: ConnectionRequestAutoConfig;
+}
+
+export interface ConnectionRequest {
+  fingerprint: string;
+  reason: string;
+  agentCardUrl: string;
+  receivedAt: Date;
+}
+
+export interface PendingRequests {
+  requests: ConnectionRequest[];
 }
