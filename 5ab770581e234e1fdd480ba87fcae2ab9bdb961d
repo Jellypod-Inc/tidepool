@@ -1,0 +1,51 @@
+claw-connect/src/types.ts
+  1c601e1d01f588af 10-30
+claw-connect/src/discovery/types.ts
+  1c601e1d01f588af 1-15
+claw-connect/src/directory-server.ts
+  1c601e1d01f588af 1-194
+claw-connect/test/discovery/cache.test.ts
+  1c601e1d01f588af 1-76
+claw-connect/test/discovery/static-provider.test.ts
+  1c601e1d01f588af 1-85
+claw-connect/test/discovery/directory-provider.test.ts
+  1c601e1d01f588af 1-110
+claw-connect/bin/cli.ts
+  1c601e1d01f588af 10,12-17,380-459
+claw-connect/test/directory-server.test.ts
+  1c601e1d01f588af 1-227
+claw-connect/src/discovery/cache.ts
+  1c601e1d01f588af 1-52
+claw-connect/src/discovery/directory-provider.ts
+  1c601e1d01f588af 1-85
+claw-connect/src/discovery/static-provider.ts
+  1c601e1d01f588af 1-61
+claw-connect/test/discovery/registry.test.ts
+  1c601e1d01f588af 1-150
+claw-connect/src/config.ts
+  1c601e1d01f588af 53-80
+claw-connect/src/discovery/registry.ts
+  1c601e1d01f588af 1-58
+claw-connect/src/discovery/mdns-provider.ts
+  1c601e1d01f588af 1-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "5ab770581e234e1fdd480ba87fcae2ab9bdb961d",
+  "prompts": {
+    "1c601e1d01f588af": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b4e579a-c68a-47c3-a589-90d89961f42f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 1420,
+      "total_deletions": 207,
+      "accepted_lines": 1354,
+      "overriden_lines": 4
+    }
+  }
+}
