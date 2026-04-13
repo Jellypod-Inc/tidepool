@@ -17,6 +17,7 @@ export interface AgentConfig {
   localEndpoint: string;
   rateLimit: string;
   description: string;
+  timeoutSeconds: number;
 }
 
 export interface FriendEntry {

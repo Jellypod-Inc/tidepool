@@ -150,9 +150,9 @@ describe("e2e: connection handshake", () => {
       },
     );
 
-    expect(response.status).toBe(401);
-    const data = (await response.json()) as { error: string };
-    expect(data.error).toBe("Not a friend");
+    expect(response.status).toBe(403);
+    const data = (await response.json()) as { status: { state: string } };
+    expect(data.status.state).toBe("TASK_STATE_REJECTED");
   });
 
   it("accepts a CONNECTION_REQUEST from an unknown agent (accept mode)", async () => {

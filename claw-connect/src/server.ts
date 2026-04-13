@@ -17,7 +17,23 @@ import { mapLocalTenantToRemote, buildOutboundUrl } from "./proxy.js";
 import { buildLocalAgentCard, buildRemoteAgentCard } from "./agent-card.js";
 import { handleConnectionRequest } from "./handshake.js";
 import { addFriend, writeFriendsConfig } from "./friends.js";
+import { TokenBucket, parseRateLimit } from "./rate-limiter.js";
+import {
+  rateLimitResponse,
+  notFriendResponse,
+  agentNotFoundResponse,
+  agentScopeDeniedResponse,
+  agentTimeoutResponse,
+  type A2AErrorResponse,
+} from "./errors.js";
 import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
+
+function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
+  for (const [key, value] of Object.entries(error.headers)) {
+    res.setHeader(key, value);
+  }
+  res.status(error.statusCode).json(error.body);
+}
 
 export interface StartServerOpts {
   configDir: string;
@@ -33,7 +49,29 @@ export async function startServer(opts: StartServerOpts) {
   );
   const remoteAgents = opts.remoteAgents ?? [];
 
-  const publicApp = createPublicApp(serverConfig, friendsConfig, opts.configDir);
+  // Initialize rate limiters
+  const serverRateConfig = parseRateLimit(serverConfig.server.rateLimit);
+  const serverBucket = new TokenBucket(
+    serverRateConfig.tokens,
+    serverRateConfig.windowMs,
+  );
+
+  const agentBuckets = new Map<string, TokenBucket>();
+  for (const [name, agentConfig] of Object.entries(serverConfig.agents)) {
+    const agentRateConfig = parseRateLimit(agentConfig.rateLimit);
+    agentBuckets.set(
+      name,
+      new TokenBucket(agentRateConfig.tokens, agentRateConfig.windowMs),
+    );
+  }
+
+  const publicApp = createPublicApp(
+    serverConfig,
+    friendsConfig,
+    opts.configDir,
+    serverBucket,
+    agentBuckets,
+  );
   const localApp = createLocalApp(serverConfig, remoteAgents, opts.configDir);
 
   // Public interface: mTLS
@@ -90,6 +128,8 @@ function createPublicApp(
   config: ServerConfig,
   friends: FriendsConfig,
   configDir: string,
+  serverBucket: TokenBucket,
+  agentBuckets: Map<string, TokenBucket>,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -116,21 +156,28 @@ function createPublicApp(
     },
   );
 
-  // A2A proxy endpoint per tenant — matches /:tenant/message:send etc.
+  // A2A proxy endpoint per tenant — full middleware pipeline
   app.post(
     "/:tenant/:action",
     async (req, res) => {
       const { tenant, action } = req.params;
 
-      // 1. Extract peer cert fingerprint
-      const peerCert = (req.socket as any).getPeerCertificate?.();
-      const peerFingerprint = extractFingerprint(peerCert?.raw);
-      if (!peerFingerprint) {
-        res.status(401).json({ error: "No client certificate" });
+      // --- Step 1: Server rate limit ---
+      const serverResult = serverBucket.consume();
+      if (!serverResult.allowed) {
+        sendA2AError(res, rateLimitResponse(serverResult.retryAfterSeconds));
         return;
       }
 
-      // 2. Check friends list
+      // --- Step 2: Extract peer cert fingerprint ---
+      const peerCert = (req.socket as any).getPeerCertificate?.();
+      const peerFingerprint = extractFingerprint(peerCert?.raw);
+      if (!peerFingerprint) {
+        sendA2AError(res, notFriendResponse());
+        return;
+      }
+
+      // --- Step 3: Check friends list ---
       const friendLookup = checkFriend(friends, peerFingerprint);
       if (!friendLookup) {
         // Not a friend — check if this is a CONNECTION_REQUEST
@@ -158,13 +205,11 @@ function createPublicApp(
               pendingRequestsPath: `${configDir}/pending-requests.json`,
             });
 
-            // If approved, persist the new friend
             if (result.newFriend) {
               const updated = addFriend(friends, {
                 handle: result.newFriend.handle,
                 fingerprint: result.newFriend.fingerprint,
               });
-              // Mutate the in-memory friends config so subsequent requests see the new friend
               friends.friends = updated.friends;
               writeFriendsConfig(`${configDir}/friends.toml`, updated);
             }
@@ -178,46 +223,54 @@ function createPublicApp(
           return;
         }
 
-        res.status(401).json({ error: "Not a friend" });
+        sendA2AError(res, notFriendResponse());
         return;
       }
 
-      // 3. Resolve tenant
+      // --- Step 4: Resolve tenant ---
       const agent = resolveTenant(config, tenant);
       if (!agent) {
-        res.status(404).json({ error: "Agent not found" });
+        sendA2AError(res, agentNotFoundResponse(tenant));
         return;
       }
 
-      // 4. Check agent scope
+      // --- Step 5: Agent rate limit ---
+      const agentBucket = agentBuckets.get(tenant);
+      if (agentBucket) {
+        const agentResult = agentBucket.consume();
+        if (!agentResult.allowed) {
+          sendA2AError(res, rateLimitResponse(agentResult.retryAfterSeconds));
+          return;
+        }
+      }
+
+      // --- Step 6: Check agent scope ---
       if (!checkAgentScope(friendLookup.friend, tenant)) {
-        res.status(403).json({ error: "Not authorized for this agent" });
+        sendA2AError(res, agentScopeDeniedResponse(tenant));
         return;
       }
 
-      // 5. Forward to local agent's A2A endpoint
+      // --- Step 7: Forward to local agent with timeout ---
       const targetUrl = `${agent.localEndpoint}/${action}`;
+      const timeoutMs = agent.timeoutSeconds * 1000;
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
         const response = await fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(req.body),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         const data = await response.json();
         res.status(response.status).json(data);
       } catch {
-        res.status(504).json({
-          id: uuidv4(),
-          status: { state: "TASK_STATE_FAILED" },
-          artifacts: [
-            {
-              artifactId: "error",
-              parts: [{ kind: "text", text: "Agent unreachable" }],
-            },
-          ],
-        });
+        sendA2AError(res, agentTimeoutResponse(tenant, agent.timeoutSeconds));
       }
     },
   );

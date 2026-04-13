@@ -121,6 +121,7 @@ program
       localEndpoint: opts.endpoint,
       rateLimit: "50/hour",
       description: opts.description,
+      timeoutSeconds: 30,
     };
 
     fs.writeFileSync(serverTomlPath, TOML.stringify(config as any));

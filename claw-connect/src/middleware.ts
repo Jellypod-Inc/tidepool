@@ -1,4 +1,6 @@
 import forge from "node-forge";
+import { TokenBucket } from "./rate-limiter.js";
+import type { ConsumeResult } from "./rate-limiter.js";
 import type {
   FriendsConfig,
   FriendEntry,
@@ -69,6 +71,15 @@ export function isConnectionRequest(body: unknown): boolean {
   if (!parts || !Array.isArray(parts) || parts.length === 0) return false;
 
   return parts[0].text === "CONNECTION_REQUEST";
+}
+
+/**
+ * Creates a rate limit check function bound to a token bucket.
+ */
+export function createRateLimitChecker(
+  bucket: TokenBucket,
+): () => ConsumeResult {
+  return () => bucket.consume();
 }
 
 /**

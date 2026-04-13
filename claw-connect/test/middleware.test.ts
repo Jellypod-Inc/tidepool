@@ -5,7 +5,9 @@ import {
   resolveTenant,
   extractFingerprint,
   isConnectionRequest,
+  createRateLimitChecker,
 } from "../src/middleware.js";
+import { TokenBucket } from "../src/rate-limiter.js";
 import type { FriendsConfig, ServerConfig } from "../src/types.js";
 
 const friends: FriendsConfig = {
@@ -27,6 +29,7 @@ const serverConfig: ServerConfig = {
       localEndpoint: "http://localhost:18800",
       rateLimit: "50/hour",
       description: "Rust expert",
+      timeoutSeconds: 30,
     },
   },
   connectionRequests: { mode: "deny" },
@@ -108,6 +111,27 @@ describe("extractFingerprint", () => {
   it("returns null for empty buffer", () => {
     const fingerprint = extractFingerprint(Buffer.alloc(0));
     expect(fingerprint).toBeNull();
+  });
+});
+
+describe("createRateLimitChecker", () => {
+  it("returns allowed when bucket has tokens", () => {
+    const bucket = new TokenBucket(10, 3_600_000);
+    const check = createRateLimitChecker(bucket);
+
+    const result = check();
+    expect(result.allowed).toBe(true);
+  });
+
+  it("returns denied with retryAfterSeconds when bucket is empty", () => {
+    const bucket = new TokenBucket(1, 3_600_000);
+    const check = createRateLimitChecker(bucket);
+
+    check();
+
+    const result = check();
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfterSeconds).toBeGreaterThan(0);
   });
 });
 

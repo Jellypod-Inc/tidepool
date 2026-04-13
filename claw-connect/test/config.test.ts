@@ -20,6 +20,8 @@ describe("loadServerConfig", () => {
       "Expert in Rust and systems programming",
     );
     expect(config.agents["code-reviewer"]).toBeDefined();
+    expect(config.agents["rust-expert"].timeoutSeconds).toBe(30);
+    expect(config.agents["code-reviewer"].timeoutSeconds).toBe(60);
     expect(config.connectionRequests.mode).toBe("deny");
   });
 

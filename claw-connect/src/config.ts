@@ -31,6 +31,7 @@ export function loadServerConfig(filePath: string): ServerConfig {
           localEndpoint: cfg.localEndpoint as string,
           rateLimit: (cfg.rateLimit as string) ?? "50/hour",
           description: (cfg.description as string) ?? "",
+          timeoutSeconds: (cfg.timeoutSeconds as number) ?? 30,
         },
       ]),
     ),
