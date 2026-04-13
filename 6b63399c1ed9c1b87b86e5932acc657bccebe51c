@@ -1,0 +1,59 @@
+claw-connect/vitest.config.ts
+  1c601e1d01f588af 1-8
+claw-connect/src/types.ts
+  1c601e1d01f588af 1-45
+claw-connect/src/server.ts
+  1c601e1d01f588af 1-322
+claw-connect/test/config.test.ts
+  1c601e1d01f588af 1-46
+claw-connect/bin/cli.ts
+  1c601e1d01f588af 1-166
+claw-connect/src/identity.ts
+  1c601e1d01f588af 1-60
+claw-connect/tsconfig.json
+  1c601e1d01f588af 1-16
+claw-connect/src/middleware.ts
+  1c601e1d01f588af 1-35
+claw-connect/fixtures/friends.toml
+  1c601e1d01f588af 1-6
+claw-connect/test/identity.test.ts
+  1c601e1d01f588af 1-57
+claw-connect/src/proxy.ts
+  1c601e1d01f588af 1-18
+claw-connect/test/e2e.test.ts
+  1c601e1d01f588af 1-248
+claw-connect/test/middleware.test.ts
+  1c601e1d01f588af 1-73
+claw-connect/test/proxy.test.ts
+  1c601e1d01f588af 1-46
+claw-connect/src/agent-card.ts
+  1c601e1d01f588af 1-97
+claw-connect/package.json
+  1c601e1d01f588af 1-33
+claw-connect/test/agent-card.test.ts
+  1c601e1d01f588af 1-48
+claw-connect/fixtures/server.toml
+  1c601e1d01f588af 1-22
+claw-connect/src/config.ts
+  1c601e1d01f588af 1-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "6b63399c1ed9c1b87b86e5932acc657bccebe51c",
+  "prompts": {
+    "1c601e1d01f588af": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b4e579a-c68a-47c3-a589-90d89961f42f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 1518,
+      "total_deletions": 0,
+      "accepted_lines": 1416,
+      "overriden_lines": 0
+    }
+  }
+}
