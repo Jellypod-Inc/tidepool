@@ -1,0 +1,47 @@
+claw-connect/test/cli-ping.test.ts
+  1c601e1d01f588af 1-74
+claw-connect/src/agent-card.ts
+  1c601e1d01f588af 73-123
+claw-connect/src/config.ts
+  1c601e1d01f588af 26
+claw-connect/test/streaming-e2e.test.ts
+  1c601e1d01f588af 1-298
+claw-connect/src/streaming.ts
+  1c601e1d01f588af 1-212
+claw-connect/test/streaming.test.ts
+  1c601e1d01f588af 1-103
+claw-connect/src/types.ts
+  1c601e1d01f588af 7,86-109
+claw-connect/src/ping.ts
+  1c601e1d01f588af 1-84
+claw-connect/test/cli-status.test.ts
+  1c601e1d01f588af 1-102
+claw-connect/bin/cli.ts
+  1c601e1d01f588af 18-19,371-432
+claw-connect/src/server.ts
+  1c601e1d01f588af 29-30,255,259-291,357,362-366,369,395-396,402-434,436,482-500,504-510
+claw-connect/test/agent-card-rich.test.ts
+  1c601e1d01f588af 1-136
+claw-connect/src/status.ts
+  1c601e1d01f588af 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "75cdf40ec4239ec91e68832ebd0d0c592c3742cb",
+  "prompts": {
+    "1c601e1d01f588af": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b4e579a-c68a-47c3-a589-90d89961f42f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 1371,
+      "total_deletions": 20,
+      "accepted_lines": 1313,
+      "overriden_lines": 0
+    }
+  }
+}
