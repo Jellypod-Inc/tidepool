@@ -30,10 +30,12 @@ import {
   agentNotFoundResponse,
   agentScopeDeniedResponse,
   agentTimeoutResponse,
+  malformedRequestResponse,
   type A2AErrorResponse,
 } from "./errors.js";
 import { proxySSEStream, initSSEResponse } from "./streaming.js";
-import { buildFailedStatusEvent } from "./a2a.js";
+import { buildFailedStatusEvent, MessageSchema } from "./a2a.js";
+import { validateWire } from "./wire-validation.js";
 import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
@@ -183,6 +185,17 @@ function createPublicApp(
       // can correlate failures to the request that triggered them. May be
       // undefined for malformed bodies; error builders fall back to a uuid.
       const messageId: string | undefined = req.body?.message?.messageId;
+
+      // --- Step 0: Validate inbound A2A message envelope ---
+      const inbound = validateWire(
+        MessageSchema,
+        req.body?.message,
+        { mode: config.validation.mode, context: "inbound.public.message" },
+      );
+      if (!inbound.ok) {
+        sendA2AError(res, malformedRequestResponse(inbound.error, messageId));
+        return;
+      }
 
       // --- Step 1: Server rate limit ---
       const serverResult = serverBucket.consume();
@@ -442,6 +455,17 @@ function createLocalApp(
   // Outbound proxy — local agent sends A2A to a remote agent via local handle
   app.post("/:tenant/:action", async (req, res) => {
     const { tenant, action } = req.params;
+
+    const inbound = validateWire(
+      MessageSchema,
+      req.body?.message,
+      { mode: config.validation.mode, context: "inbound.local.message" },
+    );
+    if (!inbound.ok) {
+      sendA2AError(res, malformedRequestResponse(inbound.error, req.body?.message?.messageId));
+      return;
+    }
+
     const remote = mapLocalTenantToRemote(remoteAgents, tenant);
     const streamTimeoutMs = config.server.streamTimeoutSeconds * 1000;
     const isStream = action === "message:stream";
