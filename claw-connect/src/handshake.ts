@@ -1,21 +1,16 @@
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { CONNECTION_EXTENSION_URL } from "./middleware.js";
+import type { Message } from "./a2a.js";
 import type {
   ConnectionRequestConfig,
   ConnectionRequest,
   FriendsConfig,
 } from "./types.js";
 
-interface ConnectionResponse {
-  id: string;
-  status: { state: string };
-  artifacts: Array<{
-    artifactId: string;
-    parts: Array<{ kind: string; text: string }>;
-    metadata: Record<string, Record<string, string>>;
-  }>;
-}
+// The handshake response is a v1.0 Message with the connection-extension
+// metadata attached. Callers expose it as the body of a message:send reply.
+type ConnectionResponse = Message;
 
 interface NewFriend {
   handle: string;
@@ -45,38 +40,23 @@ interface HandleConnectionRequestResult {
 
 export function buildAcceptedResponse(): ConnectionResponse {
   return {
-    id: uuidv4(),
-    status: { state: "TASK_STATE_COMPLETED" },
-    artifacts: [
-      {
-        artifactId: "connection-result",
-        parts: [{ kind: "text", text: "Connection accepted" }],
-        metadata: {
-          [CONNECTION_EXTENSION_URL]: {
-            type: "accepted",
-          },
-        },
-      },
-    ],
+    messageId: uuidv4(),
+    role: "agent",
+    parts: [{ kind: "text", text: "Connection accepted" }],
+    metadata: {
+      [CONNECTION_EXTENSION_URL]: { type: "accepted" },
+    },
   };
 }
 
 export function buildDeniedResponse(reason: string): ConnectionResponse {
   return {
-    id: uuidv4(),
-    status: { state: "TASK_STATE_REJECTED" },
-    artifacts: [
-      {
-        artifactId: "connection-result",
-        parts: [{ kind: "text", text: "Connection denied" }],
-        metadata: {
-          [CONNECTION_EXTENSION_URL]: {
-            type: "denied",
-            reason,
-          },
-        },
-      },
-    ],
+    messageId: uuidv4(),
+    role: "agent",
+    parts: [{ kind: "text", text: "Connection denied" }],
+    metadata: {
+      [CONNECTION_EXTENSION_URL]: { type: "denied", reason },
+    },
   };
 }
 

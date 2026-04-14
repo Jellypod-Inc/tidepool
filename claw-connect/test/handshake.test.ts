@@ -16,34 +16,28 @@ import type {
 } from "../src/types.js";
 
 describe("buildAcceptedResponse", () => {
-  it("returns an A2A task with TASK_STATE_COMPLETED and accepted extension", () => {
+  it("returns a v1.0 Message with accepted extension metadata", () => {
     const response = buildAcceptedResponse();
 
-    expect(response.status.state).toBe("TASK_STATE_COMPLETED");
-    expect(response.artifacts).toHaveLength(1);
-    expect(response.artifacts[0].parts[0].text).toBe("Connection accepted");
+    expect(response.messageId).toMatch(/.+/);
+    expect(response.role).toBe("agent");
+    expect(response.parts[0]).toEqual({ kind: "text", text: "Connection accepted" });
     expect(
-      response.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
-        .type,
-    ).toBe("accepted");
+      response.metadata?.["https://clawconnect.dev/ext/connection/v1"],
+    ).toEqual({ type: "accepted" });
   });
 });
 
 describe("buildDeniedResponse", () => {
-  it("returns an A2A task with TASK_STATE_REJECTED and denied extension", () => {
+  it("returns a v1.0 Message with denied extension metadata", () => {
     const response = buildDeniedResponse("Not accepting connections");
 
-    expect(response.status.state).toBe("TASK_STATE_REJECTED");
-    expect(response.artifacts).toHaveLength(1);
-    expect(response.artifacts[0].parts[0].text).toBe("Connection denied");
+    expect(response.messageId).toMatch(/.+/);
+    expect(response.role).toBe("agent");
+    expect(response.parts[0]).toEqual({ kind: "text", text: "Connection denied" });
     expect(
-      response.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
-        .type,
-    ).toBe("denied");
-    expect(
-      response.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
-        .reason,
-    ).toBe("Not accepting connections");
+      response.metadata?.["https://clawconnect.dev/ext/connection/v1"],
+    ).toEqual({ type: "denied", reason: "Not accepting connections" });
   });
 });
 
@@ -89,7 +83,8 @@ describe("handleConnectionRequest — accept mode", () => {
       fetchAgentCard: async () => ({ name: "alice-dev" }),
     });
 
-    expect(result.response.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(result.response.role).toBe("agent");
+    expect(result.response.metadata?.["https://clawconnect.dev/ext/connection/v1"]).toEqual({ type: "accepted" });
     expect(result.newFriend).toBeDefined();
     expect(result.newFriend!.handle).toBe("alice-dev");
     expect(result.newFriend!.fingerprint).toBe(
@@ -112,7 +107,8 @@ describe("handleConnectionRequest — deny mode", () => {
       fetchAgentCard: async () => ({ name: "alice-dev" }),
     });
 
-    expect(result.response.status.state).toBe("TASK_STATE_REJECTED");
+    expect(result.response.role).toBe("agent");
+    expect(result.response.metadata?.["https://clawconnect.dev/ext/connection/v1"]).toMatchObject({ type: "denied" });
     expect(result.newFriend).toBeUndefined();
   });
 });
@@ -141,7 +137,8 @@ describe("handleConnectionRequest — auto mode", () => {
       }),
     });
 
-    expect(result.response.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(result.response.role).toBe("agent");
+    expect(result.response.metadata?.["https://clawconnect.dev/ext/connection/v1"]).toEqual({ type: "accepted" });
     expect(result.newFriend).toBeDefined();
   });
 
@@ -169,7 +166,8 @@ describe("handleConnectionRequest — auto mode", () => {
       }),
     });
 
-    expect(result.response.status.state).toBe("TASK_STATE_REJECTED");
+    expect(result.response.role).toBe("agent");
+    expect(result.response.metadata?.["https://clawconnect.dev/ext/connection/v1"]).toMatchObject({ type: "denied" });
     expect(result.newFriend).toBeUndefined();
   });
 

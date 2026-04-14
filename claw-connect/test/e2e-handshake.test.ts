@@ -190,15 +190,15 @@ describe("e2e: connection handshake", () => {
 
     expect(response.status).toBe(200);
     const data = (await response.json()) as {
-      status: { state: string };
-      artifacts: Array<{
-        metadata: Record<string, Record<string, string>>;
-      }>;
+      messageId: string;
+      role: string;
+      parts: Array<{ kind: string; text: string }>;
+      metadata: Record<string, Record<string, string>>;
     };
-    expect(data.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(data.role).toBe("agent");
+    expect(data.parts[0].text).toBe("Connection accepted");
     expect(
-      data.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
-        .type,
+      data.metadata["https://clawconnect.dev/ext/connection/v1"].type,
     ).toBe("accepted");
   });
 
