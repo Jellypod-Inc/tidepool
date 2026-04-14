@@ -100,7 +100,7 @@ describe("e2e: connection handshake", () => {
     bobApp.post("/message\\:send", (_req, res) => {
       res.json({
         id: "task-bob",
-        status: { state: "TASK_STATE_COMPLETED" },
+        status: { state: "completed" },
         artifacts: [
           {
             artifactId: "response",
@@ -135,7 +135,7 @@ describe("e2e: connection handshake", () => {
         body: JSON.stringify({
           message: {
             messageId: "test-1",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "Hello!" }],
           },
         }),
@@ -164,7 +164,7 @@ describe("e2e: connection handshake", () => {
         body: JSON.stringify({
           message: {
             messageId: "conn-req-1",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
             extensions: ["https://clawconnect.dev/ext/connection/v1"],
             metadata: {
@@ -226,7 +226,7 @@ describe("e2e: connection handshake", () => {
         body: JSON.stringify({
           message: {
             messageId: "test-post-friend",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "How do you handle errors?" }],
           },
         }),
@@ -246,7 +246,7 @@ describe("e2e: connection handshake", () => {
       status: { state: string };
       artifacts: Array<{ parts: Array<{ text: string }> }>;
     };
-    expect(data.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(data.status.state).toBe("completed");
     expect(data.artifacts[0].parts[0].text).toBe("rust-expert says hello");
   });
 });

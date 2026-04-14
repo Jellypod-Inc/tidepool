@@ -391,7 +391,7 @@ function createLocalApp(
       })),
       defaultInputModes: ["text/plain"],
       defaultOutputModes: ["text/plain"],
-      capabilities: { streaming: true, pushNotifications: false, stateTransitionHistory: false },
+      capabilities: { streaming: true, pushNotifications: false },
       securitySchemes: {},
       securityRequirements: [],
     });

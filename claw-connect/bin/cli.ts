@@ -270,7 +270,7 @@ program
     const body = {
       message: {
         messageId: crypto.randomUUID(),
-        role: "ROLE_USER",
+        role: "user",
         parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
         extensions: ["https://clawconnect.dev/ext/connection/v1"],
         metadata: {
@@ -302,14 +302,14 @@ program
       const result = (await response.json()) as Record<string, unknown>;
 
       const status = result.status as { state: string } | undefined;
-      if (status?.state === "TASK_STATE_COMPLETED") {
+      if (status?.state === "completed") {
         console.log("Connection accepted!");
         console.log(`Remote agent "${remoteCard.name}" is now a friend on their server.`);
         console.log(`\nTo add them as a friend on YOUR server, run:`);
         console.log(
           `  claw-connect friends add --handle "${remoteCard.name}" --fingerprint <their-fingerprint>`,
         );
-      } else if (status?.state === "TASK_STATE_REJECTED") {
+      } else if (status?.state === "rejected") {
         const artifacts = result.artifacts as Array<{
           metadata?: Record<string, Record<string, string>>;
         }>;

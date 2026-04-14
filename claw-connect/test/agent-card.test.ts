@@ -1,12 +1,20 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import express from "express";
 import type http from "http";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import TOML from "@iarna/toml";
+import { Agent as UndiciAgent } from "undici";
 import {
   buildLocalAgentCard,
   buildRemoteAgentCard,
   fetchRemoteAgentCard,
 } from "../src/agent-card.js";
 import type { RemoteAgent } from "../src/types.js";
+import { generateIdentity } from "../src/identity.js";
+import { startServer } from "../src/server.js";
+import { AgentCardSchema } from "../src/a2a.js";
 
 describe("buildLocalAgentCard", () => {
   it("builds a v1.0 Agent Card for a locally registered agent", () => {
@@ -99,5 +107,101 @@ describe("fetchRemoteAgentCard validation", () => {
   it("returns null on non-JSON response", async () => {
     const card = await fetchRemoteAgentCard(`http://127.0.0.1:${PORT}/html`);
     expect(card).toBeNull();
+  });
+});
+
+describe("v1.0 conformance: Agent Card emitted by the server validates against AgentCardSchema", () => {
+  let tmpDir: string;
+  let server: { close: () => void };
+  let clientCert: Buffer;
+  let clientKey: Buffer;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-card-conformance-"));
+    const configDir = path.join(tmpDir, "host");
+    fs.mkdirSync(path.join(configDir, "agents/probe"), { recursive: true });
+
+    await generateIdentity({
+      name: "probe",
+      certPath: path.join(configDir, "agents/probe/identity.crt"),
+      keyPath: path.join(configDir, "agents/probe/identity.key"),
+    });
+
+    // A separate identity to present as the client when we GET the card over
+    // mTLS — content of the cert doesn't matter; the request just needs to
+    // complete the TLS handshake.
+    const peerDir = path.join(tmpDir, "peer");
+    fs.mkdirSync(path.join(peerDir, "agents/peer"), { recursive: true });
+    await generateIdentity({
+      name: "peer",
+      certPath: path.join(peerDir, "agents/peer/identity.crt"),
+      keyPath: path.join(peerDir, "agents/peer/identity.key"),
+    });
+    clientCert = fs.readFileSync(path.join(peerDir, "agents/peer/identity.crt"));
+    clientKey = fs.readFileSync(path.join(peerDir, "agents/peer/identity.key"));
+
+    fs.writeFileSync(
+      path.join(configDir, "server.toml"),
+      TOML.stringify({
+        server: {
+          port: 57700,
+          host: "0.0.0.0",
+          localPort: 57701,
+          rateLimit: "100/hour",
+          streamTimeoutSeconds: 10,
+        },
+        agents: {
+          probe: {
+            localEndpoint: "http://127.0.0.1:57702",
+            rateLimit: "50/hour",
+            description: "probe",
+            timeoutSeconds: 5,
+          },
+        },
+        connectionRequests: { mode: "deny" },
+        discovery: { providers: ["static"], cacheTtlSeconds: 300 },
+      } as any),
+    );
+    fs.writeFileSync(
+      path.join(configDir, "friends.toml"),
+      TOML.stringify({ friends: {} } as any),
+    );
+
+    server = await startServer({ configDir, remoteAgents: [] });
+  });
+
+  afterAll(() => {
+    server?.close();
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("parses as a valid v1.0 AgentCard", async () => {
+    const res = await fetch("https://127.0.0.1:57700/probe/.well-known/agent-card.json", {
+      // @ts-expect-error — undici dispatcher for mTLS
+      dispatcher: new UndiciAgent({
+        connect: {
+          cert: clientCert,
+          key: clientKey,
+          rejectUnauthorized: false,
+        },
+      }),
+    });
+    expect(res.ok).toBe(true);
+
+    const card = await res.json();
+    const parsed = AgentCardSchema.safeParse(card);
+    expect(parsed.success).toBe(true);
+
+    if (parsed.success) {
+      // Declared our extension
+      expect(parsed.data.capabilities.extensions).toBeDefined();
+      expect(parsed.data.capabilities.extensions?.[0]?.uri).toBe(
+        "https://clawconnect.dev/ext/connection/v1",
+      );
+      // v1.0 does NOT have stateTransitionHistory on capabilities
+      expect((parsed.data.capabilities as any).stateTransitionHistory).toBeUndefined();
+      // mtls scheme uses v1.0 tagged-union shape
+      expect(parsed.data.securitySchemes.mtls).toMatchObject({ type: "mtls" });
+    }
   });
 });

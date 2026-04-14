@@ -18,7 +18,7 @@ function createMockAgent(port: number, name: string): http.Server {
     res.json({
       id: `task-${name}`,
       contextId: `ctx-${name}`,
-      status: { state: "TASK_STATE_COMPLETED" },
+      status: { state: "completed" },
       artifacts: [
         {
           artifactId: "response",
@@ -87,7 +87,7 @@ async function mTLSFetch(
 const a2aMessage = (text: string) => ({
   message: {
     messageId: "test-msg",
-    role: "ROLE_USER",
+    role: "user",
     parts: [{ kind: "text", text }],
   },
 });
@@ -197,7 +197,7 @@ describe("e2e: rate limiting and timeout", () => {
     );
 
     expect(resp.status).toBe(200);
-    expect(resp.body.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(resp.body.status.state).toBe("completed");
   });
 
   it("returns 429 with Retry-After when agent rate limit is exceeded", async () => {
