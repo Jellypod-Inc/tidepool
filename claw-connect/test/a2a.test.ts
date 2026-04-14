@@ -204,3 +204,63 @@ describe("AgentCardSchema", () => {
     expect(parsed.success).toBe(true);
   });
 });
+
+import {
+  formatSseEvent,
+  parseSseLine,
+  buildFailedStatusEvent,
+  isTerminalState,
+} from "../src/a2a.js";
+
+describe("formatSseEvent", () => {
+  it("formats a JSON object as an SSE data line", () => {
+    const event = { kind: "status-update", taskId: "t1" };
+    expect(formatSseEvent(event)).toBe(`data: ${JSON.stringify(event)}\n\n`);
+  });
+});
+
+describe("parseSseLine", () => {
+  it("parses a data: prefixed line", () => {
+    const obj = { foo: 1 };
+    expect(parseSseLine(`data: ${JSON.stringify(obj)}`)).toEqual(obj);
+  });
+
+  it("returns null for comments and blanks", () => {
+    expect(parseSseLine("")).toBeNull();
+    expect(parseSseLine(": keepalive")).toBeNull();
+    expect(parseSseLine("event: update")).toBeNull();
+  });
+
+  it("returns null for malformed JSON", () => {
+    expect(parseSseLine("data: {not json")).toBeNull();
+  });
+});
+
+describe("buildFailedStatusEvent", () => {
+  it("builds a v1.0 status-update with state=failed and no `final` field", () => {
+    const event = buildFailedStatusEvent("task-1", "ctx-1", "Stream timed out");
+    expect(event.kind).toBe("status-update");
+    expect(event.taskId).toBe("task-1");
+    expect(event.contextId).toBe("ctx-1");
+    expect(event.status.state).toBe("failed");
+    expect(event.status.message?.parts[0]).toEqual({ kind: "text", text: "Stream timed out" });
+    // v1.0 removed `final` — terminality is inferred
+    expect((event as any).final).toBeUndefined();
+  });
+});
+
+describe("isTerminalState", () => {
+  it("returns true for completed/failed/canceled/rejected", () => {
+    expect(isTerminalState("completed")).toBe(true);
+    expect(isTerminalState("failed")).toBe(true);
+    expect(isTerminalState("canceled")).toBe(true);
+    expect(isTerminalState("rejected")).toBe(true);
+  });
+
+  it("returns false for non-terminal states", () => {
+    expect(isTerminalState("submitted")).toBe(false);
+    expect(isTerminalState("working")).toBe(false);
+    expect(isTerminalState("input-required")).toBe(false);
+    expect(isTerminalState("auth-required")).toBe(false);
+  });
+});

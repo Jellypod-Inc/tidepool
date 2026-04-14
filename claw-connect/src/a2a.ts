@@ -286,3 +286,71 @@ export const AgentCardSchema = z
     securityRequirements: z.array(z.record(z.string(), z.array(z.string()))).default([]),
   })
   .loose();
+
+// ============================================================
+// SSE helpers
+// ============================================================
+
+/** Format any JSON-serializable value as a single SSE `data:` event. */
+export function formatSseEvent(obj: unknown): string {
+  return `data: ${JSON.stringify(obj)}\n\n`;
+}
+
+/** Parse a single SSE line. Returns null for comments, blanks, and non-data lines. */
+export function parseSseLine(line: string): unknown | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith(":") || !trimmed.startsWith("data: ")) {
+    return null;
+  }
+  try {
+    return JSON.parse(trimmed.slice(6));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build a v1.0 TaskStatusUpdateEvent with state=failed. Used by the SSE proxy
+ * to surface upstream failures to downstream consumers. v1.0 removed the
+ * `final` field; terminality is inferred via isTerminalState().
+ */
+export function buildFailedStatusEvent(
+  taskId: string,
+  contextId: string,
+  reason: string,
+): TaskStatusUpdateEvent {
+  return {
+    kind: "status-update",
+    taskId,
+    contextId,
+    status: {
+      state: "failed",
+      timestamp: new Date().toISOString(),
+      message: {
+        messageId: `err-${taskId}`,
+        role: "agent",
+        parts: [{ kind: "text", text: reason }],
+      },
+    },
+  };
+}
+
+// ============================================================
+// Terminality
+// ============================================================
+
+const TERMINAL_STATES: ReadonlySet<TaskState> = new Set<TaskState>([
+  "completed",
+  "failed",
+  "canceled",
+  "rejected",
+]);
+
+/**
+ * True if the given TaskState ends the task (v1.0 terminality rule).
+ * v1.0 removed the explicit `final` field from status events; use this
+ * helper wherever the old code would have checked `event.final`.
+ */
+export function isTerminalState(state: TaskState): boolean {
+  return TERMINAL_STATES.has(state);
+}
