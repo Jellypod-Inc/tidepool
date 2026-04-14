@@ -15,7 +15,12 @@ import {
   CONNECTION_EXTENSION_URL,
 } from "./middleware.js";
 import { mapLocalTenantToRemote, buildOutboundUrl } from "./proxy.js";
-import { buildLocalAgentCard, buildRemoteAgentCard } from "./agent-card.js";
+import {
+  buildLocalAgentCard,
+  buildRemoteAgentCard,
+  fetchRemoteAgentCard,
+  buildRichRemoteAgentCard,
+} from "./agent-card.js";
 import { handleConnectionRequest } from "./handshake.js";
 import { addFriend, writeFriendsConfig } from "./friends.js";
 import { TokenBucket, parseRateLimit } from "./rate-limiter.js";
@@ -29,7 +34,6 @@ import {
 } from "./errors.js";
 import { proxySSEStream, initSSEResponse } from "./streaming.js";
 import { buildFailedStatusEvent } from "./a2a.js";
-import { fetchRemoteAgentCard, buildRichRemoteAgentCard } from "./agent-card.js";
 import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
@@ -220,8 +224,10 @@ function createPublicApp(
                 reason: metadata.reason,
                 agentCardUrl: metadata.agentCardUrl,
                 fetchAgentCard: async (url: string) => {
-                  const resp = await fetch(url);
-                  const card = await resp.json() as { name: string };
+                  const card = await fetchRemoteAgentCard(url);
+                  if (!card) {
+                    throw new Error(`Unable to fetch peer agent card at ${url}`);
+                  }
                   return { name: card.name };
                 },
                 pendingRequestsPath: `${configDir}/pending-requests.json`,
