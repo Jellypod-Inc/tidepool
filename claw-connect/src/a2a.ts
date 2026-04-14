@@ -143,3 +143,146 @@ export interface AgentCard {
   securitySchemes: Record<string, SecurityScheme>;
   securityRequirements: Record<string, string[]>[];
 }
+
+// ============================================================
+// Zod schemas — for validating external input at wire boundaries
+// ============================================================
+
+import { z } from "zod";
+
+export const TaskStateSchema = z.enum([
+  "submitted",
+  "working",
+  "input-required",
+  "completed",
+  "failed",
+  "canceled",
+  "rejected",
+  "auth-required",
+]);
+
+export const RoleSchema = z.enum(["user", "agent"]);
+
+export const FileContentSchema = z
+  .object({
+    name: z.string().optional(),
+    mimeType: z.string().optional(),
+    bytes: z.string().optional(),
+    uri: z.string().optional(),
+  })
+  .loose();
+
+const MetadataSchema = z.record(z.string(), z.unknown()).optional();
+
+export const PartSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("text"), text: z.string(), metadata: MetadataSchema }),
+  z.object({ kind: z.literal("file"), file: FileContentSchema, metadata: MetadataSchema }),
+  z.object({
+    kind: z.literal("data"),
+    data: z.record(z.string(), z.unknown()),
+    metadata: MetadataSchema,
+  }),
+]);
+
+export const MessageSchema = z
+  .object({
+    messageId: z.string().min(1),
+    role: RoleSchema,
+    parts: z.array(PartSchema),
+    contextId: z.string().optional(),
+    taskId: z.string().optional(),
+    extensions: z.array(z.string()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .loose();
+
+export const ArtifactSchema = z.object({
+  artifactId: z.string().min(1),
+  parts: z.array(PartSchema),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const TaskSchema = z
+  .object({
+    id: z.string().min(1),
+    contextId: z.string().min(1),
+    status: z.object({
+      state: TaskStateSchema,
+      timestamp: z.string().optional(),
+      message: MessageSchema.optional(),
+    }),
+    artifacts: z.array(ArtifactSchema).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .loose();
+
+export const TaskStatusUpdateEventSchema = z
+  .object({
+    kind: z.literal("status-update"),
+    taskId: z.string().min(1),
+    contextId: z.string().min(1),
+    status: z.object({
+      state: TaskStateSchema,
+      timestamp: z.string().optional(),
+      message: MessageSchema.optional(),
+    }),
+  })
+  .loose();
+
+export const TaskArtifactUpdateEventSchema = z
+  .object({
+    kind: z.literal("artifact-update"),
+    taskId: z.string().min(1),
+    contextId: z.string().min(1),
+    artifact: ArtifactSchema,
+  })
+  .loose();
+
+export const StreamEventSchema = z.union([
+  TaskStatusUpdateEventSchema,
+  TaskArtifactUpdateEventSchema,
+  MessageSchema,
+  TaskSchema,
+]);
+
+export const ExtensionSchema = z.object({
+  uri: z.string().min(1),
+  description: z.string().optional(),
+  required: z.boolean().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const AgentCapabilitiesSchema = z
+  .object({
+    streaming: z.boolean().optional(),
+    pushNotifications: z.boolean().optional(),
+    supportsExtendedAgentCard: z.boolean().optional(),
+    extensions: z.array(ExtensionSchema).optional(),
+  })
+  .loose();
+
+const SecuritySchemeSchema = z
+  .object({ type: z.string().min(1) })
+  .loose();
+
+export const AgentSkillSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().default(""),
+  tags: z.array(z.string()).default([]),
+});
+
+export const AgentCardSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().default(""),
+    url: z.string().min(1),
+    version: z.string().default("1.0.0"),
+    skills: z.array(AgentSkillSchema).default([]),
+    defaultInputModes: z.array(z.string()).default([]),
+    defaultOutputModes: z.array(z.string()).default([]),
+    capabilities: AgentCapabilitiesSchema.default({}),
+    securitySchemes: z.record(z.string(), SecuritySchemeSchema).default({}),
+    securityRequirements: z.array(z.record(z.string(), z.array(z.string()))).default([]),
+  })
+  .loose();
