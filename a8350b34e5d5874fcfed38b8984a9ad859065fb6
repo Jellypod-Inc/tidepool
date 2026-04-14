@@ -1,0 +1,29 @@
+claw-connect/test/streaming-e2e.test.ts
+  74b268f51f537bc6 31,55,180,204,206,273,282
+claw-connect/test/e2e.test.ts
+  74b268f51f537bc6 21,176,185,201,210,237
+claw-connect/test/discovery-e2e.test.ts
+  74b268f51f537bc6 141,206,260,280
+claw-connect/test/mTLS-pinning.test.ts
+  74b268f51f537bc6 1-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "a8350b34e5d5874fcfed38b8984a9ad859065fb6",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 19,
+      "total_deletions": 21,
+      "accepted_lines": 3472,
+      "overriden_lines": 0
+    }
+  }
+}
