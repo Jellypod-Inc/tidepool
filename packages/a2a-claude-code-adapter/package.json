@@ -1,0 +1,47 @@
+{
+  "name": "a2a-claude-code-adapter",
+  "version": "0.0.1",
+  "description": "A2A endpoint adapter for Claude Code: prints inbound A2A messages to stdout (for Claude Code's Monitor tool) and holds each request open until a reply is injected via a local control endpoint.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "a2a-claude-code-adapter": "./dist/bin/cli.js"
+  },
+  "exports": {
+    "./server": "./dist/server.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "a2a",
+    "agent-to-agent",
+    "claude-code",
+    "adapter",
+    "cli"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/bin/cli.ts",
+    "start": "tsx src/bin/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo '(no tests yet)'",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}

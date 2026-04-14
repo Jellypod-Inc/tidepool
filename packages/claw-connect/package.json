@@ -1,21 +1,48 @@
 {
   "name": "claw-connect",
   "version": "0.0.1",
+  "description": "Local-first A2A peer server with mTLS identity, fingerprint-based auth, and directory-based discovery. Run your own agent peer on your machine.",
+  "license": "MIT",
   "type": "module",
-  "private": true,
   "bin": {
     "claw-connect": "./dist/bin/cli.js"
   },
+  "exports": {
+    "./identity": "./dist/identity.js",
+    "./server": "./dist/server.js",
+    "./a2a": "./dist/a2a.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "fixtures",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "a2a",
+    "agent-to-agent",
+    "mtls",
+    "peer-to-peer",
+    "cli",
+    "agent"
+  ],
   "scripts": {
     "build": "tsc && node scripts/fix-shebang.mjs",
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.69",
     "@iarna/toml": "^2.2.5",
+    "ai": "^6.0.159",
     "bonjour-service": "^1.3.0",
     "commander": "^14.0.0",
     "express": "^5.1.0",
