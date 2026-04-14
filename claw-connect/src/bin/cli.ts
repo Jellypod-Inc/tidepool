@@ -15,6 +15,7 @@ import {
 import { runWhoami } from "../cli/whoami.js";
 import { runStatus } from "../cli/status.js";
 import { runPing } from "../cli/ping.js";
+import { runServe } from "../cli/serve.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -177,6 +178,22 @@ program
   .action(async (url: string) => {
     const out = await runPing({ url });
     ok(out);
+  });
+
+program
+  .command("serve")
+  .alias("start")
+  .description("Boot the Claw Connect server")
+  .action(async () => {
+    const configDir = resolveConfigDir(program.opts());
+    const handle = await runServe({ configDir });
+    const shutdown = async (signal: string) => {
+      process.stderr.write(`\nReceived ${signal}, shutting down...\n`);
+      await handle.stop();
+      process.exit(0);
+    };
+    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
