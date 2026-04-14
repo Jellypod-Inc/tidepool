@@ -29,6 +29,17 @@ program
   .option("-c, --config-dir <path>", "Override config directory")
   .option("-v, --verbose", "Verbose output");
 
+program.addHelpText(
+  "after",
+  `\nExamples:\n` +
+    `  $ claw-connect init\n` +
+    `  $ claw-connect register alice-dev --local-endpoint http://127.0.0.1:28800\n` +
+    `  $ claw-connect whoami\n` +
+    `  $ claw-connect friend add bob sha256:...\n` +
+    `  $ claw-connect remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
+    `  $ claw-connect serve\n`,
+);
+
 program
   .command("init")
   .description("Create config files in the config directory")
