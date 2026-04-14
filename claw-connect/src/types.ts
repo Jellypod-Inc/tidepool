@@ -83,27 +83,3 @@ export interface ConnectionRequest {
 export interface PendingRequests {
   requests: ConnectionRequest[];
 }
-
-export interface TaskStatusUpdateEvent {
-  kind: "status-update";
-  taskId: string;
-  contextId: string;
-  status: {
-    state: string;
-    timestamp?: string;
-    message?: { role: string; parts: { kind: string; text: string }[] };
-  };
-  final: boolean;
-}
-
-export interface TaskArtifactUpdateEvent {
-  kind: "artifact-update";
-  taskId: string;
-  contextId: string;
-  artifact: {
-    artifactId: string;
-    parts: { kind: string; text: string }[];
-  };
-}
-
-export type StreamEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
