@@ -30,6 +30,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke.ts",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
