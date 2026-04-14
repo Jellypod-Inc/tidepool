@@ -358,15 +358,15 @@ describe("upstream SSE validation: enforce mode", () => {
       path.join(configDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 58900,
+          port: 58950,
           host: "0.0.0.0",
-          localPort: 58901,
+          localPort: 58951,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 30,
         },
         agents: {
           "strict-stream-agent": {
-            localEndpoint: "http://127.0.0.1:58902",
+            localEndpoint: "http://127.0.0.1:58952",
             rateLimit: "50/hour",
             description: "Streaming agent whose upstream sends malformed SSE",
             timeoutSeconds: 30,
@@ -383,7 +383,7 @@ describe("upstream SSE validation: enforce mode", () => {
       TOML.stringify({ friends: {} } as any),
     );
 
-    mockAgent = createMalformedSseMockAgent(58902);
+    mockAgent = createMalformedSseMockAgent(58952);
 
     server = await startServer({ configDir });
   });
@@ -396,7 +396,7 @@ describe("upstream SSE validation: enforce mode", () => {
 
   it("tears down stream and emits failed status-update on malformed upstream event", async () => {
     const response = await fetch(
-      "http://127.0.0.1:58901/strict-stream-agent/message:stream",
+      "http://127.0.0.1:58951/strict-stream-agent/message:stream",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -414,7 +414,7 @@ describe("upstream SSE validation: enforce mode", () => {
     expect(response.headers.get("content-type")).toContain("text/event-stream");
 
     const events = await collectSSEEvents(response);
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(events.length).toBe(1);
 
     const last: any = events[events.length - 1];
     expect(last.kind).toBe("status-update");
