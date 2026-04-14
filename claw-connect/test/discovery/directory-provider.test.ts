@@ -108,3 +108,49 @@ describe("DirectoryProvider", () => {
     await provider.deadvertise();
   });
 });
+
+describe("DirectoryProvider validation", () => {
+  // A bogus directory that returns malformed payloads — simulates a compromised
+  // or buggy directory server. The provider must not propagate garbage.
+  let bogusServer: http.Server;
+  let bogusUrl: string;
+
+  beforeAll(async () => {
+    const http2 = await import("http");
+    const express = (await import("express")).default;
+    const app = express();
+
+    app.get("/v1/agents/search", (_req, res) => {
+      res.json({ agents: [{ handle: "only-handle" /* missing fields */ }] });
+    });
+
+    app.get("/v1/agents/:handle", (_req, res) => {
+      res.json({ not: "a valid entry" });
+    });
+
+    bogusServer = await new Promise<http.Server>((resolve) => {
+      const s = http2.createServer(app).listen(0, "127.0.0.1", () => {
+        resolve(s);
+      });
+    });
+
+    const addr = bogusServer.address() as { port: number };
+    bogusUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  afterAll(() => {
+    bogusServer?.close();
+  });
+
+  it("search returns [] when the directory returns malformed entries", async () => {
+    const provider = new DirectoryProvider(bogusUrl, "sha256:client-fp");
+    const results = await provider.search({ query: "anything" });
+    expect(results).toEqual([]);
+  });
+
+  it("resolve returns null when the directory returns a malformed entry", async () => {
+    const provider = new DirectoryProvider(bogusUrl, "sha256:client-fp");
+    const result = await provider.resolve("anything");
+    expect(result).toBeNull();
+  });
+});

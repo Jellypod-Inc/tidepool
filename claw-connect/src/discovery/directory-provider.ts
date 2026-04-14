@@ -1,3 +1,7 @@
+import {
+  DirectorySearchResponseSchema,
+  DiscoveredAgentSchema,
+} from "../schemas.js";
 import type { DiscoveredAgent, DiscoveryProvider } from "./types.js";
 
 export class DirectoryProvider implements DiscoveryProvider {
@@ -53,8 +57,12 @@ export class DirectoryProvider implements DiscoveryProvider {
 
     if (!res.ok) return [];
 
-    const data = (await res.json()) as { agents: DiscoveredAgent[] };
-    return data.agents;
+    const data = await res.json();
+    const parsed = DirectorySearchResponseSchema.safeParse(data);
+    // A malformed directory response means "no results" rather than an
+    // exception — discovery is best-effort across multiple providers.
+    if (!parsed.success) return [];
+    return parsed.data.agents;
   }
 
   async resolve(handle: string): Promise<DiscoveredAgent | null> {
@@ -63,7 +71,10 @@ export class DirectoryProvider implements DiscoveryProvider {
     if (res.status === 404) return null;
     if (!res.ok) return null;
 
-    return (await res.json()) as DiscoveredAgent;
+    const data = await res.json();
+    const parsed = DiscoveredAgentSchema.safeParse(data);
+    if (!parsed.success) return null;
+    return parsed.data;
   }
 
   async heartbeat(handle: string): Promise<void> {
