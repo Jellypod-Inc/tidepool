@@ -102,3 +102,16 @@ export function agentTimeoutResponse(
     taskId,
   );
 }
+
+export function malformedRequestResponse(
+  detail: string,
+  taskId?: string,
+): A2AErrorResponse {
+  return buildErrorResponse(
+    400,
+    "failed",
+    `Malformed A2A message: ${detail}`,
+    {},
+    taskId,
+  );
+}

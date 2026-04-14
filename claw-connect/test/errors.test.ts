@@ -5,6 +5,7 @@ import {
   agentNotFoundResponse,
   agentScopeDeniedResponse,
   agentTimeoutResponse,
+  malformedRequestResponse,
 } from "../src/errors.js";
 
 describe("rateLimitResponse", () => {
@@ -74,5 +75,22 @@ describe("error response id correlation", () => {
     // Backwards compatible: old callers keep working.
     const id = rateLimitResponse(10).body.id;
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+});
+
+describe("malformedRequestResponse", () => {
+  it("returns 400 with state=failed and the supplied detail", () => {
+    const resp = malformedRequestResponse("messageId: invalid enum value", "m-1");
+    expect(resp.statusCode).toBe(400);
+    expect(resp.body.status.state).toBe("failed");
+    expect(resp.body.id).toBe("m-1");
+    expect(resp.body.artifacts[0].parts[0].text).toContain(
+      "messageId: invalid enum value",
+    );
+  });
+
+  it("generates a uuid when no taskId is provided", () => {
+    const resp = malformedRequestResponse("bad role");
+    expect(resp.body.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
