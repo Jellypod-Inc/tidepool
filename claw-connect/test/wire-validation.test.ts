@@ -56,3 +56,77 @@ describe("validateWire", () => {
     expect(message).not.toContain("\n");
   });
 });
+
+describe("validateWire: union error formatting", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // A discriminated-ish union where each variant has a `kind` literal.
+  const UnionSchema = z.union([
+    z.object({ kind: z.literal("a"), value: z.string() }),
+    z.object({ kind: z.literal("b"), count: z.number() }),
+  ]);
+
+  it("when payload's kind matches one variant, reports only that variant's field errors", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = validateWire(
+      UnionSchema,
+      { kind: "a", value: 42 },
+      { mode: "enforce", context: "test" },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // Should mention the field that failed inside variant "a".
+      expect(result.error).toMatch(/value/);
+      // Should NOT collapse to the generic zod union message.
+      expect(result.error).not.toMatch(/^\(root\): Invalid input$/);
+      expect(result.error.trim()).not.toBe("Invalid input");
+    }
+  });
+
+  it("when payload has no matching kind, reports a more specific summary than generic Invalid input", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = validateWire(
+      UnionSchema,
+      { kind: "c" },
+      { mode: "enforce", context: "test" },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // The summarizer may legitimately pick either variant, but the output
+      // MUST be richer than the opaque top-level zod message.
+      expect(result.error).not.toBe("(root): Invalid input");
+      expect(result.error.length).toBeGreaterThan("Invalid input".length);
+    }
+  });
+
+  it("prefixes the chosen variant with a [variant …] tag for operator traceability", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    validateWire(
+      UnionSchema,
+      { kind: "a", value: 42 },
+      { mode: "warn", context: "test" },
+    );
+    const message = warn.mock.calls[0]?.[0] as string;
+    expect(message).toMatch(/\[variant [^\]]+\]/);
+  });
+
+  it("handles non-discriminated unions (no `kind` on the input) without throwing", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const PlainUnion = z.union([
+      z.object({ a: z.string() }),
+      z.object({ b: z.number() }),
+    ]);
+    const result = validateWire(
+      PlainUnion,
+      { a: 1, b: "x" },
+      { mode: "enforce", context: "test" },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // Still produces something more detailed than "Invalid input".
+      expect(result.error.length).toBeGreaterThan("Invalid input".length);
+    }
+  });
+});
