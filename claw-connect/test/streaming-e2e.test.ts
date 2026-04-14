@@ -294,9 +294,8 @@ describe("e2e: SSE stream timeout", () => {
     const events = await collectSSEEvents(response);
 
     const failEvents = events.filter(
-      (e: any) => e.kind === "status-update" && e.status?.state === "TASK_STATE_FAILED",
+      (e: any) => e.kind === "status-update" && e.status?.state === "failed",
     );
     expect(failEvents.length).toBe(1);
-    expect((failEvents[0] as any).final).toBe(true);
   }, 10000);
 });

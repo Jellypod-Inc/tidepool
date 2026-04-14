@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  buildFailedEvent,
   createTimeoutController,
   formatSSEEvent,
   parseSSELine,
@@ -40,17 +39,6 @@ describe("parseSSELine", () => {
   });
 });
 
-describe("buildFailedEvent", () => {
-  it("builds a TASK_STATE_FAILED status update event", () => {
-    const event = buildFailedEvent("task-1", "ctx-1", "Stream timed out");
-    expect(event.kind).toBe("status-update");
-    expect(event.taskId).toBe("task-1");
-    expect(event.contextId).toBe("ctx-1");
-    expect(event.status.state).toBe("TASK_STATE_FAILED");
-    expect(event.status.message?.parts[0].text).toBe("Stream timed out");
-    expect(event.final).toBe(true);
-  });
-});
 
 describe("createTimeoutController", () => {
   afterEach(() => {

@@ -3,7 +3,7 @@ import https from "https";
 import http from "http";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
-import { Agent } from "undici";
+import { buildPinnedDispatcher } from "./outbound-tls.js";
 import { loadServerConfig, loadFriendsConfig } from "./config.js";
 import {
   checkFriend,
@@ -26,7 +26,8 @@ import {
   agentTimeoutResponse,
   type A2AErrorResponse,
 } from "./errors.js";
-import { proxySSEStream, buildFailedEvent, initSSEResponse } from "./streaming.js";
+import { proxySSEStream, initSSEResponse } from "./streaming.js";
+import { buildFailedStatusEvent } from "./a2a.js";
 import { fetchRemoteAgentCard, buildRichRemoteAgentCard } from "./agent-card.js";
 import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
 
@@ -173,11 +174,18 @@ function createPublicApp(
     "/:tenant/:action",
     async (req, res) => {
       const { tenant, action } = req.params;
+      // Caller's messageId — threaded into every error response so clients
+      // can correlate failures to the request that triggered them. May be
+      // undefined for malformed bodies; error builders fall back to a uuid.
+      const messageId: string | undefined = req.body?.message?.messageId;
 
       // --- Step 1: Server rate limit ---
       const serverResult = serverBucket.consume();
       if (!serverResult.allowed) {
-        sendA2AError(res, rateLimitResponse(serverResult.retryAfterSeconds));
+        sendA2AError(
+          res,
+          rateLimitResponse(serverResult.retryAfterSeconds, messageId),
+        );
         return;
       }
 
@@ -185,7 +193,7 @@ function createPublicApp(
       const peerCert = (req.socket as any).getPeerCertificate?.();
       const peerFingerprint = extractFingerprint(peerCert?.raw);
       if (!peerFingerprint) {
-        sendA2AError(res, notFriendResponse());
+        sendA2AError(res, notFriendResponse(messageId));
         return;
       }
 
@@ -238,14 +246,14 @@ function createPublicApp(
           return;
         }
 
-        sendA2AError(res, notFriendResponse());
+        sendA2AError(res, notFriendResponse(messageId));
         return;
       }
 
       // --- Step 4: Resolve tenant ---
       const agent = resolveTenant(config, tenant);
       if (!agent) {
-        sendA2AError(res, agentNotFoundResponse(tenant));
+        sendA2AError(res, agentNotFoundResponse(tenant, messageId));
         return;
       }
 
@@ -254,14 +262,17 @@ function createPublicApp(
       if (agentBucket) {
         const agentResult = agentBucket.consume();
         if (!agentResult.allowed) {
-          sendA2AError(res, rateLimitResponse(agentResult.retryAfterSeconds));
+          sendA2AError(
+            res,
+            rateLimitResponse(agentResult.retryAfterSeconds, messageId),
+          );
           return;
         }
       }
 
       // --- Step 6: Check agent scope ---
       if (!checkAgentScope(friendLookup.friend, tenant)) {
-        sendA2AError(res, agentScopeDeniedResponse(tenant));
+        sendA2AError(res, agentScopeDeniedResponse(tenant, messageId));
         return;
       }
 
@@ -283,7 +294,7 @@ function createPublicApp(
 
           if (!upstreamResponse.ok || !upstreamResponse.body) {
             const sse = initSSEResponse(res);
-            sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
+            sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
             sse.end();
             return;
           }
@@ -297,7 +308,10 @@ function createPublicApp(
           });
         } catch {
           if (!res.headersSent) {
-            sendA2AError(res, agentTimeoutResponse(tenant, agent.timeoutSeconds));
+            sendA2AError(
+              res,
+              agentTimeoutResponse(tenant, agent.timeoutSeconds, messageId),
+            );
           }
         }
         return;
@@ -322,11 +336,14 @@ function createPublicApp(
         // Only report as timeout if the abort fired. Other errors (ECONNREFUSED,
         // invalid JSON, etc.) get a 504 with a more accurate message.
         if (err instanceof Error && err.name === "AbortError") {
-          sendA2AError(res, agentTimeoutResponse(tenant, agent.timeoutSeconds));
+          sendA2AError(
+            res,
+            agentTimeoutResponse(tenant, agent.timeoutSeconds, messageId),
+          );
         } else {
           const message = err instanceof Error ? err.message : "Agent unreachable";
           res.status(504).json({
-            id: uuidv4(),
+            id: messageId ?? uuidv4(),
             status: { state: "TASK_STATE_FAILED" },
             artifacts: [
               { artifactId: "error", parts: [{ kind: "text", text: message }] },
@@ -438,7 +455,7 @@ function createLocalApp(
 
             if (!upstreamResponse.ok || !upstreamResponse.body) {
               const sse = initSSEResponse(res);
-              sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
+              sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
               sse.end();
               return;
             }
@@ -489,21 +506,11 @@ function createLocalApp(
     const keyPath = `${configDir}/agents/${firstAgent}/identity.key`;
 
     try {
-      // TODO(mTLS pinning): The spec requires verifying the remote peer's cert
-      // fingerprint against remote.certFingerprint on every outbound request.
-      // Node's TLS with `rejectUnauthorized: false` bypasses `checkServerIdentity`,
-      // so this cannot be done via undici's connect options alone. A proper fix
-      // refactors outbound calls to use Node's `https.request` directly, which
-      // exposes the TLSSocket so getPeerCertificate().raw can be hashed and
-      // compared. Inbound verification (server.ts:extractFingerprint) already
-      // pins correctly; outbound pinning is a known v1 gap tracked here.
-      const dispatcher = new Agent({
-        connect: {
-          cert: fs.readFileSync(certPath, "utf-8"),
-          key: fs.readFileSync(keyPath, "utf-8"),
-          rejectUnauthorized: false,
-        },
-      });
+      const dispatcher = buildPinnedDispatcher(
+        certPath,
+        keyPath,
+        remote.certFingerprint,
+      );
 
       const response = await fetch(targetUrl, {
         method: "POST",
@@ -517,7 +524,7 @@ function createLocalApp(
         const taskId = req.body?.message?.messageId ?? uuidv4();
         if (!response.ok || !response.body) {
           const sse = initSSEResponse(res);
-          sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Remote agent returned non-streaming response"));
+          sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Remote agent returned non-streaming response"));
           sse.end();
           return;
         }
@@ -538,7 +545,7 @@ function createLocalApp(
       if (isStream && !res.headersSent) {
         const taskId = req.body?.message?.messageId ?? uuidv4();
         const sse = initSSEResponse(res);
-        sse.write(buildFailedEvent(taskId, `ctx-${taskId}`, "Remote agent unreachable"));
+        sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Remote agent unreachable"));
         sse.end();
         return;
       }
