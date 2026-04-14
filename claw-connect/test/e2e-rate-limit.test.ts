@@ -225,7 +225,7 @@ describe("e2e: rate limiting and timeout", () => {
     expect(resp.status).toBe(429);
     expect(resp.headers["retry-after"]).toBeDefined();
     expect(parseInt(resp.headers["retry-after"])).toBeGreaterThan(0);
-    expect(resp.body.status.state).toBe("TASK_STATE_FAILED");
+    expect(resp.body.status.state).toBe("failed");
   });
 
   it("returns TASK_STATE_FAILED with 504 when agent times out", async () => {
@@ -237,7 +237,7 @@ describe("e2e: rate limiting and timeout", () => {
     );
 
     expect(resp.status).toBe(504);
-    expect(resp.body.status.state).toBe("TASK_STATE_FAILED");
+    expect(resp.body.status.state).toBe("failed");
     expect(resp.body.artifacts[0].parts[0].text).toContain("slow-agent");
     expect(resp.body.artifacts[0].parts[0].text).toContain("2");
   }, 10_000);
@@ -262,7 +262,7 @@ describe("e2e: rate limiting and timeout", () => {
     );
 
     expect(resp.status).toBe(403);
-    expect(resp.body.status.state).toBe("TASK_STATE_REJECTED");
+    expect(resp.body.status.state).toBe("rejected");
   });
 
   it("returns 404 for unknown agent tenant", async () => {
@@ -274,7 +274,7 @@ describe("e2e: rate limiting and timeout", () => {
     );
 
     expect(resp.status).toBe(404);
-    expect(resp.body.status.state).toBe("TASK_STATE_FAILED");
+    expect(resp.body.status.state).toBe("failed");
     expect(resp.body.artifacts[0].parts[0].text).toContain("nonexistent-agent");
   });
 });

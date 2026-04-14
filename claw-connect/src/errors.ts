@@ -18,12 +18,17 @@ function buildErrorResponse(
   state: string,
   message: string,
   headers: Record<string, string> = {},
+  taskId?: string,
 ): A2AErrorResponse {
   return {
     statusCode,
     headers,
     body: {
-      id: uuidv4(),
+      // When a caller's messageId is available, echo it so clients can
+      // correlate the error to the request that triggered it. Fall back to
+      // a fresh uuid when we have nothing to correlate to (e.g. malformed
+      // request bodies or early-rejected requests without a parsed body).
+      id: taskId ?? uuidv4(),
       status: { state },
       artifacts: [
         {
@@ -37,46 +42,63 @@ function buildErrorResponse(
 
 export function rateLimitResponse(
   retryAfterSeconds: number,
+  taskId?: string,
 ): A2AErrorResponse {
   return buildErrorResponse(
     429,
-    "TASK_STATE_FAILED",
+    "failed",
     `Rate limit exceeded. Retry after ${retryAfterSeconds} seconds.`,
     { "Retry-After": String(retryAfterSeconds) },
+    taskId,
   );
 }
 
-export function notFriendResponse(): A2AErrorResponse {
+export function notFriendResponse(taskId?: string): A2AErrorResponse {
   return buildErrorResponse(
     403,
-    "TASK_STATE_REJECTED",
+    "rejected",
     "You are not authorized. Send a CONNECTION_REQUEST to establish a friendship first.",
+    {},
+    taskId,
   );
 }
 
-export function agentNotFoundResponse(tenant: string): A2AErrorResponse {
+export function agentNotFoundResponse(
+  tenant: string,
+  taskId?: string,
+): A2AErrorResponse {
   return buildErrorResponse(
     404,
-    "TASK_STATE_FAILED",
+    "failed",
     `Agent "${tenant}" not found on this server.`,
+    {},
+    taskId,
   );
 }
 
-export function agentScopeDeniedResponse(tenant: string): A2AErrorResponse {
+export function agentScopeDeniedResponse(
+  tenant: string,
+  taskId?: string,
+): A2AErrorResponse {
   return buildErrorResponse(
     403,
-    "TASK_STATE_REJECTED",
+    "rejected",
     `You are not authorized to access agent "${tenant}".`,
+    {},
+    taskId,
   );
 }
 
 export function agentTimeoutResponse(
   tenant: string,
   timeoutSeconds: number,
+  taskId?: string,
 ): A2AErrorResponse {
   return buildErrorResponse(
     504,
-    "TASK_STATE_FAILED",
+    "failed",
     `Agent "${tenant}" did not respond within ${timeoutSeconds} seconds.`,
+    {},
+    taskId,
   );
 }

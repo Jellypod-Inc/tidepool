@@ -152,7 +152,7 @@ describe("e2e: connection handshake", () => {
 
     expect(response.status).toBe(403);
     const data = (await response.json()) as { status: { state: string } };
-    expect(data.status.state).toBe("TASK_STATE_REJECTED");
+    expect(data.status.state).toBe("rejected");
   });
 
   it("accepts a CONNECTION_REQUEST from an unknown agent (accept mode)", async () => {
