@@ -1,0 +1,40 @@
+claw-connect/test/cli/status.test.ts
+  88080cd5a7512b2f 1-27
+claw-connect/src/bin/cli.ts
+  88080cd5a7512b2f 16,164-172
+claw-connect/src/cli/status.ts
+  88080cd5a7512b2f 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "a52416157479c40c107db57e4fd8e5d179a4a29f",
+  "prompts": {
+    "88080cd5a7512b2f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c79301ec-e02f-45e6-a81c-69e331c78c8e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 50,
+      "total_deletions": 217,
+      "accepted_lines": 50,
+      "overriden_lines": 0
+    },
+    "98e3d88cadae012c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8eefc657-fa86-49a1-942c-71dd4807174a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2053,
+      "overriden_lines": 0
+    }
+  }
+}
