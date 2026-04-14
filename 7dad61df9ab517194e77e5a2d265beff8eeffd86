@@ -1,0 +1,29 @@
+claw-connect/test/e2e-rate-limit.test.ts
+  74b268f51f537bc6 228,240,265,277
+claw-connect/test/e2e-handshake.test.ts
+  74b268f51f537bc6 155
+claw-connect/src/errors.ts
+  74b268f51f537bc6 49,59,72,85,99
+claw-connect/test/errors.test.ts
+  74b268f51f537bc6 16,26,36,46,56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "7dad61df9ab517194e77e5a2d265beff8eeffd86",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 15,
+      "accepted_lines": 15,
+      "overriden_lines": 0
+    }
+  }
+}
