@@ -2,6 +2,11 @@
 import { Command } from "commander";
 import { runInit } from "../cli/init.js";
 import { runRegister } from "../cli/register.js";
+import {
+  runFriendAdd,
+  runFriendList,
+  runFriendRemove,
+} from "../cli/friend.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -54,6 +59,51 @@ program
     });
     ok(`Registered ${name}`);
     ok(`  fingerprint: ${result.fingerprint}`);
+  });
+
+const friend = program.command("friend").description("Manage friends");
+
+friend
+  .command("add <handle> <fingerprint>")
+  .description("Register a friend by handle and cert fingerprint")
+  .option(
+    "-s, --scope <agents...>",
+    "Restrict visibility to specific local agents",
+  )
+  .action(async (handle: string, fingerprint: string, cmdOpts) => {
+    const configDir = resolveConfigDir(program.opts());
+    await runFriendAdd({
+      configDir,
+      handle,
+      fingerprint,
+      agents: cmdOpts.scope,
+    });
+    ok(`Added friend ${handle}`);
+  });
+
+friend
+  .command("list")
+  .description("List known friends")
+  .action(async () => {
+    const configDir = resolveConfigDir(program.opts());
+    const entries = await runFriendList({ configDir });
+    if (entries.length === 0) {
+      ok("(no friends)");
+      return;
+    }
+    for (const e of entries) {
+      const scope = e.agents ? ` [scoped: ${e.agents.join(", ")}]` : "";
+      ok(`${e.handle}  ${e.fingerprint}${scope}`);
+    }
+  });
+
+friend
+  .command("remove <handle>")
+  .description("Remove a friend")
+  .action(async (handle: string) => {
+    const configDir = resolveConfigDir(program.opts());
+    await runFriendRemove({ configDir, handle });
+    ok(`Removed friend ${handle}`);
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
