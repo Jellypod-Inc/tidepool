@@ -12,6 +12,7 @@ import {
   runRemoteList,
   runRemoteRemove,
 } from "../cli/remote.js";
+import { runWhoami } from "../cli/whoami.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -144,6 +145,19 @@ remote
     const configDir = resolveConfigDir(program.opts());
     await runRemoteRemove({ configDir, localHandle });
     ok(`Removed remote ${localHandle}`);
+  });
+
+program
+  .command("whoami")
+  .description("Print local identities and their fingerprints")
+  .action(async () => {
+    const configDir = resolveConfigDir(program.opts());
+    const entries = await runWhoami({ configDir });
+    if (entries.length === 0) {
+      ok("(no local agents — run 'claw-connect register <name>')");
+      return;
+    }
+    for (const e of entries) ok(`${e.name}  ${e.fingerprint}`);
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
