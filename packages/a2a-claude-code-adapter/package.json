@@ -24,11 +24,11 @@
     "adapter"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "dev": "tsx watch src/bin/cli.ts",
     "start": "tsx src/bin/cli.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "prepublishOnly": "pnpm build"
   },
