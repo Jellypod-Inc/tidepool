@@ -1,0 +1,27 @@
+claw-connect/package.json
+  74b268f51f537bc6 23-24
+claw-connect/src/config.ts
+  74b268f51f537bc6 3-4,7-24,27,29-32,34-36,45-50,52
+claw-connect/test/config.test.ts
+  74b268f51f537bc6 3-4,9-15,78-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "4447eea5df5392b37bfd10b1562169d316b2b598",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 794,
+      "total_deletions": 10,
+      "accepted_lines": 3842,
+      "overriden_lines": 0
+    }
+  }
+}
