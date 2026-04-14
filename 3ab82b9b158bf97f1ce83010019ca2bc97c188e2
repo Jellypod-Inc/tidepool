@@ -1,0 +1,38 @@
+claw-connect/test/discovery/directory-provider.test.ts
+  74b268f51f537bc6 111-156
+claw-connect/src/discovery/directory-provider.ts
+  74b268f51f537bc6 1-4,60-65,74-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "3ab82b9b158bf97f1ce83010019ca2bc97c188e2",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3746,
+      "overriden_lines": 0
+    },
+    "98e3d88cadae012c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8eefc657-fa86-49a1-942c-71dd4807174a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
