@@ -16,6 +16,7 @@ import { runWhoami } from "../cli/whoami.js";
 import { runStatus } from "../cli/status.js";
 import { runPing } from "../cli/ping.js";
 import { runServe } from "../cli/serve.js";
+import { runDirectoryServe } from "../cli/directory.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -194,6 +195,27 @@ program
     };
     process.on("SIGINT", () => shutdown("SIGINT"));
     process.on("SIGTERM", () => shutdown("SIGTERM"));
+  });
+
+const directory = program.command("directory").description("Directory service");
+
+directory
+  .command("serve")
+  .description("Run a standalone directory server")
+  .option("-p, --port <port>", "Listen port", (v) => parseInt(v, 10), 9100)
+  .option("-h, --host <host>", "Bind host", "127.0.0.1")
+  .action(async (cmdOpts) => {
+    const handle = await runDirectoryServe({
+      port: cmdOpts.port,
+      host: cmdOpts.host,
+    });
+    ok(`Directory listening on http://${cmdOpts.host}:${handle.port}`);
+    const shutdown = async () => {
+      await handle.stop();
+      process.exit(0);
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
