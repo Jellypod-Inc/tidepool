@@ -5,6 +5,7 @@ import os from "os";
 import http from "http";
 import express from "express";
 import TOML from "@iarna/toml";
+import { Agent as UndiciAgent } from "undici";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 
@@ -244,5 +245,109 @@ describe("e2e: two Claw Connect servers", () => {
       // Expected — self-signed cert rejected by fetch, or no client cert
       expect(true).toBe(true);
     }
+  });
+});
+
+describe("inbound validation: enforce mode", () => {
+  let tmpDir: string;
+  let configDir: string;
+  let server: { close: () => void };
+  let clientCert: Buffer;
+  let clientKey: Buffer;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-enforce-inbound-"));
+    configDir = path.join(tmpDir, "server");
+    fs.mkdirSync(path.join(configDir, "agents/strict-agent"), {
+      recursive: true,
+    });
+
+    // Server's own identity (used by mTLS listener)
+    await generateIdentity({
+      name: "strict-agent",
+      certPath: path.join(configDir, "agents/strict-agent/identity.crt"),
+      keyPath: path.join(configDir, "agents/strict-agent/identity.key"),
+    });
+
+    // Client identity (any valid cert works; enforce rejects before friend check)
+    const clientDir = path.join(tmpDir, "client");
+    fs.mkdirSync(path.join(clientDir, "agents/client-agent"), {
+      recursive: true,
+    });
+    await generateIdentity({
+      name: "client-agent",
+      certPath: path.join(clientDir, "agents/client-agent/identity.crt"),
+      keyPath: path.join(clientDir, "agents/client-agent/identity.key"),
+    });
+    clientCert = fs.readFileSync(
+      path.join(clientDir, "agents/client-agent/identity.crt"),
+    );
+    clientKey = fs.readFileSync(
+      path.join(clientDir, "agents/client-agent/identity.key"),
+    );
+
+    fs.writeFileSync(
+      path.join(configDir, "server.toml"),
+      TOML.stringify({
+        server: {
+          port: 58850,
+          host: "0.0.0.0",
+          localPort: 58851,
+          rateLimit: "100/hour",
+        },
+        agents: {
+          "strict-agent": {
+            localEndpoint: "http://127.0.0.1:58852",
+            rateLimit: "50/hour",
+            description: "Strict agent that enforces wire validation",
+          },
+        },
+        connectionRequests: { mode: "deny" },
+        discovery: { providers: ["static"], cacheTtlSeconds: 300 },
+        validation: { mode: "enforce" },
+      } as any),
+    );
+
+    fs.writeFileSync(
+      path.join(configDir, "friends.toml"),
+      TOML.stringify({ friends: {} } as any),
+    );
+
+    server = await startServer({ configDir });
+  });
+
+  afterAll(() => {
+    server?.close();
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("rejects malformed inbound message with HTTP 400 and state=failed", async () => {
+    const response = await fetch(
+      "https://127.0.0.1:58850/strict-agent/message:send",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            messageId: "bad-1",
+            // Invalid — MessageSchema expects "user" or "agent"
+            role: "ROLE_USER",
+            parts: [{ kind: "text", text: "hello" }],
+          },
+        }),
+        // @ts-expect-error — undici dispatcher for mTLS
+        dispatcher: new UndiciAgent({
+          connect: {
+            cert: clientCert,
+            key: clientKey,
+            rejectUnauthorized: false,
+          },
+        }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { status: { state: string } };
+    expect(data.status.state).toBe("failed");
   });
 });

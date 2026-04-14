@@ -297,3 +297,130 @@ describe("e2e: SSE stream timeout", () => {
     expect(failEvents.length).toBe(1);
   }, 10000);
 });
+
+// --- Upstream SSE validation in enforce mode ---
+
+function createMalformedSseMockAgent(port: number): http.Server {
+  const app = express();
+  app.use(express.json());
+
+  app.post("/message\\:stream", (_req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+
+    // Emit exactly one SSE event with a verbose-dialect task state that is
+    // invalid under StreamEventSchema (it expects "completed", not
+    // "TASK_STATE_COMPLETED"). In enforce mode, proxySSEStream should tear
+    // the stream down and emit a synthetic failed status-update.
+    res.write(
+      formatSseEvent({
+        kind: "status-update",
+        taskId: "t1",
+        contextId: "c1",
+        status: { state: "TASK_STATE_COMPLETED" },
+      }),
+    );
+    res.end();
+  });
+
+  return app.listen(port, "127.0.0.1");
+}
+
+describe("upstream SSE validation: enforce mode", () => {
+  let tmpDir: string;
+  let configDir: string;
+  let mockAgent: http.Server;
+  let server: { close: () => void };
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-enforce-"));
+    configDir = path.join(tmpDir, "enforce-server");
+    fs.mkdirSync(path.join(configDir, "agents/strict-stream-agent"), {
+      recursive: true,
+    });
+
+    await generateIdentity({
+      name: "strict-stream-agent",
+      certPath: path.join(
+        configDir,
+        "agents/strict-stream-agent/identity.crt",
+      ),
+      keyPath: path.join(
+        configDir,
+        "agents/strict-stream-agent/identity.key",
+      ),
+    });
+
+    fs.writeFileSync(
+      path.join(configDir, "server.toml"),
+      TOML.stringify({
+        server: {
+          port: 58900,
+          host: "0.0.0.0",
+          localPort: 58901,
+          rateLimit: "100/hour",
+          streamTimeoutSeconds: 30,
+        },
+        agents: {
+          "strict-stream-agent": {
+            localEndpoint: "http://127.0.0.1:58902",
+            rateLimit: "50/hour",
+            description: "Streaming agent whose upstream sends malformed SSE",
+            timeoutSeconds: 30,
+          },
+        },
+        connectionRequests: { mode: "deny" },
+        discovery: { providers: ["static"], cacheTtlSeconds: 300 },
+        validation: { mode: "enforce" },
+      } as any),
+    );
+
+    fs.writeFileSync(
+      path.join(configDir, "friends.toml"),
+      TOML.stringify({ friends: {} } as any),
+    );
+
+    mockAgent = createMalformedSseMockAgent(58902);
+
+    server = await startServer({ configDir });
+  });
+
+  afterAll(() => {
+    mockAgent?.close();
+    server?.close();
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("tears down stream and emits failed status-update on malformed upstream event", async () => {
+    const response = await fetch(
+      "http://127.0.0.1:58901/strict-stream-agent/message:stream",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            messageId: "enforce-stream-1",
+            role: "user",
+            parts: [{ kind: "text", text: "Stream me" }],
+          },
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const events = await collectSSEEvents(response);
+    expect(events.length).toBeGreaterThanOrEqual(1);
+
+    const last: any = events[events.length - 1];
+    expect(last.kind).toBe("status-update");
+    expect(last.status.state).toBe("failed");
+    expect(last.status.message.parts[0].text).toContain(
+      "Upstream sent malformed event",
+    );
+  });
+});
