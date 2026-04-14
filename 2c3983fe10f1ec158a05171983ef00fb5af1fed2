@@ -1,0 +1,38 @@
+claw-connect/src/errors.ts
+  98e3d88cadae012c 105-117
+claw-connect/test/errors.test.ts
+  98e3d88cadae012c 8,80-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "2c3983fe10f1ec158a05171983ef00fb5af1fed2",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3606,
+      "overriden_lines": 0
+    },
+    "98e3d88cadae012c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8eefc657-fa86-49a1-942c-71dd4807174a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 124,
+      "total_deletions": 402,
+      "accepted_lines": 86,
+      "overriden_lines": 0
+    }
+  }
+}
