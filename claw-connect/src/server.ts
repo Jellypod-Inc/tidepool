@@ -12,6 +12,7 @@ import {
   extractFingerprint,
   isConnectionRequest,
   extractConnectionMetadata,
+  CONNECTION_EXTENSION_URL,
 } from "./middleware.js";
 import { mapLocalTenantToRemote, buildOutboundUrl } from "./proxy.js";
 import { buildLocalAgentCard, buildRemoteAgentCard } from "./agent-card.js";
@@ -237,7 +238,7 @@ function createPublicApp(
               return r;
             });
 
-            res.setHeader("X-A2A-Extensions", "https://clawconnect.dev/ext/connection/v1");
+            res.setHeader("X-A2A-Extensions", CONNECTION_EXTENSION_URL);
             res.json(result.response);
           } catch (err) {
             const message =

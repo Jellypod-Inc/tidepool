@@ -7,7 +7,7 @@ import express from "express";
 import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
-import { formatSSEEvent } from "../src/streaming.js";
+import { formatSseEvent } from "../src/a2a.js";
 
 function createStreamingMockAgent(port: number, name: string): http.Server {
   const app = express();
@@ -24,7 +24,7 @@ function createStreamingMockAgent(port: number, name: string): http.Server {
     const contextId = `ctx-stream-${name}`;
 
     res.write(
-      formatSSEEvent({
+      formatSseEvent({
         kind: "status-update",
         taskId,
         contextId,
@@ -34,7 +34,7 @@ function createStreamingMockAgent(port: number, name: string): http.Server {
 
     setTimeout(() => {
       res.write(
-        formatSSEEvent({
+        formatSseEvent({
           kind: "artifact-update",
           taskId,
           contextId,
@@ -48,7 +48,7 @@ function createStreamingMockAgent(port: number, name: string): http.Server {
 
     setTimeout(() => {
       res.write(
-        formatSSEEvent({
+        formatSseEvent({
           kind: "status-update",
           taskId,
           contextId,

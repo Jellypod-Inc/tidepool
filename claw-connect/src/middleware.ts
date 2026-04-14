@@ -5,6 +5,7 @@ import type {
   ServerConfig,
   AgentConfig,
 } from "./types.js";
+import { parseExtensionsHeader } from "./a2a.js";
 
 export const CONNECTION_EXTENSION_URL =
   "https://clawconnect.dev/ext/connection/v1";
@@ -72,16 +73,13 @@ export function isConnectionRequest(
     ? (message.extensions as string[])
     : [];
 
-  // `X-A2A-Extensions` header — express normalizes header names to lowercase.
-  const headerRaw = headers["x-a2a-extensions"];
-  const headerValue = typeof headerRaw === "string" ? headerRaw : undefined;
-  const inHeaderExtensions = headerValue
-    ? headerValue.split(",").map((s) => s.trim()).filter(Boolean)
-    : [];
-
   const declaresExtension =
     inBodyExtensions.includes(CONNECTION_EXTENSION_URL) ||
-    inHeaderExtensions.includes(CONNECTION_EXTENSION_URL);
+    parseExtensionsHeader(
+      typeof headers["x-a2a-extensions"] === "string"
+        ? (headers["x-a2a-extensions"] as string)
+        : undefined,
+    ).includes(CONNECTION_EXTENSION_URL);
 
   if (!declaresExtension) return false;
 

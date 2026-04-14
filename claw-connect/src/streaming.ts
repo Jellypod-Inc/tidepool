@@ -1,14 +1,5 @@
 import type { Response as ExpressResponse } from "express";
-import {
-  formatSseEvent,
-  parseSseLine,
-  buildFailedStatusEvent,
-} from "./a2a.js";
-
-// Re-export the SSE primitives so callers that want them through this file
-// keep working, but all new code should import directly from ./a2a.js.
-export const formatSSEEvent = formatSseEvent;
-export const parseSSELine = parseSseLine;
+import { formatSseEvent, buildFailedStatusEvent } from "./a2a.js";
 
 export function createTimeoutController(
   timeoutMs: number,

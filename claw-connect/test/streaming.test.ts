@@ -1,44 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import {
-  createTimeoutController,
-  formatSSEEvent,
-  parseSSELine,
-} from "../src/streaming.js";
-
-describe("formatSSEEvent", () => {
-  it("formats a JSON object as an SSE data line", () => {
-    const event = { kind: "status-update", taskId: "t1" };
-    const result = formatSSEEvent(event);
-    expect(result).toBe(`data: ${JSON.stringify(event)}\n\n`);
-  });
-});
-
-describe("parseSSELine", () => {
-  it("parses a data: prefixed line into a JSON object", () => {
-    const obj = { kind: "status-update", taskId: "t1" };
-    const line = `data: ${JSON.stringify(obj)}`;
-    const result = parseSSELine(line);
-    expect(result).toEqual(obj);
-  });
-
-  it("returns null for empty lines", () => {
-    expect(parseSSELine("")).toBeNull();
-    expect(parseSSELine("\n")).toBeNull();
-  });
-
-  it("returns null for comment lines", () => {
-    expect(parseSSELine(": keepalive")).toBeNull();
-  });
-
-  it("returns null for non-data lines", () => {
-    expect(parseSSELine("event: update")).toBeNull();
-  });
-
-  it("returns null for malformed JSON", () => {
-    expect(parseSSELine("data: {not json")).toBeNull();
-  });
-});
-
+import { createTimeoutController } from "../src/streaming.js";
 
 describe("createTimeoutController", () => {
   afterEach(() => {

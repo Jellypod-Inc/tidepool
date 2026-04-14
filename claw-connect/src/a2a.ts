@@ -34,7 +34,7 @@ export interface FileContent {
   uri?: string;
 }
 
-// ----- Part (v1.0 flattened, #1411) -----
+// ----- Part -----
 
 export type Part =
   | { kind: "text"; text: string; metadata?: Record<string, unknown> }
@@ -73,7 +73,7 @@ export interface Task {
   metadata?: Record<string, unknown>;
 }
 
-// ----- Stream events (v1.0: no `final` field, #1308) -----
+// ----- Stream events -----
 
 export interface TaskStatusUpdateEvent {
   kind: "status-update";
@@ -309,11 +309,7 @@ export function parseSseLine(line: string): unknown | null {
   }
 }
 
-/**
- * Build a v1.0 TaskStatusUpdateEvent with state=failed. Used by the SSE proxy
- * to surface upstream failures to downstream consumers. v1.0 removed the
- * `final` field; terminality is inferred via isTerminalState().
- */
+/** Build a TaskStatusUpdateEvent with state=failed to signal upstream errors. */
 export function buildFailedStatusEvent(
   taskId: string,
   contextId: string,
@@ -346,17 +342,13 @@ const TERMINAL_STATES: ReadonlySet<TaskState> = new Set<TaskState>([
   "rejected",
 ]);
 
-/**
- * True if the given TaskState ends the task (v1.0 terminality rule).
- * v1.0 removed the explicit `final` field from status events; use this
- * helper wherever the old code would have checked `event.final`.
- */
+/** True if the given TaskState ends the task. */
 export function isTerminalState(state: TaskState): boolean {
   return TERMINAL_STATES.has(state);
 }
 
 // ============================================================
-// Extension header carriage (v1.0)
+// Extension header carriage
 // ============================================================
 
 /**
