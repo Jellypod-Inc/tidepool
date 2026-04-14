@@ -1,8 +1,17 @@
 import { describe, it, expect } from "vitest";
 import { loadServerConfig, loadFriendsConfig } from "../src/config.js";
+import fs from "fs";
+import os from "os";
 import path from "path";
 
 const fixturesDir = path.resolve(import.meta.dirname, "../fixtures");
+
+function writeTempToml(name: string, contents: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-config-test-"));
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, contents);
+  return file;
+}
 
 describe("loadServerConfig", () => {
   it("loads and parses server.toml", () => {
@@ -64,5 +73,42 @@ describe("loadFriendsConfig", () => {
   it("returns empty friends on missing file", () => {
     const config = loadFriendsConfig("/nonexistent/friends.toml");
     expect(config.friends).toEqual({});
+  });
+});
+
+describe("config validation (zod)", () => {
+  it("throws with a clear path when an agent is missing localEndpoint", () => {
+    const file = writeTempToml(
+      "server.toml",
+      `
+[server]
+port = 9900
+host = "0.0.0.0"
+localPort = 9901
+
+[agents.broken]
+# localEndpoint missing — should fail validation with the offending path
+rateLimit = "50/hour"
+description = "broken"
+`,
+    );
+
+    expect(() => loadServerConfig(file)).toThrowError(
+      /agents\.broken\.localEndpoint/,
+    );
+  });
+
+  it("throws when a friend fingerprint does not match the sha256 format", () => {
+    const file = writeTempToml(
+      "friends.toml",
+      `
+[friends.badfriend]
+fingerprint = "not-a-real-fingerprint"
+`,
+    );
+
+    expect(() => loadFriendsConfig(file)).toThrowError(
+      /friends\.badfriend\.fingerprint/,
+    );
   });
 });
