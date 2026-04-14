@@ -1,0 +1,27 @@
+claw-connect/src/server.ts
+  74b268f51f537bc6 204,240,348,555
+claw-connect/src/middleware.ts
+  74b268f51f537bc6 54-58,60-63,71-86
+claw-connect/test/middleware.test.ts
+  74b268f51f537bc6 8,117-127,130-134,137-138,140-141,144-148,151-152,154-155,159,162-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "5f0f54c3c023de869141bb7de87663202e7620d7",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 75,
+      "total_deletions": 890,
+      "accepted_lines": 3530,
+      "overriden_lines": 0
+    }
+  }
+}
