@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { z } from "zod";
-import { validateWire } from "../src/wire-validation.js";
+import { validateWire, logWireFailure } from "../src/wire-validation.js";
 
 const SampleSchema = z.object({ foo: z.string() });
 
@@ -128,5 +128,79 @@ describe("validateWire: union error formatting", () => {
       // Still produces something more detailed than "Invalid input".
       expect(result.error.length).toBeGreaterThan("Invalid input".length);
     }
+  });
+
+  it("does NOT use input's kind as variant tag when no variant declares that kind literal", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = z.union([
+      z.object({ kind: z.literal("a"), value: z.string() }),
+      z.object({ kind: z.literal("b"), count: z.number() }),
+      // A kind-less variant — analogous to MessageSchema inside StreamEventSchema.
+      z.object({ messageId: z.string() }),
+    ]);
+    const result = validateWire(
+      schema,
+      { kind: "unknownKind" },
+      { mode: "enforce", context: "t" },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // Must NOT carry the bogus [variant unknownKind] tag — "unknownKind" is
+      // not declared by any variant. Falls back to a 0-based index tag.
+      expect(result.error).not.toMatch(/\[variant unknownKind\]/);
+      expect(result.error).toMatch(/\[variant [0-9]+\]/);
+    }
+    const logged = warn.mock.calls[0]?.[0] as string;
+    expect(logged).not.toMatch(/\[variant unknownKind\]/);
+  });
+
+  it("uses input's kind as variant tag when a variant declares that kind literal", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const schema = z.union([
+      z.object({ kind: z.literal("a"), value: z.string() }),
+      z.object({ kind: z.literal("b"), count: z.number() }),
+      z.object({ messageId: z.string() }),
+    ]);
+    const result = validateWire(
+      schema,
+      { kind: "a", value: 42 },
+      { mode: "enforce", context: "t" },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/\[variant a\]/);
+      expect(result.error).toMatch(/value/);
+    }
+    const logged = warn.mock.calls[0]?.[0] as string;
+    expect(logged).toMatch(/\[variant a\]/);
+  });
+});
+
+describe("logWireFailure: log-injection hardening", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("escapes C0 control chars (CR, LF, ESC) in the detail argument", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logWireFailure("warn", "ctx", "bad\rpayload\x1b[31m\n");
+    const line = warn.mock.calls[0]?.[0] as string;
+    // Escaped forms present.
+    expect(line).toContain("\\x0d"); // CR
+    expect(line).toContain("\\x1b"); // ESC
+    expect(line).toContain("\\x0a"); // LF
+    // Raw control chars absent.
+    expect(line).not.toContain("\r");
+    expect(line).not.toContain("\n");
+    expect(line).not.toContain("\x1b");
+    // Result is a single line.
+    expect(line.split("\n").length).toBe(1);
+  });
+
+  it("leaves normal printable characters untouched", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    logWireFailure("enforce", "upstream.sse.event", "invalid JSON: {foo: 'bar'}");
+    const line = warn.mock.calls[0]?.[0] as string;
+    expect(line).toContain("invalid JSON: {foo: 'bar'}");
   });
 });
