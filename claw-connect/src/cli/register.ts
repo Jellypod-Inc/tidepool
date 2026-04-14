@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import { generateIdentity } from "../identity.js";
 import { loadServerConfig } from "../config.js";
@@ -18,13 +19,9 @@ export async function runRegister(
   opts: RunRegisterOpts,
 ): Promise<{ fingerprint: string }> {
   const serverPath = path.join(opts.configDir, "server.toml");
-  const cfg: ServerConfig = (() => {
-    try {
-      return loadServerConfig(serverPath);
-    } catch {
-      return defaultServerConfig();
-    }
-  })();
+  const cfg: ServerConfig = fs.existsSync(serverPath)
+    ? loadServerConfig(serverPath)
+    : defaultServerConfig();
 
   if (cfg.agents[opts.name] && !opts.force) {
     throw new Error(
