@@ -1,0 +1,31 @@
+claw-connect/src/ping.ts
+  74b268f51f537bc6 1-2,30-31,33,43-49,62,79
+claw-connect/test/cli-ping.test.ts
+  74b268f51f537bc6 12-16,78-85
+claw-connect/test/agent-card-rich.test.ts
+  74b268f51f537bc6 40-41,110
+claw-connect/src/agent-card.ts
+  74b268f51f537bc6 1-6,9,37-42,46-47,60-68,79,81-82,84,116-120
+claw-connect/test/agent-card.test.ts
+  74b268f51f537bc6 1-3,7,12,27-38,63-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "2c3acd9eb4d14945644c987fd0911ba02bd76b10",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 44,
+      "total_deletions": 612,
+      "accepted_lines": 3604,
+      "overriden_lines": 0
+    }
+  }
+}
