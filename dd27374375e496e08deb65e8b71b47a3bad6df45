@@ -1,0 +1,29 @@
+claw-connect/src/handshake.ts
+  74b268f51f537bc6 4,11-13,43-48,54-59
+claw-connect/test/handshake.test.ts
+  74b268f51f537bc6 19,22-24,26-27,32,35-37,39-40,86-87,110-111,140-141,169-170
+claw-connect/test/e2e-handshake.test.ts
+  74b268f51f537bc6 193-196,198-199,201
+claw-connect/test/discovery-e2e.test.ts
+  74b268f51f537bc6 1-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "dd27374375e496e08deb65e8b71b47a3bad6df45",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 49,
+      "total_deletions": 72,
+      "accepted_lines": 3897,
+      "overriden_lines": 0
+    }
+  }
+}
