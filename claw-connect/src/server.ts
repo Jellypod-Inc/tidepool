@@ -326,6 +326,7 @@ function createPublicApp(
             timeoutMs: streamTimeoutMs,
             taskId,
             contextId: `ctx-${taskId}`,
+            validationMode: config.validation.mode,
           });
         } catch {
           if (!res.headersSent) {
@@ -498,6 +499,7 @@ function createLocalApp(
               timeoutMs: streamTimeoutMs,
               taskId,
               contextId: `ctx-${taskId}`,
+              validationMode: config.validation.mode,
             });
           } catch {
             if (!res.headersSent) {
@@ -567,6 +569,7 @@ function createLocalApp(
           timeoutMs: streamTimeoutMs,
           taskId,
           contextId: `ctx-${taskId}`,
+          validationMode: config.validation.mode,
         });
         return;
       }

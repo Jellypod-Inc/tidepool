@@ -1,5 +1,11 @@
 import type { Response as ExpressResponse } from "express";
-import { formatSseEvent, buildFailedStatusEvent } from "./a2a.js";
+import {
+  formatSseEvent,
+  parseSseLine,
+  buildFailedStatusEvent,
+  StreamEventSchema,
+} from "./a2a.js";
+import { validateWire, type ValidationMode } from "./wire-validation.js";
 
 export function createTimeoutController(
   timeoutMs: number,
@@ -55,8 +61,9 @@ export async function proxySSEStream(opts: {
   timeoutMs: number;
   taskId: string;
   contextId: string;
+  validationMode: ValidationMode;
 }): Promise<void> {
-  const { upstreamResponse, downstream, timeoutMs, taskId, contextId } = opts;
+  const { upstreamResponse, downstream, timeoutMs, taskId, contextId, validationMode } = opts;
 
   const sse = initSSEResponse(downstream);
   let closed = false;
@@ -117,11 +124,36 @@ export async function proxySSEStream(opts: {
 
       for (const line of lines) {
         if (closed) break;
-        if (line.trim()) {
-          downstream.write(line + "\n");
-        } else {
+        if (!line.trim()) {
           downstream.write("\n");
+          continue;
         }
+
+        // Validate each parsed SSE event against the v1.0 StreamEventSchema.
+        // Non-data lines (comments, `event:`, blanks) and data lines whose JSON
+        // fails to parse both return null here and pass through untouched.
+        // In warn mode, validateWire logs and returns ok; in enforce mode,
+        // we emit a failed status-update downstream and tear the stream down.
+        const parsed = parseSseLine(line);
+        if (parsed !== null) {
+          const result = validateWire(StreamEventSchema, parsed, {
+            mode: validationMode,
+            context: "upstream.sse.event",
+          });
+          if (!result.ok) {
+            sse.write(
+              buildFailedStatusEvent(
+                taskId,
+                contextId,
+                `Upstream sent malformed event: ${result.error}`,
+              ),
+            );
+            cleanup();
+            return;
+          }
+        }
+
+        downstream.write(line + "\n");
       }
     }
   } catch {
