@@ -1,15 +1,11 @@
 {
   "name": "a2a-claude-code-adapter",
   "version": "0.0.1",
-  "description": "A2A endpoint adapter for Claude Code: prints inbound A2A messages to stdout (for Claude Code's Monitor tool) and holds each request open until a reply is injected via a local control endpoint.",
+  "description": "MCP channel server for Claude Code that receives A2A messages via claw-connect and lets Claude reply through an a2a_reply tool.",
   "license": "MIT",
   "type": "module",
   "bin": {
     "a2a-claude-code-adapter": "./dist/bin/cli.js"
-  },
-  "exports": {
-    "./server": "./dist/server.js",
-    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -23,25 +19,31 @@
     "a2a",
     "agent-to-agent",
     "claude-code",
-    "adapter",
-    "cli"
+    "mcp",
+    "channel",
+    "adapter"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/bin/cli.ts",
     "start": "tsx src/bin/cli.ts",
     "typecheck": "tsc --noEmit",
-    "test": "echo '(no tests yet)'",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@modelcontextprotocol/sdk": "^1.0.4",
     "commander": "^14.0.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.1"
   }
 }

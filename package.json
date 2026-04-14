@@ -5,18 +5,6 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "smoke": "pnpm --filter claw-connect smoke",
-    "e2e:init": "tsx scripts/e2e-init.ts",
-    "e2e:alice": "tsx scripts/e2e-run.ts alice",
-    "e2e:bob": "tsx scripts/e2e-run.ts bob",
-    "e2e:cheatsheet": "tsx scripts/e2e-cheatsheet.ts"
-  },
-  "devDependencies": {
-    "@iarna/toml": "^2.2.5",
-    "@types/node": "^22.0.0",
-    "a2a-claude-code-adapter": "workspace:*",
-    "claw-connect": "workspace:*",
-    "tsx": "^4.19.0",
-    "typescript": "^5.9.3"
+    "smoke": "pnpm --filter claw-connect smoke"
   }
 }
