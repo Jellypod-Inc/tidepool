@@ -52,6 +52,10 @@ const DiscoveryConfigSchema = z.object({
     .optional(),
 });
 
+const ValidationConfigSchema = z.object({
+  mode: z.enum(["warn", "enforce"]).default("warn"),
+});
+
 export const ServerConfigSchema = z.object({
   server: z.object({
     port: z.number().int().positive().default(9900),
@@ -66,6 +70,7 @@ export const ServerConfigSchema = z.object({
     providers: ["static"],
     cacheTtlSeconds: 300,
   }),
+  validation: ValidationConfigSchema.default({ mode: "warn" }),
 });
 
 // --- FriendsConfig ---

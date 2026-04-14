@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { loadServerConfig, loadFriendsConfig } from "../src/config.js";
+import { ServerConfigSchema } from "../src/schemas.js";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -110,5 +111,48 @@ fingerprint = "not-a-real-fingerprint"
     expect(() => loadFriendsConfig(file)).toThrowError(
       /friends\.badfriend\.fingerprint/,
     );
+  });
+});
+
+describe("validation config", () => {
+  it("defaults to warn mode when omitted", () => {
+    const parsed = ServerConfigSchema.parse({
+      server: {
+        port: 9900,
+        host: "0.0.0.0",
+        localPort: 9901,
+        rateLimit: "100/hour",
+        streamTimeoutSeconds: 300,
+      },
+    });
+    expect(parsed.validation.mode).toBe("warn");
+  });
+
+  it("accepts enforce mode", () => {
+    const parsed = ServerConfigSchema.parse({
+      server: {
+        port: 9900,
+        host: "0.0.0.0",
+        localPort: 9901,
+        rateLimit: "100/hour",
+        streamTimeoutSeconds: 300,
+      },
+      validation: { mode: "enforce" },
+    });
+    expect(parsed.validation.mode).toBe("enforce");
+  });
+
+  it("rejects invalid mode values", () => {
+    const result = ServerConfigSchema.safeParse({
+      server: {
+        port: 9900,
+        host: "0.0.0.0",
+        localPort: 9901,
+        rateLimit: "100/hour",
+        streamTimeoutSeconds: 300,
+      },
+      validation: { mode: "panic" },
+    });
+    expect(result.success).toBe(false);
   });
 });

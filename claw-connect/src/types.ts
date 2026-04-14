@@ -9,6 +9,7 @@ export interface ServerConfig {
   agents: Record<string, AgentConfig>;
   connectionRequests: ConnectionRequestConfig;
   discovery: DiscoveryConfig;
+  validation: ValidationConfig;
 }
 
 export interface StaticPeer {
@@ -71,6 +72,10 @@ export interface ConnectionRequestAutoConfig {
 export interface ConnectionRequestConfig {
   mode: "accept" | "deny" | "auto";
   auto?: ConnectionRequestAutoConfig;
+}
+
+export interface ValidationConfig {
+  mode: "warn" | "enforce";
 }
 
 export interface ConnectionRequest {
