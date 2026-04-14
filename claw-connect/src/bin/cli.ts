@@ -13,6 +13,7 @@ import {
   runRemoteRemove,
 } from "../cli/remote.js";
 import { runWhoami } from "../cli/whoami.js";
+import { runStatus } from "../cli/status.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -158,6 +159,15 @@ program
       return;
     }
     for (const e of entries) ok(`${e.name}  ${e.fingerprint}`);
+  });
+
+program
+  .command("status")
+  .description("Show configured server + agents + friends")
+  .action(async () => {
+    const configDir = resolveConfigDir(program.opts());
+    const out = await runStatus({ configDir });
+    ok(out);
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
