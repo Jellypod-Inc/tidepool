@@ -1,0 +1,38 @@
+claw-connect/src/server.ts
+  98e3d88cadae012c 329,502,572
+claw-connect/src/streaming.ts
+  98e3d88cadae012c 2-8,64,66,127,129,131-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "75e3bdfdad8c47c14c0ef961dc03fcca32fabb2a",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3606,
+      "overriden_lines": 0
+    },
+    "98e3d88cadae012c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8eefc657-fa86-49a1-942c-71dd4807174a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 40,
+      "total_deletions": 777,
+      "accepted_lines": 40,
+      "overriden_lines": 0
+    }
+  }
+}
