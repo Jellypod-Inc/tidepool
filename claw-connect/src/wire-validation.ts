@@ -31,11 +31,24 @@ export function validateWire<S extends ZodTypeAny>(
   const issueSummary = parsed.error.issues
     .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
     .join("; ");
-  const line = `[wire-validation] ${opts.mode} ${opts.context} — ${issueSummary}`;
-  console.warn(line);
+  logWireFailure(opts.mode, opts.context, issueSummary);
 
   if (opts.mode === "warn") {
     return { ok: true, data: data as z.infer<S> };
   }
   return { ok: false, error: issueSummary };
+}
+
+/**
+ * Single source of truth for the `[wire-validation]` log line format. Callers
+ * outside `validateWire` (e.g. the SSE proxy reporting a non-schema failure
+ * like invalid JSON) should use this helper so operators see a uniform prefix
+ * and grep pattern regardless of which layer detected the problem.
+ */
+export function logWireFailure(
+  mode: ValidationMode,
+  context: string,
+  detail: string,
+): void {
+  console.warn(`[wire-validation] ${mode} ${context} — ${detail}`);
 }

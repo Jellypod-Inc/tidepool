@@ -424,3 +424,118 @@ describe("upstream SSE validation: enforce mode", () => {
     );
   });
 });
+
+// --- Upstream invalid-JSON SSE data: enforce rejection ---
+
+function createInvalidJsonSseMockAgent(port: number): http.Server {
+  const app = express();
+  app.use(express.json());
+
+  app.post("/message\\:stream", (_req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+
+    // A raw `data:` line whose JSON fails to parse. Before this fix, such
+    // lines slipped through enforce mode because parseSseLine collapsed them
+    // into the same null bucket as legitimate non-data lines.
+    res.write("data: {broken\n\n");
+    res.end();
+  });
+
+  return app.listen(port, "127.0.0.1");
+}
+
+describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
+  let tmpDir: string;
+  let configDir: string;
+  let mockAgent: http.Server;
+  let server: { close: () => void };
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-bad-json-"));
+    configDir = path.join(tmpDir, "bad-json-server");
+    fs.mkdirSync(path.join(configDir, "agents/bad-json-agent"), {
+      recursive: true,
+    });
+
+    await generateIdentity({
+      name: "bad-json-agent",
+      certPath: path.join(configDir, "agents/bad-json-agent/identity.crt"),
+      keyPath: path.join(configDir, "agents/bad-json-agent/identity.key"),
+    });
+
+    fs.writeFileSync(
+      path.join(configDir, "server.toml"),
+      TOML.stringify({
+        server: {
+          port: 58960,
+          host: "0.0.0.0",
+          localPort: 58961,
+          rateLimit: "100/hour",
+          streamTimeoutSeconds: 30,
+        },
+        agents: {
+          "bad-json-agent": {
+            localEndpoint: "http://127.0.0.1:58962",
+            rateLimit: "50/hour",
+            description: "Streaming agent whose upstream sends invalid JSON",
+            timeoutSeconds: 30,
+          },
+        },
+        connectionRequests: { mode: "deny" },
+        discovery: { providers: ["static"], cacheTtlSeconds: 300 },
+        validation: { mode: "enforce" },
+      } as any),
+    );
+
+    fs.writeFileSync(
+      path.join(configDir, "friends.toml"),
+      TOML.stringify({ friends: {} } as any),
+    );
+
+    mockAgent = createInvalidJsonSseMockAgent(58962);
+
+    server = await startServer({ configDir });
+  });
+
+  afterAll(() => {
+    mockAgent?.close();
+    server?.close();
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("tears down stream and emits failed status-update when upstream sends unparseable JSON", async () => {
+    const response = await fetch(
+      "http://127.0.0.1:58961/bad-json-agent/message:stream",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            messageId: "enforce-bad-json-1",
+            role: "user",
+            parts: [{ kind: "text", text: "Stream me" }],
+          },
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const events = await collectSSEEvents(response);
+    // collectSSEEvents silently skips malformed data lines, so only the
+    // synthetic failed status-update should come through.
+    expect(events.length).toBe(1);
+
+    const last: any = events[events.length - 1];
+    expect(last.kind).toBe("status-update");
+    expect(last.status.state).toBe("failed");
+    expect(last.status.message.parts[0].text).toContain(
+      "Upstream sent unparseable SSE data",
+    );
+  });
+});

@@ -296,16 +296,29 @@ export function formatSseEvent(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
-/** Parse a single SSE line. Returns null for comments, blanks, and non-data lines. */
-export function parseSseLine(line: string): unknown | null {
+/**
+ * Discriminated result for SSE line parsing. `skip` covers comments, blanks,
+ * and non-`data:` headers (e.g. `event: …`); `data` carries a successfully
+ * parsed JSON payload; `invalid-json` carries the raw payload for a `data:`
+ * line whose JSON failed to parse — callers can then decide whether to reject
+ * (enforce) or pass through (warn).
+ */
+export type SseLineParse =
+  | { kind: "skip" }
+  | { kind: "data"; value: unknown }
+  | { kind: "invalid-json"; raw: string };
+
+/** Parse a single SSE line into a 3-state discriminated result. */
+export function parseSseLine(line: string): SseLineParse {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith(":") || !trimmed.startsWith("data: ")) {
-    return null;
+    return { kind: "skip" };
   }
+  const payload = trimmed.slice(6);
   try {
-    return JSON.parse(trimmed.slice(6));
+    return { kind: "data", value: JSON.parse(payload) };
   } catch {
-    return null;
+    return { kind: "invalid-json", raw: payload };
   }
 }
 

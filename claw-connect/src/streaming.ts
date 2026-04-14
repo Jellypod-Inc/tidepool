@@ -5,7 +5,14 @@ import {
   buildFailedStatusEvent,
   StreamEventSchema,
 } from "./a2a.js";
-import { validateWire, type ValidationMode } from "./wire-validation.js";
+import {
+  validateWire,
+  logWireFailure,
+  type ValidationMode,
+} from "./wire-validation.js";
+
+const truncate = (s: string, n: number): string =>
+  s.length > n ? s.slice(0, n) + "…" : s;
 
 export function createTimeoutController(
   timeoutMs: number,
@@ -129,28 +136,57 @@ export async function proxySSEStream(opts: {
           continue;
         }
 
-        // Validate each parsed SSE event against the v1.0 StreamEventSchema.
-        // Non-data lines (comments, `event:`, blanks) and data lines whose JSON
-        // fails to parse both return null here and pass through untouched.
-        // In warn mode, validateWire logs and returns ok; in enforce mode,
-        // we emit a failed status-update downstream and tear the stream down.
         const parsed = parseSseLine(line);
-        if (parsed !== null) {
-          const result = validateWire(StreamEventSchema, parsed, {
-            mode: validationMode,
-            context: "upstream.sse.event",
-          });
-          if (!result.ok) {
+
+        if (parsed.kind === "skip") {
+          // Comments, `event:` headers, and other non-data lines pass through
+          // untouched — they carry no JSON payload to validate.
+          downstream.write(line + "\n");
+          continue;
+        }
+
+        if (parsed.kind === "invalid-json") {
+          // A `data:` line whose JSON.parse threw. In warn mode we log but
+          // pass the raw line through (downstream SSE consumers will discard
+          // unparseable data frames themselves). In enforce mode we reject —
+          // otherwise malformed JSON would slip past schema validation.
+          logWireFailure(
+            validationMode,
+            "upstream.sse.event",
+            `invalid JSON: ${truncate(parsed.raw, 80)}`,
+          );
+          if (validationMode === "enforce") {
             sse.write(
               buildFailedStatusEvent(
                 taskId,
                 contextId,
-                `Upstream sent malformed event: ${result.error}`,
+                `Upstream sent unparseable SSE data: ${truncate(parsed.raw, 80)}`,
               ),
             );
             cleanup();
             return;
           }
+          downstream.write(line + "\n");
+          continue;
+        }
+
+        // parsed.kind === "data" — schema-validate against StreamEventSchema.
+        // In warn mode, validateWire logs and returns ok; in enforce mode,
+        // we emit a failed status-update downstream and tear the stream down.
+        const result = validateWire(StreamEventSchema, parsed.value, {
+          mode: validationMode,
+          context: "upstream.sse.event",
+        });
+        if (!result.ok) {
+          sse.write(
+            buildFailedStatusEvent(
+              taskId,
+              contextId,
+              `Upstream sent malformed event: ${result.error}`,
+            ),
+          );
+          cleanup();
+          return;
         }
 
         downstream.write(line + "\n");

@@ -220,19 +220,33 @@ describe("formatSseEvent", () => {
 });
 
 describe("parseSseLine", () => {
-  it("parses a data: prefixed line", () => {
+  it("parses a data: prefixed line as kind=data", () => {
     const obj = { foo: 1 };
-    expect(parseSseLine(`data: ${JSON.stringify(obj)}`)).toEqual(obj);
+    expect(parseSseLine(`data: ${JSON.stringify(obj)}`)).toEqual({
+      kind: "data",
+      value: obj,
+    });
   });
 
-  it("returns null for comments and blanks", () => {
-    expect(parseSseLine("")).toBeNull();
-    expect(parseSseLine(": keepalive")).toBeNull();
-    expect(parseSseLine("event: update")).toBeNull();
+  it("returns kind=skip for comments, blanks, and non-data headers", () => {
+    expect(parseSseLine("")).toEqual({ kind: "skip" });
+    expect(parseSseLine(": keepalive")).toEqual({ kind: "skip" });
+    expect(parseSseLine("event: update")).toEqual({ kind: "skip" });
   });
 
-  it("returns null for malformed JSON", () => {
-    expect(parseSseLine("data: {not json")).toBeNull();
+  it("returns kind=invalid-json for data: lines whose JSON fails to parse", () => {
+    expect(parseSseLine("data: {not json")).toEqual({
+      kind: "invalid-json",
+      raw: "{not json",
+    });
+  });
+
+  it("preserves the raw payload verbatim for downstream inspection", () => {
+    const result = parseSseLine('data: {"partial":true,');
+    expect(result).toEqual({
+      kind: "invalid-json",
+      raw: '{"partial":true,',
+    });
   });
 });
 
