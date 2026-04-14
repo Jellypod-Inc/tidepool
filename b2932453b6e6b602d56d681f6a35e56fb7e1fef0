@@ -1,0 +1,42 @@
+package.json
+  dbd4ffcb4a760eb1 8
+packages/a2a-claude-code-adapter/package.json
+  dbd4ffcb4a760eb1 4,22-24,31-32,36-37,39-40,46-47
+packages/a2a-claude-code-adapter/src/bin/cli.ts
+  dbd4ffcb4a760eb1 2-3
+packages/a2a-claude-code-adapter/vitest.config.ts
+  dbd4ffcb4a760eb1 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "b2932453b6e6b602d56d681f6a35e56fb7e1fef0",
+  "prompts": {
+    "98e3d88cadae012c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8eefc657-fa86-49a1-942c-71dd4807174a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1787,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 23,
+      "total_deletions": 411,
+      "accepted_lines": 9513,
+      "overriden_lines": 0
+    }
+  }
+}
