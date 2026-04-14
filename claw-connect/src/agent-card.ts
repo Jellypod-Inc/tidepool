@@ -1,28 +1,12 @@
+import {
+  AgentCardSchema,
+  declareExtension,
+} from "./a2a.js";
+import type { AgentCard } from "./a2a.js";
+import { CONNECTION_EXTENSION_URL } from "./middleware.js";
 import type { RemoteAgent } from "./types.js";
 
-export interface AgentCard {
-  name: string;
-  description: string;
-  url: string;
-  version: string;
-  skills: AgentSkill[];
-  defaultInputModes: string[];
-  defaultOutputModes: string[];
-  capabilities: {
-    streaming: boolean;
-    pushNotifications: boolean;
-    stateTransitionHistory: boolean;
-  };
-  securitySchemes: Record<string, unknown>;
-  securityRequirements: Record<string, unknown[]>[];
-}
-
-interface AgentSkill {
-  id: string;
-  name: string;
-  description: string;
-  tags: string[];
-}
+export type { AgentCard };
 
 interface BuildLocalOpts {
   name: string;
@@ -50,14 +34,17 @@ export function buildLocalAgentCard(opts: BuildLocalOpts): AgentCard {
     capabilities: {
       streaming: true,
       pushNotifications: false,
-      stateTransitionHistory: false,
+      extensions: [
+        declareExtension(CONNECTION_EXTENSION_URL, {
+          description: "Claw Connect peer friending handshake",
+          required: false,
+        }),
+      ],
     },
     securitySchemes: {
       mtls: {
-        mutualTlsSecurityScheme: {
-          description:
-            "mTLS with self-signed certificates. Identity is cert fingerprint.",
-        },
+        type: "mtls",
+        description: "mTLS with self-signed certificates. Identity is cert fingerprint.",
       },
     },
     securityRequirements: [{ mtls: [] }],
@@ -70,6 +57,15 @@ interface BuildRemoteOpts {
   description: string;
 }
 
+/**
+ * Fetch a peer's Agent Card over plain HTTPS with no fingerprint pinning.
+ *
+ * Initial card discovery happens BEFORE the peer's fingerprint is known
+ * (the card itself is what you use to decide whether to friend them).
+ * Pinning here would be chicken-and-egg. Post-friending interactions — A2A
+ * messages and any authenticated card refresh — go through
+ * buildPinnedDispatcher, which does enforce fingerprint equality.
+ */
 export async function fetchRemoteAgentCard(
   url: string,
 ): Promise<AgentCard | null> {
@@ -80,11 +76,12 @@ export async function fetchRemoteAgentCard(
 
     if (!response.ok) return null;
 
-    const data = (await response.json()) as any;
+    const data = await response.json();
 
-    if (!data.name || !data.url) return null;
+    const parsed = AgentCardSchema.safeParse(data);
+    if (!parsed.success) return null;
 
-    return data as AgentCard;
+    return parsed.data as unknown as AgentCard;
   } catch {
     return null;
   }
@@ -116,6 +113,11 @@ export function buildRichRemoteAgentCard(opts: BuildRichRemoteOpts): AgentCard {
     defaultInputModes: remoteCard.defaultInputModes,
     defaultOutputModes: remoteCard.defaultOutputModes,
     capabilities: remoteCard.capabilities,
+    // The local interface is plain HTTP on 127.0.0.1 — local agents talk to
+    // their own Claw Connect without credentials. We deliberately drop the
+    // remote card's mTLS scheme so local agents don't try to present client
+    // certs when calling localhost. mTLS happens server-to-server on the
+    // public interface, handled transparently by the Claw Connect proxy.
     securitySchemes: {},
     securityRequirements: [],
   };
@@ -140,7 +142,6 @@ export function buildRemoteAgentCard(opts: BuildRemoteOpts): AgentCard {
     capabilities: {
       streaming: true,
       pushNotifications: false,
-      stateTransitionHistory: false,
     },
     securitySchemes: {},
     securityRequirements: [],

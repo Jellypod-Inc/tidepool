@@ -34,13 +34,11 @@ const mockRemoteCard = {
   capabilities: {
     streaming: true,
     pushNotifications: false,
-    stateTransitionHistory: true,
   },
   securitySchemes: {
     mtls: {
-      mutualTlsSecurityScheme: {
-        description: "mTLS with self-signed certificates",
-      },
+      type: "mtls",
+      description: "mTLS with self-signed certificates",
     },
   },
   securityRequirements: [{ mtls: [] }],
@@ -109,7 +107,7 @@ describe("buildRichRemoteAgentCard", () => {
     expect(card.skills).toEqual(mockRemoteCard.skills);
     expect(card.defaultInputModes).toEqual(mockRemoteCard.defaultInputModes);
     expect(card.defaultOutputModes).toEqual(mockRemoteCard.defaultOutputModes);
-    expect(card.capabilities.stateTransitionHistory).toBe(true);
+    expect(card.capabilities.streaming).toBe(true);
     expect(card.securitySchemes).toEqual({});
     expect(card.securityRequirements).toEqual([]);
   });

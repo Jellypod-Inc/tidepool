@@ -9,6 +9,11 @@ const mockPort = 48910;
 beforeAll(() => {
   const app = express();
 
+  app.get("/malformed-card/.well-known/agent-card.json", (_req, res) => {
+    // 200 OK but missing required `name` — schema rejects this.
+    res.json({ description: "no name here" });
+  });
+
   app.get("/reachable-agent/.well-known/agent-card.json", (_req, res) => {
     res.json({
       name: "reachable-agent",
@@ -28,7 +33,6 @@ beforeAll(() => {
       capabilities: {
         streaming: true,
         pushNotifications: false,
-        stateTransitionHistory: false,
       },
       securitySchemes: {},
       securityRequirements: [],
@@ -70,5 +74,13 @@ describe("pingAgent", () => {
       `http://127.0.0.1:${mockPort}/bad-path`,
     );
     expect(result.reachable).toBe(false);
+  });
+
+  it("returns unreachable when the response is JSON but fails schema validation", async () => {
+    const result = await pingAgent(
+      `http://127.0.0.1:${mockPort}/malformed-card/.well-known/agent-card.json`,
+    );
+    expect(result.reachable).toBe(false);
+    expect(result.error).toContain("not a valid Agent Card");
   });
 });

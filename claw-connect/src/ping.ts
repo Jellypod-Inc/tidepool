@@ -1,3 +1,5 @@
+import { AgentCardSchema } from "./a2a.js";
+
 export interface PingResult {
   reachable: boolean;
   name?: string;
@@ -25,9 +27,10 @@ export async function pingAgent(agentCardUrl: string): Promise<PingResult> {
       };
     }
 
-    const data = (await response.json()) as any;
+    const data = await response.json();
+    const parsed = AgentCardSchema.safeParse(data);
 
-    if (!data.name) {
+    if (!parsed.success) {
       return {
         reachable: false,
         latencyMs,
@@ -37,9 +40,13 @@ export async function pingAgent(agentCardUrl: string): Promise<PingResult> {
 
     return {
       reachable: true,
-      name: data.name,
-      description: data.description,
-      skills: data.skills,
+      name: parsed.data.name,
+      description: parsed.data.description,
+      skills: parsed.data.skills.map((s) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+      })),
       latencyMs,
     };
   } catch (err) {
@@ -52,10 +59,7 @@ export async function pingAgent(agentCardUrl: string): Promise<PingResult> {
   }
 }
 
-export function formatPingResult(
-  url: string,
-  result: PingResult,
-): string {
+export function formatPingResult(url: string, result: PingResult): string {
   const lines: string[] = [];
 
   if (result.reachable) {
@@ -72,9 +76,7 @@ export function formatPingResult(
     }
   } else {
     lines.push(`UNREACHABLE  ${url}`);
-    if (result.error) {
-      lines.push(`  Error: ${result.error}`);
-    }
+    if (result.error) lines.push(`  Error: ${result.error}`);
     if (result.latencyMs !== undefined) {
       lines.push(`  Latency: ${result.latencyMs}ms`);
     }
