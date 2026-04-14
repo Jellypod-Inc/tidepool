@@ -1,0 +1,42 @@
+docs/superpowers/plans/2026-04-13-a2a-v1-migration.md
+  74b268f51f537bc6 1-2503
+docs/superpowers/specs/2026-04-13-a2a-v1-migration-design.md
+  74b268f51f537bc6 1-312
+docs/superpowers/plans/2026-04-14-wire-validation-gates.md
+  74b268f51f537bc6 1-784
+package.json
+  74b268f51f537bc6 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "46309d571af724fb84b77cfa62b995e38658a9ce",
+  "prompts": {
+    "74b268f51f537bc6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56d8b8a4-c6ac-4a5d-90b0-9b8b2cb6e4db",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3606,
+      "overriden_lines": 0
+    },
+    "98e3d88cadae012c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8eefc657-fa86-49a1-942c-71dd4807174a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
