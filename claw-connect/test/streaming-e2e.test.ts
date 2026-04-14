@@ -28,8 +28,7 @@ function createStreamingMockAgent(port: number, name: string): http.Server {
         kind: "status-update",
         taskId,
         contextId,
-        status: { state: "TASK_STATE_WORKING" },
-        final: false,
+        status: { state: "working" },
       }),
     );
 
@@ -53,8 +52,7 @@ function createStreamingMockAgent(port: number, name: string): http.Server {
           kind: "status-update",
           taskId,
           contextId,
-          status: { state: "TASK_STATE_COMPLETED" },
-          final: true,
+          status: { state: "completed" },
         }),
       );
       res.end();
@@ -179,7 +177,7 @@ describe("e2e: SSE streaming through local interface", () => {
         body: JSON.stringify({
           message: {
             messageId: "stream-test-1",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "Stream me a response" }],
           },
         }),
@@ -203,9 +201,9 @@ describe("e2e: SSE streaming through local interface", () => {
     expect(statusEvents.length).toBeGreaterThanOrEqual(2);
     expect(artifactEvents.length).toBeGreaterThanOrEqual(1);
 
-    expect((statusEvents[0] as any).status.state).toBe("TASK_STATE_WORKING");
+    expect((statusEvents[0] as any).status.state).toBe("working");
     expect((statusEvents[statusEvents.length - 1] as any).status.state).toBe(
-      "TASK_STATE_COMPLETED",
+      "completed",
     );
 
     expect((artifactEvents[0] as any).artifact.parts[0].text).toContain(
@@ -272,7 +270,7 @@ describe("e2e: SSE stream timeout", () => {
     fs.rmSync(tmpDir, { recursive: true });
   });
 
-  it("sends TASK_STATE_FAILED when stream times out with no data", async () => {
+  it("sends state=failed status-update when stream times out with no data", async () => {
     const response = await fetch(
       "http://127.0.0.1:59911/slow-agent/message:stream",
       {
@@ -281,7 +279,7 @@ describe("e2e: SSE stream timeout", () => {
         body: JSON.stringify({
           message: {
             messageId: "timeout-test-1",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "Hello slow agent" }],
           },
         }),

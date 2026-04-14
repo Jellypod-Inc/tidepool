@@ -18,7 +18,7 @@ function createMockAgent(port: number, name: string): http.Server {
     res.json({
       id: `task-${name}`,
       contextId: `ctx-${name}`,
-      status: { state: "TASK_STATE_COMPLETED" },
+      status: { state: "completed" },
       artifacts: [
         {
           artifactId: "response",
@@ -173,7 +173,7 @@ describe("e2e: two Claw Connect servers", () => {
         body: JSON.stringify({
           message: {
             messageId: "test-1",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "How do you handle errors in Rust?" }],
           },
         }),
@@ -182,7 +182,7 @@ describe("e2e: two Claw Connect servers", () => {
 
     const data = await response.json() as any;
 
-    expect(data.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(data.status.state).toBe("completed");
     expect(data.artifacts[0].parts[0].text).toContain("rust-expert received:");
     expect(data.artifacts[0].parts[0].text).toContain(
       "How do you handle errors in Rust?",
@@ -198,7 +198,7 @@ describe("e2e: two Claw Connect servers", () => {
         body: JSON.stringify({
           message: {
             messageId: "test-2",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "What are you working on?" }],
           },
         }),
@@ -207,7 +207,7 @@ describe("e2e: two Claw Connect servers", () => {
 
     const data = await response.json() as any;
 
-    expect(data.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(data.status.state).toBe("completed");
     expect(data.artifacts[0].parts[0].text).toContain("alice-dev received:");
     expect(data.artifacts[0].parts[0].text).toContain(
       "What are you working on?",
@@ -234,7 +234,7 @@ describe("e2e: two Claw Connect servers", () => {
         body: JSON.stringify({
           message: {
             messageId: "test-3",
-            role: "ROLE_USER",
+            role: "user",
             parts: [{ kind: "text", text: "Hello" }],
           },
         }),
