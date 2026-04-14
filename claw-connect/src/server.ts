@@ -33,7 +33,7 @@ import {
   malformedRequestResponse,
   type A2AErrorResponse,
 } from "./errors.js";
-import { proxySSEStream, initSSEResponse } from "./streaming.js";
+import { proxyUpstreamOrFail, initSSEResponse } from "./streaming.js";
 import { buildFailedStatusEvent, MessageSchema } from "./a2a.js";
 import { validateWire } from "./wire-validation.js";
 import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
@@ -313,19 +313,11 @@ function createPublicApp(
             body: JSON.stringify(req.body),
           });
 
-          if (!upstreamResponse.ok || !upstreamResponse.body) {
-            const sse = initSSEResponse(res);
-            sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
-            sse.end();
-            return;
-          }
-
-          await proxySSEStream({
+          await proxyUpstreamOrFail({
             upstreamResponse,
             downstream: res,
             timeoutMs: streamTimeoutMs,
             taskId,
-            contextId: `ctx-${taskId}`,
             validationMode: config.validation.mode,
           });
         } catch {
@@ -486,19 +478,11 @@ function createLocalApp(
               body: JSON.stringify(req.body),
             });
 
-            if (!upstreamResponse.ok || !upstreamResponse.body) {
-              const sse = initSSEResponse(res);
-              sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Agent returned non-streaming response"));
-              sse.end();
-              return;
-            }
-
-            await proxySSEStream({
+            await proxyUpstreamOrFail({
               upstreamResponse,
               downstream: res,
               timeoutMs: streamTimeoutMs,
               taskId,
-              contextId: `ctx-${taskId}`,
               validationMode: config.validation.mode,
             });
           } catch {
@@ -556,20 +540,13 @@ function createLocalApp(
 
       if (isStream) {
         const taskId = req.body?.message?.messageId ?? uuidv4();
-        if (!response.ok || !response.body) {
-          const sse = initSSEResponse(res);
-          sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Remote agent returned non-streaming response"));
-          sse.end();
-          return;
-        }
-
-        await proxySSEStream({
+        await proxyUpstreamOrFail({
           upstreamResponse: response,
           downstream: res,
           timeoutMs: streamTimeoutMs,
           taskId,
-          contextId: `ctx-${taskId}`,
           validationMode: config.validation.mode,
+          nonStreamingMessage: "Remote agent returned non-streaming response",
         });
         return;
       }

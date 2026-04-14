@@ -62,6 +62,48 @@ export function initSSEResponse(res: ExpressResponse): {
   };
 }
 
+/**
+ * Proxy an upstream SSE response to a downstream Express response. If the
+ * upstream isn't a valid stream, emits a single failed status-update and ends
+ * the response without attempting to proxy.
+ */
+export async function proxyUpstreamOrFail(opts: {
+  upstreamResponse: Response;
+  downstream: ExpressResponse;
+  timeoutMs: number;
+  taskId: string;
+  validationMode: ValidationMode;
+  /** Human-readable message emitted if upstream is non-streaming. */
+  nonStreamingMessage?: string;
+}): Promise<void> {
+  const {
+    upstreamResponse,
+    downstream,
+    timeoutMs,
+    taskId,
+    validationMode,
+    nonStreamingMessage = "Agent returned non-streaming response",
+  } = opts;
+
+  const contextId = `ctx-${taskId}`;
+
+  if (!upstreamResponse.ok || !upstreamResponse.body) {
+    const sse = initSSEResponse(downstream);
+    sse.write(buildFailedStatusEvent(taskId, contextId, nonStreamingMessage));
+    sse.end();
+    return;
+  }
+
+  await proxySSEStream({
+    upstreamResponse,
+    downstream,
+    timeoutMs,
+    taskId,
+    contextId,
+    validationMode,
+  });
+}
+
 export async function proxySSEStream(opts: {
   upstreamResponse: Response;
   downstream: ExpressResponse;
