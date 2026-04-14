@@ -201,7 +201,7 @@ function createPublicApp(
       const friendLookup = checkFriend(friends, peerFingerprint);
       if (!friendLookup) {
         // Not a friend — check if this is a CONNECTION_REQUEST
-        if (isConnectionRequest(req.body)) {
+        if (isConnectionRequest(req.body, req.headers)) {
           const metadata = extractConnectionMetadata(
             req.body as Record<string, unknown>,
           );
@@ -237,6 +237,7 @@ function createPublicApp(
               return r;
             });
 
+            res.setHeader("X-A2A-Extensions", "https://clawconnect.dev/ext/connection/v1");
             res.json(result.response);
           } catch (err) {
             const message =
@@ -344,7 +345,7 @@ function createPublicApp(
           const message = err instanceof Error ? err.message : "Agent unreachable";
           res.status(504).json({
             id: messageId ?? uuidv4(),
-            status: { state: "TASK_STATE_FAILED" },
+            status: { state: "failed" },
             artifacts: [
               { artifactId: "error", parts: [{ kind: "text", text: message }] },
             ],
@@ -551,7 +552,7 @@ function createLocalApp(
       }
       res.status(504).json({
         id: uuidv4(),
-        status: { state: "TASK_STATE_FAILED" },
+        status: { state: "failed" },
         artifacts: [
           {
             artifactId: "error",

@@ -5,6 +5,7 @@ import {
   resolveTenant,
   extractFingerprint,
   isConnectionRequest,
+  CONNECTION_EXTENSION_URL,
 } from "../src/middleware.js";
 import type { FriendsConfig, ServerConfig } from "../src/types.js";
 
@@ -113,43 +114,65 @@ describe("extractFingerprint", () => {
 });
 
 describe("isConnectionRequest", () => {
-  it("returns true for a valid CONNECTION_REQUEST body", () => {
-    const body = {
-      message: {
-        parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
-        extensions: ["https://clawconnect.dev/ext/connection/v1"],
-        metadata: {
-          "https://clawconnect.dev/ext/connection/v1": {
-            type: "request",
-            reason: "Want to learn Rust",
-            agent_card_url: "https://example.com/.well-known/agent-card.json",
-          },
+  const connectionRequestBody = {
+    message: {
+      messageId: "cr-1",
+      role: "user",
+      parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
+      extensions: [CONNECTION_EXTENSION_URL],
+      metadata: {
+        [CONNECTION_EXTENSION_URL]: {
+          type: "request",
+          reason: "test",
+          agent_card_url: "http://example.com/card.json",
         },
       },
-    };
-    expect(isConnectionRequest(body)).toBe(true);
+    },
+  };
+
+  it("returns true when extension URI is in message.extensions", () => {
+    expect(isConnectionRequest(connectionRequestBody, {})).toBe(true);
   });
 
-  it("returns false for a normal A2A message", () => {
-    const body = {
+  it("returns true when extension URI is only in X-A2A-Extensions header", () => {
+    const bodyWithoutExt = {
       message: {
-        parts: [{ kind: "text", text: "Hello, how do you handle errors in Rust?" }],
+        ...connectionRequestBody.message,
+        extensions: [],
       },
     };
-    expect(isConnectionRequest(body)).toBe(false);
+    expect(
+      isConnectionRequest(bodyWithoutExt, {
+        "x-a2a-extensions": CONNECTION_EXTENSION_URL,
+      }),
+    ).toBe(true);
   });
 
-  it("returns false for missing extension", () => {
-    const body = {
+  it("returns false when neither signal declares the extension", () => {
+    const bodyNoExt = {
       message: {
+        messageId: "x",
+        role: "user",
         parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
       },
     };
-    expect(isConnectionRequest(body)).toBe(false);
+    expect(isConnectionRequest(bodyNoExt, {})).toBe(false);
   });
 
-  it("returns false for null body", () => {
-    expect(isConnectionRequest(null)).toBe(false);
-    expect(isConnectionRequest(undefined)).toBe(false);
+  it("returns false when body is malformed", () => {
+    expect(isConnectionRequest(null, {})).toBe(false);
+    expect(isConnectionRequest({}, {})).toBe(false);
+  });
+
+  it("returns false when first part text is not CONNECTION_REQUEST", () => {
+    const bodyWrong = {
+      message: {
+        messageId: "x",
+        role: "user",
+        parts: [{ kind: "text", text: "hello" }],
+        extensions: [CONNECTION_EXTENSION_URL],
+      },
+    };
+    expect(isConnectionRequest(bodyWrong, {})).toBe(false);
   });
 });

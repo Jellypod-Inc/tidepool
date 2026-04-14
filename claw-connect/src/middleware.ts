@@ -51,20 +51,39 @@ export function extractFingerprint(raw: Buffer | undefined): string | null {
 }
 
 /**
- * Check if an inbound A2A request body is a CONNECTION_REQUEST.
- * Looks for the Claw Connect connection extension in the message.
+ * Check if an inbound A2A request is a CONNECTION_REQUEST.
+ *
+ * Per v1.0, clients MAY signal an extension via `message.extensions[]` AND/OR
+ * the `X-A2A-Extensions` request header. We treat either signal as sufficient
+ * and additionally require the first text part to be "CONNECTION_REQUEST".
  */
-export function isConnectionRequest(body: unknown): boolean {
+export function isConnectionRequest(
+  body: unknown,
+  headers: Record<string, unknown>,
+): boolean {
   if (!body || typeof body !== "object") return false;
 
   const msg = (body as Record<string, unknown>).message;
   if (!msg || typeof msg !== "object") return false;
 
   const message = msg as Record<string, unknown>;
-  const extensions = message.extensions as string[] | undefined;
-  if (!extensions || !Array.isArray(extensions)) return false;
 
-  if (!extensions.includes(CONNECTION_EXTENSION_URL)) return false;
+  const inBodyExtensions = Array.isArray(message.extensions)
+    ? (message.extensions as string[])
+    : [];
+
+  // `X-A2A-Extensions` header — express normalizes header names to lowercase.
+  const headerRaw = headers["x-a2a-extensions"];
+  const headerValue = typeof headerRaw === "string" ? headerRaw : undefined;
+  const inHeaderExtensions = headerValue
+    ? headerValue.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  const declaresExtension =
+    inBodyExtensions.includes(CONNECTION_EXTENSION_URL) ||
+    inHeaderExtensions.includes(CONNECTION_EXTENSION_URL);
+
+  if (!declaresExtension) return false;
 
   const parts = message.parts as Array<Record<string, string>> | undefined;
   if (!parts || !Array.isArray(parts) || parts.length === 0) return false;
