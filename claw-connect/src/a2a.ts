@@ -354,3 +354,39 @@ const TERMINAL_STATES: ReadonlySet<TaskState> = new Set<TaskState>([
 export function isTerminalState(state: TaskState): boolean {
   return TERMINAL_STATES.has(state);
 }
+
+// ============================================================
+// Extension header carriage (v1.0)
+// ============================================================
+
+/**
+ * Parse an X-A2A-Extensions request/response header value into a list of
+ * extension URIs. Tolerates whitespace and returns [] on missing/blank input.
+ */
+export function parseExtensionsHeader(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Format a list of extension URIs for emitting as X-A2A-Extensions. */
+export function formatExtensionsHeader(uris: string[]): string {
+  return uris.join(", ");
+}
+
+/**
+ * Construct an Extension declaration for inclusion in
+ * AgentCard.capabilities.extensions.
+ */
+export function declareExtension(
+  uri: string,
+  opts: { description?: string; required?: boolean; params?: Record<string, unknown> } = {},
+): Extension {
+  const ext: Extension = { uri };
+  if (opts.description !== undefined) ext.description = opts.description;
+  if (opts.required !== undefined) ext.required = opts.required;
+  if (opts.params !== undefined) ext.params = opts.params;
+  return ext;
+}

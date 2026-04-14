@@ -264,3 +264,57 @@ describe("isTerminalState", () => {
     expect(isTerminalState("auth-required")).toBe(false);
   });
 });
+
+import {
+  parseExtensionsHeader,
+  formatExtensionsHeader,
+  declareExtension,
+} from "../src/a2a.js";
+
+describe("parseExtensionsHeader", () => {
+  it("splits comma-separated URIs and trims", () => {
+    expect(parseExtensionsHeader("https://a/ext1, https://b/ext2")).toEqual([
+      "https://a/ext1",
+      "https://b/ext2",
+    ]);
+  });
+
+  it("handles single value", () => {
+    expect(parseExtensionsHeader("https://x/ext")).toEqual(["https://x/ext"]);
+  });
+
+  it("returns [] for undefined/empty", () => {
+    expect(parseExtensionsHeader(undefined)).toEqual([]);
+    expect(parseExtensionsHeader("")).toEqual([]);
+    expect(parseExtensionsHeader("   ")).toEqual([]);
+  });
+});
+
+describe("formatExtensionsHeader", () => {
+  it("joins URIs with comma-space", () => {
+    expect(formatExtensionsHeader(["https://a", "https://b"])).toBe("https://a, https://b");
+  });
+
+  it("returns empty string for empty array", () => {
+    expect(formatExtensionsHeader([])).toBe("");
+  });
+});
+
+describe("declareExtension", () => {
+  it("builds a minimal Extension object", () => {
+    expect(declareExtension("https://x/ext1")).toEqual({ uri: "https://x/ext1" });
+  });
+
+  it("includes description and required if provided", () => {
+    expect(
+      declareExtension("https://x/ext1", {
+        description: "test",
+        required: true,
+      }),
+    ).toEqual({
+      uri: "https://x/ext1",
+      description: "test",
+      required: true,
+    });
+  });
+});
