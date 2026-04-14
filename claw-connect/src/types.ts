@@ -56,6 +56,10 @@ export interface RemoteAgent {
   certFingerprint: string;
 }
 
+export interface RemotesConfig {
+  remotes: Record<string, RemoteAgent>;
+}
+
 export interface AgentIdentity {
   name: string;
   certPath: string;

@@ -84,6 +84,19 @@ export const FriendsConfigSchema = z.object({
   friends: z.record(z.string(), FriendEntrySchema).default({}),
 });
 
+// --- RemotesConfig ---
+
+const RemoteAgentSchema = z.object({
+  localHandle: z.string().min(1),
+  remoteEndpoint: z.url(),
+  remoteTenant: z.string().min(1),
+  certFingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/i),
+});
+
+export const RemotesConfigSchema = z.object({
+  remotes: z.record(z.string(), RemoteAgentSchema).default({}),
+});
+
 // --- DiscoveredAgent (from our directory — not the A2A spec) ---
 
 export const DiscoveredAgentSchema = z.object({

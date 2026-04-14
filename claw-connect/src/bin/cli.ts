@@ -7,6 +7,11 @@ import {
   runFriendList,
   runFriendRemove,
 } from "../cli/friend.js";
+import {
+  runRemoteAdd,
+  runRemoteList,
+  runRemoteRemove,
+} from "../cli/remote.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -104,6 +109,41 @@ friend
     const configDir = resolveConfigDir(program.opts());
     await runFriendRemove({ configDir, handle });
     ok(`Removed friend ${handle}`);
+  });
+
+const remote = program.command("remote").description("Manage remote peers");
+
+remote
+  .command("add <localHandle> <remoteEndpoint> <remoteTenant> <certFingerprint>")
+  .description("Register a remote peer to proxy")
+  .action(async (localHandle, remoteEndpoint, remoteTenant, certFingerprint) => {
+    const configDir = resolveConfigDir(program.opts());
+    await runRemoteAdd({ configDir, localHandle, remoteEndpoint, remoteTenant, certFingerprint });
+    ok(`Added remote ${localHandle} → ${remoteEndpoint}/${remoteTenant}`);
+  });
+
+remote
+  .command("list")
+  .description("List registered remote peers")
+  .action(async () => {
+    const configDir = resolveConfigDir(program.opts());
+    const entries = await runRemoteList({ configDir });
+    if (entries.length === 0) {
+      ok("(no remotes)");
+      return;
+    }
+    for (const e of entries) {
+      ok(`${e.localHandle}  →  ${e.remoteEndpoint}/${e.remoteTenant}  [${e.certFingerprint.slice(0, 20)}…]`);
+    }
+  });
+
+remote
+  .command("remove <localHandle>")
+  .description("Remove a remote peer")
+  .action(async (localHandle: string) => {
+    const configDir = resolveConfigDir(program.opts());
+    await runRemoteRemove({ configDir, localHandle });
+    ok(`Removed remote ${localHandle}`);
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
