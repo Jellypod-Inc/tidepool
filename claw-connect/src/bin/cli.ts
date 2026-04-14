@@ -14,6 +14,7 @@ import {
 } from "../cli/remote.js";
 import { runWhoami } from "../cli/whoami.js";
 import { runStatus } from "../cli/status.js";
+import { runPing } from "../cli/ping.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -167,6 +168,14 @@ program
   .action(async () => {
     const configDir = resolveConfigDir(program.opts());
     const out = await runStatus({ configDir });
+    ok(out);
+  });
+
+program
+  .command("ping <url>")
+  .description("Fetch an Agent Card and report reachability + metadata")
+  .action(async (url: string) => {
+    const out = await runPing({ url });
     ok(out);
   });
 
