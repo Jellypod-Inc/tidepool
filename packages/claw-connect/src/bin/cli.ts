@@ -167,12 +167,13 @@ program
   .description("Print local identities and their fingerprints")
   .action(async () => {
     const configDir = resolveConfigDir(program.opts());
-    const entries = await runWhoami({ configDir });
-    if (entries.length === 0) {
+    const { peerFingerprint, agents } = await runWhoami({ configDir });
+    ok(`peer fingerprint: ${peerFingerprint}`);
+    if (agents.length === 0) {
       ok("(no local agents — run 'claw-connect register <name>')");
       return;
     }
-    for (const e of entries) ok(`${e.name}  ${e.fingerprint}`);
+    ok(`agents: ${agents.join(", ")}`);
   });
 
 program
