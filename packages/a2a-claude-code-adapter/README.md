@@ -60,141 +60,48 @@ which claw-connect
 which a2a-claude-code-adapter
 ```
 
-Both should print a path. If they don't, fix that before moving on.
+## Step 2 — Start a Claude Code session wired up for A2A
 
----
-
-## Step 2 — Create one home, two agents
-
-A "home" is a config directory that holds one machine's identity and the list of agents that run on it. **You only need one home for two local Claude sessions.**
-
-Pick any directory you like. A good default is `~/.config/claw-connect`:
+From any project directory:
 
 ```bash
-export CLAW_CONNECT_HOME="$HOME/.config/claw-connect"
-claw-connect init
+claw-connect claude-code:start
 ```
 
-You should see `Initialized …` printed. Behind the scenes this creates:
+What this does, in order:
 
-```
-~/.config/claw-connect/
-├── identity.crt       ← your machine's public certificate (fingerprint goes in here)
-├── identity.key       ← matching private key (do not share)
-├── server.toml        ← settings + list of agents
-├── friends.toml       ← people your machine trusts (empty for now)
-└── remotes.toml       ← shortcuts to other machines (empty for now)
-```
+1. Sets up a Claw Connect "home" at `~/.config/claw-connect` (first run only).
+2. Generates a friendly name for this agent (e.g. `donkey`) if you don't provide one.
+3. Picks a free local port and registers the agent.
+4. Writes or merges `.mcp.json` in the current directory so Claude Code loads the adapter.
+5. Starts `claw-connect serve` in the background (PID and logs under `~/.config/claw-connect`).
+6. Launches Claude Code with the development-channels flag.
 
-Now register two agents. An "agent" is a name plus a local port where its Claude session will listen:
+Pass a name if you want a specific one:
 
 ```bash
-claw-connect register alice --local-endpoint http://127.0.0.1:18800
-claw-connect register bob   --local-endpoint http://127.0.0.1:18801
+claw-connect claude-code:start bob
 ```
 
-You can check it worked:
+Run it again in the same project directory — it's idempotent. The command reads the existing `.mcp.json`, reuses the name and port, and drops you straight into Claude Code.
 
-```bash
-claw-connect whoami
-```
+### To start a second session
 
-Expected output:
+Open a second terminal, `cd` into a different project, and run the same command. You'll get a different animal name (or supply one) and a second session talking through the same background `claw-connect serve`. Messages between the two sessions hop through `127.0.0.1` with no TLS.
 
-```
-peer fingerprint: sha256:abc123…
-agents: alice, bob
-```
+### Extra commands
 
-The fingerprint is your machine's unique ID. You'd share it with a friend if you wanted them to connect to you from another laptop — but for two local sessions, you can ignore it.
+| Command | Purpose |
+|---|---|
+| `claw-connect stop` | Stop the background server |
+| `claw-connect status` | See if the server is running and where logs are |
+| `claw-connect claude-code:start --debug` | Run the server in the foreground and print the `cd <dir> && claude …` command to paste into a second terminal (useful for debugging startup issues) |
 
----
+## Step 3 — Send a message between the two sessions
 
-## Step 3 — Tell each Claude Code session which agent it is
+In one session, ask Claude to POST an A2A message to the other agent:
 
-Each Claude session needs its own MCP config file so it loads the adapter as one specific agent. We'll set up two project directories, one per session.
-
-Make a directory for alice's session and put a `.mcp.json` in it:
-
-```bash
-mkdir -p ~/claude-alice
-cat > ~/claude-alice/.mcp.json <<'JSON'
-{
-  "mcpServers": {
-    "a2a": {
-      "command": "a2a-claude-code-adapter",
-      "args": ["--agent", "alice"]
-    }
-  }
-}
-JSON
-```
-
-And a separate one for bob:
-
-```bash
-mkdir -p ~/claude-bob
-cat > ~/claude-bob/.mcp.json <<'JSON'
-{
-  "mcpServers": {
-    "a2a": {
-      "command": "a2a-claude-code-adapter",
-      "args": ["--agent", "bob"]
-    }
-  }
-}
-JSON
-```
-
-The only difference between the two files is the agent name.
-
----
-
-## Step 4 — Start claw-connect
-
-Open a new terminal (Terminal C in the picture above) and run:
-
-```bash
-export CLAW_CONNECT_HOME="$HOME/.config/claw-connect"   # same home as Step 2
-claw-connect serve
-```
-
-You should see:
-
-```
-Public interface: https://0.0.0.0:9900
-Local interface: http://127.0.0.1:9901
-```
-
-Leave this running. Every A2A message hops through this server.
-
----
-
-## Step 5 — Start the two Claude Code sessions
-
-**Terminal A (alice):**
-
-```bash
-cd ~/claude-alice
-claude --dangerously-load-development-channels server:a2a
-```
-
-**Terminal B (bob):**
-
-```bash
-cd ~/claude-bob
-claude --dangerously-load-development-channels server:a2a
-```
-
-> **About that flag.** `--dangerously-load-development-channels` is required today because the adapter isn't on Claude Code's approved allowlist yet. The "channel" is just the pipe that carries A2A messages into the session. The flag will go away once the adapter is officially blessed.
-
----
-
-## Step 6 — Make alice talk to bob
-
-In **alice's** Claude session, ask her to send a message:
-
-> Send an A2A message to the `bob` agent saying "hello bob". You can do it by POSTing to `http://127.0.0.1:9901/bob/message:send` with a body like:
+> Send an A2A message to agent `bob` (POST to `http://127.0.0.1:9901/bob/message:send`) with body:
 > ```json
 > {
 >   "message": {
@@ -205,24 +112,9 @@ In **alice's** Claude session, ask her to send a message:
 > }
 > ```
 
-Alice will make that HTTP call. Claw-connect will route it straight to bob's adapter, which delivers it into bob's Claude session.
+In the other terminal you'll see a `<channel source="a2a" task_id="...">` block appear. Claude can reply with the `a2a_reply` tool, and the reply routes back as the HTTP response to the first session.
 
-In **bob's** session, you'll see something like:
-
-```
-<channel source="a2a" task_id="…">
-role: user
-hello bob
-</channel>
-```
-
-Bob's Claude can then reply:
-
-> Please call the `a2a_reply` tool with task_id "…" and text "hi alice, got it".
-
-The reply travels back through claw-connect to alice's session, and her original HTTP call returns it as the response.
-
-That's the round-trip. Anything else is variations on this.
+That's the round-trip. Everything else is variations on this.
 
 ---
 
@@ -270,3 +162,34 @@ Everything above is for two sessions on one laptop. For two different laptops (o
 - Supports `message:send`. Streaming (`message:stream`) is future work.
 - No permission relay — another agent can't approve a Bash call on your behalf.
 - The adapter's HTTP listener binds to `127.0.0.1` only. Trust for cross-machine traffic is delegated to claw-connect's mTLS.
+
+---
+
+<details>
+<summary>Manual setup (under the hood)</summary>
+
+`claude-code:start` is just a convenience. Here's what it does step by step — the same flow you'd run manually.
+
+```bash
+export CLAW_CONNECT_HOME="$HOME/.config/claw-connect"
+claw-connect init
+
+# Register each agent with its own local port:
+claw-connect register alice --local-endpoint http://127.0.0.1:18800
+claw-connect register bob   --local-endpoint http://127.0.0.1:18801
+
+# In each project's .mcp.json, point Claude at the adapter:
+cat > ~/claude-alice/.mcp.json <<'JSON'
+{ "mcpServers": { "a2a": { "command": "a2a-claude-code-adapter", "args": ["--agent", "alice"] } } }
+JSON
+
+# Start the server in a dedicated terminal:
+claw-connect serve
+
+# Launch each Claude Code session from its project dir:
+claude --dangerously-load-development-channels server:a2a
+```
+
+The low-level commands (`init`, `register`, `serve`, `friend`, `remote`, `whoami`, `status`, `stop`) all remain available and do exactly what they say.
+
+</details>
