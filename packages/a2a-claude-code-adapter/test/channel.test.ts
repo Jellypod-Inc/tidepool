@@ -1,16 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { PendingRegistry } from "../src/pending.js";
 import { createChannel } from "../src/channel.js";
 
 describe("createChannel", () => {
-  it("declares the claude/channel and tools capabilities", () => {
-    const { server } = createChannel({ registry: new PendingRegistry() });
-    const caps = (server as any)._capabilities ?? (server as any).serverCapabilities;
-    // The SDK stores the options object; verify the capability shape we passed.
-    // Rather than reach into SDK internals, assert behavior: listTools returns a2a_reply.
-    expect(server).toBeDefined();
-  });
-
   it("notifyInbound sends a notifications/claude/channel event", async () => {
     const reg = new PendingRegistry();
     const { server, notifyInbound } = createChannel({ registry: reg });

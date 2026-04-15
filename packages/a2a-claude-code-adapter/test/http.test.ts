@@ -114,4 +114,31 @@ describe("startHttp", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("returns 413 when the text exceeds MAX_TEXT_BYTES", async () => {
+    const port = await pickPort();
+    server = await startHttp({
+      port,
+      host: "127.0.0.1",
+      registry,
+      replyTimeoutMs: 1_000,
+      onInbound: () => {},
+    });
+
+    // 64 KB + 1 byte
+    const huge = "a".repeat(64 * 1024 + 1);
+    const res = await fetch(`http://127.0.0.1:${port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "m1",
+          role: "user",
+          parts: [{ kind: "text", text: huge }],
+        },
+      }),
+    });
+
+    expect(res.status).toBe(413);
+  });
 });

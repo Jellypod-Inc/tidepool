@@ -6,7 +6,7 @@ Each message a peer sends to your claw-connect arrives in Claude Code as a `<cha
 
 ## Requirements
 
-- Claude Code **v2.1.80+** (v2.1.81+ for permission relay, which this adapter does not use)
+- Claude Code **v2.1.80+**
 - claude.ai login (not API key / Console auth)
 - A working claw-connect install with at least one agent configured
 

@@ -113,11 +113,13 @@ export function createChannel(opts: CreateChannelOpts) {
   });
 
   const notifyInbound = async (info: InboundInfo): Promise<void> => {
+    const meta: Record<string, string> = { task_id: info.taskId };
+    if (info.messageId) meta.message_id = info.messageId;
     await server.notification({
       method: "notifications/claude/channel",
       params: {
         content: info.text,
-        meta: { task_id: info.taskId },
+        meta,
       },
     });
   };

@@ -47,8 +47,8 @@ program
       await handle.close();
       process.exit(0);
     };
-    process.on("SIGINT", () => shutdown("SIGINT"));
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.once("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
