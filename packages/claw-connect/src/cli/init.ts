@@ -6,6 +6,8 @@ import {
 } from "../config-writer.js";
 import { writeFriendsConfig } from "../friends.js";
 import { writeRemotesConfig } from "./remotes-config.js";
+import { generateIdentity } from "../identity.js";
+import { peerCertPath, peerKeyPath } from "../identity-paths.js";
 
 interface RunInitOpts {
   configDir: string;
@@ -27,5 +29,11 @@ export async function runInit(opts: RunInitOpts): Promise<void> {
   const remotesPath = path.join(opts.configDir, "remotes.toml");
   if (!fs.existsSync(remotesPath)) {
     writeRemotesConfig(remotesPath, { remotes: {} });
+  }
+
+  const certPath = peerCertPath(opts.configDir);
+  const keyPath = peerKeyPath(opts.configDir);
+  if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+    await generateIdentity({ name: "peer", certPath, keyPath });
   }
 }
