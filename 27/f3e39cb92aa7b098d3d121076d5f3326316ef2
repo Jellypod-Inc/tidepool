@@ -1,0 +1,36 @@
+packages/a2a-claude-code-adapter/README.md
+  6ca295ec8033f5e3 63,65,68,71,73-78,80,83,86,88,90,92,94-98,100,102,104,115,117,165-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "27f3e39cb92aa7b098d3d121076d5f3326316ef2",
+  "prompts": {
+    "6ca295ec8033f5e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c43687af-7e17-48bd-90fb-4fb98c5d82ee",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 57,
+      "total_deletions": 134,
+      "accepted_lines": 1274,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 42,
+      "overriden_lines": 2
+    }
+  }
+}
