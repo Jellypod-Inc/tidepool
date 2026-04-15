@@ -1,0 +1,40 @@
+packages/claw-connect/test/cli/whoami.test.ts
+  6ca295ec8033f5e3 14,20-22,25,28-51
+packages/claw-connect/src/bin/cli.ts
+  6ca295ec8033f5e3 170-172,176
+packages/claw-connect/src/cli/whoami.ts
+  6ca295ec8033f5e3 3,11-12,14-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "4545206c127abac185c628b896d21fcde645c244",
+  "prompts": {
+    "6ca295ec8033f5e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c43687af-7e17-48bd-90fb-4fb98c5d82ee",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 40,
+      "total_deletions": 23,
+      "accepted_lines": 1257,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}
