@@ -1,0 +1,48 @@
+packages/a2a-claude-code-adapter/src/bin/cli.ts
+  dbd4ffcb4a760eb1 50-51
+packages/a2a-claude-code-adapter/test/http.test.ts
+  dbd4ffcb4a760eb1 117-143
+packages/a2a-claude-code-adapter/package.json
+  dbd4ffcb4a760eb1 27,46
+packages/a2a-claude-code-adapter/test/channel.test.ts
+  dbd4ffcb4a760eb1 1
+packages/a2a-claude-code-adapter/src/http.ts
+  dbd4ffcb4a760eb1 8-9,11-12,25-30,42-45,54-63,65-73,78,91,105-106,109
+packages/a2a-claude-code-adapter/README.md
+  dbd4ffcb4a760eb1 9
+packages/a2a-claude-code-adapter/src/channel.ts
+  dbd4ffcb4a760eb1 116-117,122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "72a3794736e933a57dd0151ec02c6b6393836cee",
+  "prompts": {
+    "98e3d88cadae012c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8eefc657-fa86-49a1-942c-71dd4807174a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1787,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 79,
+      "total_deletions": 16,
+      "accepted_lines": 9568,
+      "overriden_lines": 0
+    }
+  }
+}
