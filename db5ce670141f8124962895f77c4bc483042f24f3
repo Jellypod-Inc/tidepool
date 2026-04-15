@@ -1,0 +1,36 @@
+packages/a2a-claude-code-adapter/README.md
+  6ca295ec8033f5e3 3,5,7,9,11,13-40,43,46,49-50,52,56-78,80-100,102-103,105-111,113,115,117-121,126,130,133,136-146,149,151,153,155,158,162,164-169,171,173-175,178-179,182,185,187,189-210,213-225,227,229-256,260-262,264-266,268,270-272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "db5ce670141f8124962895f77c4bc483042f24f3",
+  "prompts": {
+    "6ca295ec8033f5e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c43687af-7e17-48bd-90fb-4fb98c5d82ee",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 216,
+      "total_deletions": 45,
+      "accepted_lines": 1433,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 46,
+      "overriden_lines": 20
+    }
+  }
+}
