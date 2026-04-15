@@ -51,26 +51,20 @@ describe("e2e: two Claw Connect servers", () => {
 
     // --- Alice's setup ---
     aliceConfigDir = path.join(tmpDir, "alice");
-    fs.mkdirSync(path.join(aliceConfigDir, "agents/alice-dev"), {
-      recursive: true,
-    });
 
     const aliceIdentity = await generateIdentity({
       name: "alice-dev",
-      certPath: path.join(aliceConfigDir, "agents/alice-dev/identity.crt"),
-      keyPath: path.join(aliceConfigDir, "agents/alice-dev/identity.key"),
+      certPath: path.join(aliceConfigDir, "identity.crt"),
+      keyPath: path.join(aliceConfigDir, "identity.key"),
     });
 
     // --- Bob's setup ---
     bobConfigDir = path.join(tmpDir, "bob");
-    fs.mkdirSync(path.join(bobConfigDir, "agents/rust-expert"), {
-      recursive: true,
-    });
 
     const bobIdentity = await generateIdentity({
       name: "rust-expert",
-      certPath: path.join(bobConfigDir, "agents/rust-expert/identity.crt"),
-      keyPath: path.join(bobConfigDir, "agents/rust-expert/identity.key"),
+      certPath: path.join(bobConfigDir, "identity.crt"),
+      keyPath: path.join(bobConfigDir, "identity.key"),
     });
 
     // --- Alice's config ---
@@ -258,32 +252,26 @@ describe("inbound validation: enforce mode", () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-enforce-inbound-"));
     configDir = path.join(tmpDir, "server");
-    fs.mkdirSync(path.join(configDir, "agents/strict-agent"), {
-      recursive: true,
-    });
 
     // Server's own identity (used by mTLS listener)
     await generateIdentity({
       name: "strict-agent",
-      certPath: path.join(configDir, "agents/strict-agent/identity.crt"),
-      keyPath: path.join(configDir, "agents/strict-agent/identity.key"),
+      certPath: path.join(configDir, "identity.crt"),
+      keyPath: path.join(configDir, "identity.key"),
     });
 
     // Client identity (any valid cert works; enforce rejects before friend check)
     const clientDir = path.join(tmpDir, "client");
-    fs.mkdirSync(path.join(clientDir, "agents/client-agent"), {
-      recursive: true,
-    });
     await generateIdentity({
       name: "client-agent",
-      certPath: path.join(clientDir, "agents/client-agent/identity.crt"),
-      keyPath: path.join(clientDir, "agents/client-agent/identity.key"),
+      certPath: path.join(clientDir, "identity.crt"),
+      keyPath: path.join(clientDir, "identity.key"),
     });
     clientCert = fs.readFileSync(
-      path.join(clientDir, "agents/client-agent/identity.crt"),
+      path.join(clientDir, "identity.crt"),
     );
     clientKey = fs.readFileSync(
-      path.join(clientDir, "agents/client-agent/identity.key"),
+      path.join(clientDir, "identity.key"),
     );
 
     fs.writeFileSync(

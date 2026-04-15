@@ -57,19 +57,16 @@ describe("e2e: discovery → connect → A2A", () => {
 
     // --- Alice's identity (cert only, no server) ---
     const aliceConfigDir = path.join(tmpDir, "alice");
-    fs.mkdirSync(path.join(aliceConfigDir, "agents/alice-dev"), {
-      recursive: true,
-    });
     const aliceIdentity = await generateIdentity({
       name: "alice-dev",
-      certPath: path.join(aliceConfigDir, "agents/alice-dev/identity.crt"),
-      keyPath: path.join(aliceConfigDir, "agents/alice-dev/identity.key"),
+      certPath: path.join(aliceConfigDir, "identity.crt"),
+      keyPath: path.join(aliceConfigDir, "identity.key"),
     });
     aliceCert = fs.readFileSync(
-      path.join(aliceConfigDir, "agents/alice-dev/identity.crt"),
+      path.join(aliceConfigDir, "identity.crt"),
     );
     aliceKey = fs.readFileSync(
-      path.join(aliceConfigDir, "agents/alice-dev/identity.key"),
+      path.join(aliceConfigDir, "identity.key"),
     );
     aliceFingerprint = aliceIdentity.fingerprint;
 
@@ -90,13 +87,10 @@ describe("e2e: discovery → connect → A2A", () => {
 
     // --- Bob's setup ---
     bobConfigDir = path.join(tmpDir, "bob");
-    fs.mkdirSync(path.join(bobConfigDir, "agents/rust-expert"), {
-      recursive: true,
-    });
     const bobIdentity = await generateIdentity({
       name: "rust-expert",
-      certPath: path.join(bobConfigDir, "agents/rust-expert/identity.crt"),
-      keyPath: path.join(bobConfigDir, "agents/rust-expert/identity.key"),
+      certPath: path.join(bobConfigDir, "identity.crt"),
+      keyPath: path.join(bobConfigDir, "identity.key"),
     });
     bobFingerprint = bobIdentity.fingerprint;
 

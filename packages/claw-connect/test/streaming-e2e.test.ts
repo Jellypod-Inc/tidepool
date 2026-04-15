@@ -119,14 +119,11 @@ describe("e2e: SSE streaming through local interface", () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-e2e-"));
     configDir = path.join(tmpDir, "server");
-    fs.mkdirSync(path.join(configDir, "agents/streaming-agent"), {
-      recursive: true,
-    });
 
     await generateIdentity({
       name: "streaming-agent",
-      certPath: path.join(configDir, "agents/streaming-agent/identity.crt"),
-      keyPath: path.join(configDir, "agents/streaming-agent/identity.key"),
+      certPath: path.join(configDir, "identity.crt"),
+      keyPath: path.join(configDir, "identity.key"),
     });
 
     fs.writeFileSync(
@@ -221,14 +218,11 @@ describe("e2e: SSE stream timeout", () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-timeout-"));
     configDir = path.join(tmpDir, "timeout-server");
-    fs.mkdirSync(path.join(configDir, "agents/slow-agent"), {
-      recursive: true,
-    });
 
     await generateIdentity({
       name: "slow-agent",
-      certPath: path.join(configDir, "agents/slow-agent/identity.crt"),
-      keyPath: path.join(configDir, "agents/slow-agent/identity.key"),
+      certPath: path.join(configDir, "identity.crt"),
+      keyPath: path.join(configDir, "identity.key"),
     });
 
     fs.writeFileSync(
@@ -338,20 +332,11 @@ describe("upstream SSE validation: enforce mode", () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-enforce-"));
     configDir = path.join(tmpDir, "enforce-server");
-    fs.mkdirSync(path.join(configDir, "agents/strict-stream-agent"), {
-      recursive: true,
-    });
 
     await generateIdentity({
       name: "strict-stream-agent",
-      certPath: path.join(
-        configDir,
-        "agents/strict-stream-agent/identity.crt",
-      ),
-      keyPath: path.join(
-        configDir,
-        "agents/strict-stream-agent/identity.key",
-      ),
+      certPath: path.join(configDir, "identity.crt"),
+      keyPath: path.join(configDir, "identity.key"),
     });
 
     fs.writeFileSync(
@@ -457,14 +442,11 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-bad-json-"));
     configDir = path.join(tmpDir, "bad-json-server");
-    fs.mkdirSync(path.join(configDir, "agents/bad-json-agent"), {
-      recursive: true,
-    });
 
     await generateIdentity({
       name: "bad-json-agent",
-      certPath: path.join(configDir, "agents/bad-json-agent/identity.crt"),
-      keyPath: path.join(configDir, "agents/bad-json-agent/identity.key"),
+      certPath: path.join(configDir, "identity.crt"),
+      keyPath: path.join(configDir, "identity.key"),
     });
 
     fs.writeFileSync(

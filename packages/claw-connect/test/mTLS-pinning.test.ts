@@ -64,17 +64,10 @@ describe("outbound mTLS fingerprint pinning", () => {
     aliceConfigDir = path.join(tmpDir, "alice");
     malloryConfigDir = path.join(tmpDir, "mallory");
 
-    fs.mkdirSync(path.join(aliceConfigDir, "agents/alice-dev"), {
-      recursive: true,
-    });
-    fs.mkdirSync(path.join(malloryConfigDir, "agents/rust-expert"), {
-      recursive: true,
-    });
-
     const aliceIdentity = await generateIdentity({
       name: "alice-dev",
-      certPath: path.join(aliceConfigDir, "agents/alice-dev/identity.crt"),
-      keyPath: path.join(aliceConfigDir, "agents/alice-dev/identity.key"),
+      certPath: path.join(aliceConfigDir, "identity.crt"),
+      keyPath: path.join(aliceConfigDir, "identity.key"),
     });
 
     // Bob's identity — generated but NEVER used to stand up a server.
@@ -90,14 +83,8 @@ describe("outbound mTLS fingerprint pinning", () => {
     // Mallory's identity — the impersonator actually running on the endpoint.
     const malloryIdentity = await generateIdentity({
       name: "rust-expert",
-      certPath: path.join(
-        malloryConfigDir,
-        "agents/rust-expert/identity.crt",
-      ),
-      keyPath: path.join(
-        malloryConfigDir,
-        "agents/rust-expert/identity.key",
-      ),
+      certPath: path.join(malloryConfigDir, "identity.crt"),
+      keyPath: path.join(malloryConfigDir, "identity.key"),
     });
 
     // Sanity check: test is only meaningful if Bob and Mallory differ.

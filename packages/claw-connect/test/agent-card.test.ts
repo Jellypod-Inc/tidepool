@@ -119,26 +119,23 @@ describe("v1.0 conformance: Agent Card emitted by the server validates against A
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-card-conformance-"));
     const configDir = path.join(tmpDir, "host");
-    fs.mkdirSync(path.join(configDir, "agents/probe"), { recursive: true });
-
     await generateIdentity({
       name: "probe",
-      certPath: path.join(configDir, "agents/probe/identity.crt"),
-      keyPath: path.join(configDir, "agents/probe/identity.key"),
+      certPath: path.join(configDir, "identity.crt"),
+      keyPath: path.join(configDir, "identity.key"),
     });
 
     // A separate identity to present as the client when we GET the card over
     // mTLS — content of the cert doesn't matter; the request just needs to
     // complete the TLS handshake.
     const peerDir = path.join(tmpDir, "peer");
-    fs.mkdirSync(path.join(peerDir, "agents/peer"), { recursive: true });
     await generateIdentity({
       name: "peer",
-      certPath: path.join(peerDir, "agents/peer/identity.crt"),
-      keyPath: path.join(peerDir, "agents/peer/identity.key"),
+      certPath: path.join(peerDir, "identity.crt"),
+      keyPath: path.join(peerDir, "identity.key"),
     });
-    clientCert = fs.readFileSync(path.join(peerDir, "agents/peer/identity.crt"));
-    clientKey = fs.readFileSync(path.join(peerDir, "agents/peer/identity.key"));
+    clientCert = fs.readFileSync(path.join(peerDir, "identity.crt"));
+    clientKey = fs.readFileSync(path.join(peerDir, "identity.key"));
 
     fs.writeFileSync(
       path.join(configDir, "server.toml"),

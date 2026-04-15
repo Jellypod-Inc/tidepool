@@ -105,38 +105,23 @@ describe("e2e: rate limiting and timeout", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-e2e-rl-"));
 
     serverConfigDir = path.join(tmpDir, "server");
-    fs.mkdirSync(path.join(serverConfigDir, "agents/fast-agent"), {
-      recursive: true,
-    });
-    fs.mkdirSync(path.join(serverConfigDir, "agents/slow-agent"), {
-      recursive: true,
-    });
 
     await generateIdentity({
-      name: "fast-agent",
-      certPath: path.join(serverConfigDir, "agents/fast-agent/identity.crt"),
-      keyPath: path.join(serverConfigDir, "agents/fast-agent/identity.key"),
-    });
-
-    await generateIdentity({
-      name: "slow-agent",
-      certPath: path.join(serverConfigDir, "agents/slow-agent/identity.crt"),
-      keyPath: path.join(serverConfigDir, "agents/slow-agent/identity.key"),
+      name: "server",
+      certPath: path.join(serverConfigDir, "identity.crt"),
+      keyPath: path.join(serverConfigDir, "identity.key"),
     });
 
     const peerConfigDir = path.join(tmpDir, "peer");
-    fs.mkdirSync(path.join(peerConfigDir, "agents/peer-agent"), {
-      recursive: true,
-    });
 
     const peerIdentity = await generateIdentity({
       name: "peer-agent",
-      certPath: path.join(peerConfigDir, "agents/peer-agent/identity.crt"),
-      keyPath: path.join(peerConfigDir, "agents/peer-agent/identity.key"),
+      certPath: path.join(peerConfigDir, "identity.crt"),
+      keyPath: path.join(peerConfigDir, "identity.key"),
     });
 
-    peerCertPath = path.join(peerConfigDir, "agents/peer-agent/identity.crt");
-    peerKeyPath = path.join(peerConfigDir, "agents/peer-agent/identity.key");
+    peerCertPath = path.join(peerConfigDir, "identity.crt");
+    peerKeyPath = path.join(peerConfigDir, "identity.key");
 
     fs.writeFileSync(
       path.join(serverConfigDir, "server.toml"),
@@ -244,21 +229,18 @@ describe("e2e: rate limiting and timeout", () => {
 
   it("returns TASK_STATE_REJECTED for non-friends", async () => {
     const strangerDir = path.join(tmpDir, "stranger");
-    fs.mkdirSync(path.join(strangerDir, "agents/stranger"), {
-      recursive: true,
-    });
 
     await generateIdentity({
       name: "stranger",
-      certPath: path.join(strangerDir, "agents/stranger/identity.crt"),
-      keyPath: path.join(strangerDir, "agents/stranger/identity.key"),
+      certPath: path.join(strangerDir, "identity.crt"),
+      keyPath: path.join(strangerDir, "identity.key"),
     });
 
     const resp = await mTLSFetch(
       "https://127.0.0.1:49900/fast-agent/message:send",
       a2aMessage("let me in"),
-      path.join(strangerDir, "agents/stranger/identity.crt"),
-      path.join(strangerDir, "agents/stranger/identity.key"),
+      path.join(strangerDir, "identity.crt"),
+      path.join(strangerDir, "identity.key"),
     );
 
     expect(resp.status).toBe(403);

@@ -25,21 +25,18 @@ describe("e2e: connection handshake", () => {
 
     // --- Alice's identity (no server, just a cert) ---
     const aliceConfigDir = path.join(tmpDir, "alice");
-    fs.mkdirSync(path.join(aliceConfigDir, "agents/alice-dev"), {
-      recursive: true,
-    });
 
     await generateIdentity({
       name: "alice-dev",
-      certPath: path.join(aliceConfigDir, "agents/alice-dev/identity.crt"),
-      keyPath: path.join(aliceConfigDir, "agents/alice-dev/identity.key"),
+      certPath: path.join(aliceConfigDir, "identity.crt"),
+      keyPath: path.join(aliceConfigDir, "identity.key"),
     });
 
     aliceCert = fs.readFileSync(
-      path.join(aliceConfigDir, "agents/alice-dev/identity.crt"),
+      path.join(aliceConfigDir, "identity.crt"),
     );
     aliceKey = fs.readFileSync(
-      path.join(aliceConfigDir, "agents/alice-dev/identity.key"),
+      path.join(aliceConfigDir, "identity.key"),
     );
 
     // --- Alice's mock agent card server (plain HTTP for fetchAgentCard) ---
@@ -58,14 +55,11 @@ describe("e2e: connection handshake", () => {
 
     // --- Bob's setup (accept mode) ---
     bobConfigDir = path.join(tmpDir, "bob");
-    fs.mkdirSync(path.join(bobConfigDir, "agents/rust-expert"), {
-      recursive: true,
-    });
 
     await generateIdentity({
       name: "rust-expert",
-      certPath: path.join(bobConfigDir, "agents/rust-expert/identity.crt"),
-      keyPath: path.join(bobConfigDir, "agents/rust-expert/identity.key"),
+      certPath: path.join(bobConfigDir, "identity.crt"),
+      keyPath: path.join(bobConfigDir, "identity.key"),
     });
 
     fs.writeFileSync(
