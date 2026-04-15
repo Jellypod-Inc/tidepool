@@ -15,6 +15,7 @@ import {
   CONNECTION_EXTENSION_URL,
 } from "./middleware.js";
 import { mapLocalTenantToRemote, buildOutboundUrl } from "./proxy.js";
+import { peerCertPath, peerKeyPath } from "./identity-paths.js";
 import {
   buildLocalAgentCard,
   buildRemoteAgentCard,
@@ -85,8 +86,7 @@ export async function startServer(opts: StartServerOpts) {
   const localApp = createLocalApp(serverConfig, remoteAgents, opts.configDir);
 
   // Public interface: mTLS
-  const agentNames = Object.keys(serverConfig.agents);
-  const tlsOpts = buildTlsOptions(opts.configDir, agentNames);
+  const tlsOpts = buildTlsOptions(opts.configDir);
 
   const publicServer = https.createServer(tlsOpts, publicApp);
   const localServer = http.createServer(localApp);
@@ -115,14 +115,14 @@ export async function startServer(opts: StartServerOpts) {
   };
 }
 
-function buildTlsOptions(configDir: string, agentNames: string[]) {
-  const firstAgent = agentNames[0];
-  if (!firstAgent) {
-    throw new Error("No agents registered. Run 'claw-connect register' first.");
+function buildTlsOptions(configDir: string) {
+  const certPath = peerCertPath(configDir);
+  const keyPath = peerKeyPath(configDir);
+  if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+    throw new Error(
+      `Peer identity not found at ${certPath}. Run 'claw-connect init' first.`,
+    );
   }
-
-  const certPath = `${configDir}/agents/${firstAgent}/identity.crt`;
-  const keyPath = `${configDir}/agents/${firstAgent}/identity.key`;
 
   return {
     key: fs.readFileSync(keyPath),
@@ -518,10 +518,10 @@ function createLocalApp(
       `/${action}`,
     );
 
-    // Load the first registered agent's cert for mTLS
-    const firstAgent = Object.keys(config.agents)[0];
-    const certPath = `${configDir}/agents/${firstAgent}/identity.crt`;
-    const keyPath = `${configDir}/agents/${firstAgent}/identity.key`;
+    // Outbound mTLS authenticates as this peer. All agents share the peer's
+    // identity on the wire; agents are tenants, not wire-level identities.
+    const certPath = peerCertPath(configDir);
+    const keyPath = peerKeyPath(configDir);
 
     try {
       const dispatcher = buildPinnedDispatcher(
