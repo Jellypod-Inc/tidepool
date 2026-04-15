@@ -17,6 +17,8 @@ import { runStatus } from "../cli/status.js";
 import { runPing } from "../cli/ping.js";
 import { runServe } from "../cli/serve.js";
 import { runDirectoryServe } from "../cli/directory.js";
+import { runClaudeCodeStart } from "../cli/claude-code-start.js";
+import { runStop } from "../cli/stop.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -32,6 +34,9 @@ program
 program.addHelpText(
   "after",
   `\nExamples:\n` +
+    `  $ claw-connect claude-code:start\n` +
+    `  $ claw-connect claude-code:start my-agent --debug\n` +
+    `  $ claw-connect stop\n` +
     `  $ claw-connect init\n` +
     `  $ claw-connect register alice-dev --local-endpoint http://127.0.0.1:28800\n` +
     `  $ claw-connect whoami\n` +
@@ -228,6 +233,35 @@ directory
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
+  });
+
+program
+  .command("claude-code:start [agent]")
+  .description("Start a Claude Code session wired up via A2A")
+  .option("--debug", "Run claw-connect serve in the foreground; don't exec claude")
+  .action(async (agent: string | undefined, cmdOpts) => {
+    const configDir = resolveConfigDir(program.opts());
+    await runClaudeCodeStart({
+      configDir,
+      cwd: process.cwd(),
+      explicitAgent: agent,
+      debug: !!cmdOpts.debug,
+    });
+  });
+
+program
+  .command("stop")
+  .description("Stop the background claw-connect daemon")
+  .action(async () => {
+    const configDir = resolveConfigDir(program.opts());
+    const result = await runStop({ configDir });
+    if (result.action === "not-running") {
+      ok("Claw Connect is not running.");
+    } else if (result.forced) {
+      ok(`Force-killed (SIGKILL) PID ${result.pid}.`);
+    } else {
+      ok(`Stopped (was PID ${result.pid}).`);
+    }
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
