@@ -78,8 +78,8 @@ program
       timeoutSeconds: cmdOpts.timeout,
       force: cmdOpts.force,
     });
-    ok(`Registered ${name}`);
-    ok(`  fingerprint: ${result.fingerprint}`);
+    ok(`Registered agent "${name}"`);
+    ok(`  peer fingerprint: ${result.peerFingerprint}`);
   });
 
 const friend = program.command("friend").description("Manage friends");

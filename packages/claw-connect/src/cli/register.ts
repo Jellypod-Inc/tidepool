@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { generateIdentity } from "../identity.js";
 import { loadServerConfig } from "../config.js";
 import { writeServerConfig, defaultServerConfig } from "../config-writer.js";
+import { readPeerFingerprint } from "../identity-paths.js";
 import type { ServerConfig } from "../types.js";
 
 interface RunRegisterOpts {
@@ -17,7 +17,11 @@ interface RunRegisterOpts {
 
 export async function runRegister(
   opts: RunRegisterOpts,
-): Promise<{ fingerprint: string }> {
+): Promise<{ peerFingerprint: string }> {
+  // readPeerFingerprint throws a helpful "run init first" error if the peer
+  // identity hasn't been generated yet. That's the only fatal precondition.
+  const peerFingerprint = readPeerFingerprint(opts.configDir);
+
   const serverPath = path.join(opts.configDir, "server.toml");
   const cfg: ServerConfig = fs.existsSync(serverPath)
     ? loadServerConfig(serverPath)
@@ -29,25 +33,6 @@ export async function runRegister(
     );
   }
 
-  const certPath = path.join(
-    opts.configDir,
-    "agents",
-    opts.name,
-    "identity.crt",
-  );
-  const keyPath = path.join(
-    opts.configDir,
-    "agents",
-    opts.name,
-    "identity.key",
-  );
-
-  const identity = await generateIdentity({
-    name: opts.name,
-    certPath,
-    keyPath,
-  });
-
   cfg.agents[opts.name] = {
     localEndpoint: opts.localEndpoint,
     rateLimit: opts.rateLimit ?? "50/hour",
@@ -57,5 +42,5 @@ export async function runRegister(
 
   writeServerConfig(serverPath, cfg);
 
-  return { fingerprint: identity.fingerprint };
+  return { peerFingerprint };
 }
