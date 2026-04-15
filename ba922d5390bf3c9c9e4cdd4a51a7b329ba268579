@@ -1,0 +1,38 @@
+packages/claw-connect/fixtures/server-auto.toml
+  6ca295ec8033f5e3 1-5
+packages/claw-connect/fixtures/server.toml
+  6ca295ec8033f5e3 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "ba922d5390bf3c9c9e4cdd4a51a7b329ba268579",
+  "prompts": {
+    "6ca295ec8033f5e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c43687af-7e17-48bd-90fb-4fb98c5d82ee",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1237,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}
