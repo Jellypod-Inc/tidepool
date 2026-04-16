@@ -1,0 +1,38 @@
+packages/a2a-claude-code-adapter/test/integration.test.ts
+  9ebdbc39b05cf35b 150,155-157,167-168,172,190,193-195
+packages/a2a-claude-code-adapter/test/three-agent.test.ts
+  9ebdbc39b05cf35b 1-219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "bb9d188513b219f0caf746acb9c85dc4a5266fa2",
+  "prompts": {
+    "965882ae8865935c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a84d12bd-8737-4e61-be5e-9322d853f80a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 27,
+      "overriden_lines": 0
+    },
+    "9ebdbc39b05cf35b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64d68c12-55c5-4aad-b70f-0efd6b4ccbfc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 230,
+      "total_deletions": 7,
+      "accepted_lines": 230,
+      "overriden_lines": 0
+    }
+  }
+}
