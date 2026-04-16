@@ -1,0 +1,45 @@
+packages/a2a-claude-code-adapter/test/http.test.ts
+  965882ae8865935c 2,75
+packages/claw-connect/src/identity-injection.ts
+  965882ae8865935c 21-38
+packages/a2a-claude-code-adapter/test/outbound.test.ts
+  965882ae8865935c 2,101-120
+packages/a2a-claude-code-adapter/test/channel.test.ts
+  965882ae8865935c 4,92-98
+packages/a2a-claude-code-adapter/test/integration.test.ts
+  965882ae8865935c 1,157,175,185
+packages/a2a-claude-code-adapter/src/bin/cli.ts
+  965882ae8865935c 5,24
+packages/a2a-claude-code-adapter/src/outbound.ts
+  965882ae8865935c 15-24,75-79,81-85,89-93,96-100,104-108
+packages/a2a-claude-code-adapter/src/version.ts
+  965882ae8865935c 1-6
+packages/claw-connect/src/server.ts
+  965882ae8865935c 42,111,589
+packages/a2a-claude-code-adapter/src/channel.ts
+  965882ae8865935c 9-10,64,79,177,201-203
+packages/claw-connect/test/identity-injection.test.ts
+  965882ae8865935c 5,39-77
+packages/a2a-claude-code-adapter/src/thread-store.ts
+  965882ae8865935c 43,57-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "682d94a23dc475da890c0781658c0a067f1d6ae1",
+  "prompts": {
+    "965882ae8865935c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a84d12bd-8737-4e61-be5e-9322d853f80a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 548,
+      "total_deletions": 62,
+      "accepted_lines": 308,
+      "overriden_lines": 0
+    }
+  }
+}
