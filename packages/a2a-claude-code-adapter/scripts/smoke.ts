@@ -24,19 +24,19 @@ async function main() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "adapter-smoke-"));
   const aliceDir = path.join(tmp, "alice");
   const bobDir = path.join(tmp, "bob");
-  fs.mkdirSync(path.join(aliceDir, "agents/alice-dev"), { recursive: true });
-  fs.mkdirSync(path.join(bobDir, "agents/rust-expert"), { recursive: true });
+  fs.mkdirSync(aliceDir, { recursive: true });
+  fs.mkdirSync(bobDir, { recursive: true });
 
   header("Generate identities");
   const alice = await generateIdentity({
     name: "alice-dev",
-    certPath: path.join(aliceDir, "agents/alice-dev/identity.crt"),
-    keyPath: path.join(aliceDir, "agents/alice-dev/identity.key"),
+    certPath: path.join(aliceDir, "identity.crt"),
+    keyPath: path.join(aliceDir, "identity.key"),
   });
   const bob = await generateIdentity({
     name: "rust-expert",
-    certPath: path.join(bobDir, "agents/rust-expert/identity.crt"),
-    keyPath: path.join(bobDir, "agents/rust-expert/identity.key"),
+    certPath: path.join(bobDir, "identity.crt"),
+    keyPath: path.join(bobDir, "identity.key"),
   });
   ok(`alice: ${alice.fingerprint.slice(0, 24)}…`);
   ok(`bob:   ${bob.fingerprint.slice(0, 24)}…`);
@@ -71,21 +71,22 @@ async function main() {
     TOML.stringify({ friends: { alice: { fingerprint: alice.fingerprint } } } as any),
   );
 
-  header("Boot Bob's adapter with an in-memory MCP client that auto-replies");
-  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  header("Boot Bob's adapter + MCP client that auto-replies");
+  const [bobClientT, bobServerT] = InMemoryTransport.createLinkedPair();
   const bobAdapter = await start({
     configDir: bobDir,
     agentName: "rust-expert",
-    transport: serverT,
+    transport: bobServerT,
   });
-  const client = new Client({ name: "smoke", version: "0.0.0" }, { capabilities: {} });
-  await client.connect(clientT);
+  const bobClient = new Client({ name: "smoke-bob", version: "0.0.0" }, { capabilities: {} });
+  await bobClient.connect(bobClientT);
 
-  client.setNotificationHandler(ChannelNotificationSchema, async (n) => {
-    const contextId = (n.params as any).meta.context_id;
-    const peer = (n.params as any).meta.peer;
+  bobClient.setNotificationHandler(ChannelNotificationSchema, async (n) => {
+    const meta = (n.params as any).meta ?? {};
+    const contextId = meta.context_id;
+    const peer = meta.peer;
     const inbound = n.params.content;
-    await client.callTool({
+    await bobClient.callTool({
       name: "send",
       arguments: {
         peer,
@@ -93,6 +94,24 @@ async function main() {
         thread: contextId,
       },
     });
+  });
+
+  header("Boot Alice's adapter + MCP client that awaits reply");
+  const [aliceClientT, aliceServerT] = InMemoryTransport.createLinkedPair();
+  const aliceAdapter = await start({
+    configDir: aliceDir,
+    agentName: "alice-dev",
+    transport: aliceServerT,
+  });
+  const aliceClient = new Client({ name: "smoke-alice", version: "0.0.0" }, { capabilities: {} });
+  await aliceClient.connect(aliceClientT);
+
+  let resolveReply: ((n: { content: string; meta: any }) => void) | null = null;
+  const replyPromise = new Promise<{ content: string; meta: any }>((resolve) => {
+    resolveReply = resolve;
+  });
+  aliceClient.setNotificationHandler(ChannelNotificationSchema, async (n) => {
+    resolveReply?.({ content: n.params.content, meta: (n.params as any).meta });
   });
 
   header("Boot Bob's claw-connect");
@@ -122,35 +141,42 @@ async function main() {
   });
 
   try {
-    header("Alice → Bob (message:send)");
-    const res = await fetch("http://127.0.0.1:19901/bobs-rust/message:send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: {
-          messageId: "smoke-1",
-          role: "user",
-          parts: [{ kind: "text", text: "how do you handle errors in Rust?" }],
-        },
-      }),
+    header("Alice → Bob (send tool)");
+    const sendResult = await aliceClient.callTool({
+      name: "send",
+      arguments: { peer: "bobs-rust", text: "how do you handle errors in Rust?" },
     });
-    const body = (await res.json()) as any;
-    // TODO(task-17-followup): These assertions are stale. Under fire-and-forget,
-    // the HTTP ack doesn't carry the reply text — the reply arrives asynchronously
-    // as a channel notification (see Task 9 / Task 11). To restore end-to-end
-    // smoke coverage, the script needs to await the notification rather than
-    // assert on `body.artifacts[0].parts[0].text`.
-    ok(`status: ${body.status.state}`);
-    ok(`body:   ${body.artifacts[0].parts[0].text}`);
-    if (body.status.state !== "completed") throw new Error("expected completed");
-    if (!String(body.artifacts[0].parts[0].text).includes("auto-reply to:")) {
+    if ((sendResult as any).isError) {
+      throw new Error(
+        `send errored: ${JSON.stringify((sendResult as any).content)}`,
+      );
+    }
+    const sendData = JSON.parse(((sendResult as any).content[0] as any).text);
+    ok(`ack context_id: ${sendData.context_id}`);
+
+    header("Await Bob's auto-reply on Alice's channel");
+    const reply = await Promise.race([
+      replyPromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("reply timeout (5s)")), 5000),
+      ),
+    ]);
+    ok(`reply peer:       ${reply.meta.peer}`);
+    ok(`reply context_id: ${reply.meta.context_id}`);
+    ok(`reply body:       ${reply.content}`);
+    if (reply.meta.context_id !== sendData.context_id) {
+      throw new Error("reply context_id did not match outbound");
+    }
+    if (!reply.content.includes("auto-reply to:")) {
       throw new Error("reply did not flow through");
     }
   } finally {
     aliceCC.close();
     bobCC.close();
+    await aliceAdapter.close();
     await bobAdapter.close();
-    await client.close();
+    await aliceClient.close();
+    await bobClient.close();
     fs.rmSync(tmp, { recursive: true, force: true });
   }
   console.log("\n\x1b[32mSMOKE PASSED\x1b[0m\n");
