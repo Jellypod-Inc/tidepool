@@ -1,0 +1,64 @@
+packages/a2a-claude-code-adapter/src/http.ts
+  9ebdbc39b05cf35b 33,62-63
+packages/a2a-claude-code-adapter/test/http.test.ts
+  9ebdbc39b05cf35b 149-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "809196d34873b037d7a527b5a45968d123ba2af6",
+  "prompts": {
+    "401cb399ba358dc9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7dba8ae9-55f2-40e9-b138-2be1cfb5a40b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "965882ae8865935c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a84d12bd-8737-4e61-be5e-9322d853f80a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 61,
+      "overriden_lines": 0
+    },
+    "9ebdbc39b05cf35b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64d68c12-55c5-4aad-b70f-0efd6b4ccbfc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 42,
+      "total_deletions": 0,
+      "accepted_lines": 42,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
