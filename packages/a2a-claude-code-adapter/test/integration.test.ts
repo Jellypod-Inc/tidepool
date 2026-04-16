@@ -1,125 +1,195 @@
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { z } from "zod";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import express from "express";
+import http from "node:http";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { tmpdir } from "node:os";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { start } from "../src/start.js";
 
-const ChannelNotificationSchema = z.object({
-  method: z.literal("notifications/claude/channel"),
-  params: z.object({
-    content: z.string(),
-    meta: z.any().optional(),
-  }),
-});
-
-let tmp: string;
-let handle: Awaited<ReturnType<typeof start>> | null = null;
-
-async function pickPort(): Promise<number> {
-  const net = await import("node:net");
-  return new Promise<number>((resolve, reject) => {
-    const s = net.createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const addr = s.address();
-      if (typeof addr === "object" && addr) {
-        const p = addr.port;
-        s.close(() => resolve(p));
-      } else {
-        s.close(() => reject(new Error("no port")));
-      }
+/**
+ * Mock relay that stands in for claw-connect.
+ * - Listens on a random port.
+ * - Validates X-Agent header.
+ * - Forwards POST /:tenant/message:send to the tenant's adapter HTTP port,
+ *   injecting metadata.from = X-Agent value.
+ */
+function startMockRelay(adapters: Record<string, { httpPort: number }>) {
+  const app = express();
+  app.use(express.json());
+  app.post("/:tenant/message\\:send", async (req, res) => {
+    const sender = req.header("x-agent");
+    if (!sender || !adapters[sender]) {
+      res.status(403).json({ error: "X-Agent invalid" });
+      return;
+    }
+    const tenant = req.params.tenant;
+    const target = adapters[tenant];
+    if (!target) {
+      res.status(404).json({ error: "tenant not found" });
+      return;
+    }
+    const body = {
+      ...req.body,
+      message: {
+        ...req.body.message,
+        metadata: { ...(req.body.message?.metadata ?? {}), from: sender },
+      },
+    };
+    const upstream = await fetch(
+      `http://127.0.0.1:${target.httpPort}/message:send`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    const json = await upstream.json();
+    res.status(upstream.status).json(json);
+  });
+  return new Promise<{ port: number; close: () => Promise<void> }>((resolve) => {
+    const s = app.listen(0, "127.0.0.1", () => {
+      const port = (s.address() as any).port;
+      resolve({
+        port,
+        close: () => new Promise((r) => s.close(() => r())),
+      });
     });
   });
 }
 
-beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "adapter-int-"));
-});
+function makeConfigDir(name: string, relayPort: number, httpPort: number) {
+  const dir = mkdtempSync(path.join(tmpdir(), `adapter-${name}-`));
+  writeFileSync(
+    path.join(dir, "server.toml"),
+    `
+[server]
+localPort = ${relayPort}
 
-afterEach(async () => {
-  if (handle) {
-    await handle.close();
-    handle = null;
-  }
-  fs.rmSync(tmp, { recursive: true, force: true });
-});
+[agents.${name}]
+localEndpoint = "http://127.0.0.1:${httpPort}"
+`.trim(),
+  );
+  writeFileSync(path.join(dir, "remotes.toml"), "[remotes]\n");
+  return dir;
+}
 
-describe("integration", () => {
-  it("routes an A2A POST → channel notification → reply tool → A2A response", async () => {
-    const port = await pickPort();
-    const localPort = await pickPort();
-    fs.writeFileSync(
-      path.join(tmp, "server.toml"),
-      `[server]
-localPort = ${localPort}
+describe("symmetric round-trip via mock relay", () => {
+  let relay: { port: number; close: () => Promise<void> };
+  let alice: { close: () => Promise<void>; port: number };
+  let bob: { close: () => Promise<void>; port: number };
+  let aliceClient: Client;
+  let bobClient: Client;
+  let aliceEvents: any[] = [];
+  let bobEvents: any[] = [];
 
-[agents.bob]
-localEndpoint = "http://127.0.0.1:${port}"
-`,
-    );
+  beforeAll(async () => {
+    // Pre-allocate adapter ports by binding+closing dummy servers
+    const allocPort = () =>
+      new Promise<number>((resolve) => {
+        const s = http.createServer().listen(0, "127.0.0.1", () => {
+          const p = (s.address() as any).port;
+          s.close(() => resolve(p));
+        });
+      });
+    const alicePort = await allocPort();
+    const bobPort = await allocPort();
+    relay = await startMockRelay({
+      alice: { httpPort: alicePort },
+      bob: { httpPort: bobPort },
+    });
 
-    const [clientTransport, serverTransport] =
+    const aliceDir = makeConfigDir("alice", relay.port, alicePort);
+    const bobDir = makeConfigDir("bob", relay.port, bobPort);
+
+    const [aliceServerTransport, aliceClientTransport] =
+      InMemoryTransport.createLinkedPair();
+    const [bobServerTransport, bobClientTransport] =
       InMemoryTransport.createLinkedPair();
 
-    handle = await start({
-      configDir: tmp,
-      host: "127.0.0.1",
-      replyTimeoutMs: 2_000,
-      transport: serverTransport,
+    const aliceStarted = await start({
+      configDir: aliceDir,
+      agentName: "alice",
+      transport: aliceServerTransport,
+    });
+    const bobStarted = await start({
+      configDir: bobDir,
+      agentName: "bob",
+      transport: bobServerTransport,
+    });
+    alice = { close: aliceStarted.close, port: alicePort };
+    bob = { close: bobStarted.close, port: bobPort };
+
+    aliceClient = new Client({ name: "test-alice", version: "0.0.1" }, {});
+    bobClient = new Client({ name: "test-bob", version: "0.0.1" }, {});
+    aliceClient.fallbackNotificationHandler = async (n) => {
+      aliceEvents.push(n);
+    };
+    bobClient.fallbackNotificationHandler = async (n) => {
+      bobEvents.push(n);
+    };
+    await aliceClient.connect(aliceClientTransport);
+    await bobClient.connect(bobClientTransport);
+  });
+
+  afterAll(async () => {
+    await aliceClient.close();
+    await bobClient.close();
+    await alice.close();
+    await bob.close();
+    await relay.close();
+  });
+
+  it("alice sends → bob receives event with peer=alice; bob continues thread; alice receives same context_id", async () => {
+    aliceEvents = [];
+    bobEvents = [];
+
+    const sendResult = await aliceClient.callTool({
+      name: "send",
+      arguments: { peer: "bob", text: "hi bob" },
+    });
+    const sendData = JSON.parse((sendResult.content as any)[0].text);
+    const ctx = sendData.context_id;
+    expect(ctx).toBeTruthy();
+
+    // Bob should have received a channel notification
+    await new Promise((r) => setTimeout(r, 50));
+    expect(bobEvents).toHaveLength(1);
+    expect(bobEvents[0]).toMatchObject({
+      method: "notifications/claude/channel",
+      params: {
+        content: "hi bob",
+        meta: { peer: "alice", context_id: ctx },
+      },
     });
 
-    const client = new Client(
-      { name: "test-client", version: "0.0.0" },
-      { capabilities: {} },
-    );
-    await client.connect(clientTransport);
-
-    // Listen for the channel notification.
-    const notifications: any[] = [];
-    client.setNotificationHandler(ChannelNotificationSchema, async (n) => {
-      notifications.push(n);
+    // Bob continues the thread
+    const replyResult = await bobClient.callTool({
+      name: "send",
+      arguments: { peer: "alice", text: "hey alice", thread: ctx },
     });
+    const replyData = JSON.parse((replyResult.content as any)[0].text);
+    expect(replyData.context_id).toBe(ctx);
 
-    // POST as if we were claw-connect.
-    const fetchPromise = fetch(`http://127.0.0.1:${port}/message:send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: {
-          messageId: "m1",
-          role: "user",
-          parts: [{ kind: "text", text: "is Rust memory-safe?" }],
-        },
-      }),
+    // Alice should have received a channel notification with the same context_id
+    await new Promise((r) => setTimeout(r, 50));
+    expect(aliceEvents).toHaveLength(1);
+    expect(aliceEvents[0]).toMatchObject({
+      method: "notifications/claude/channel",
+      params: {
+        content: "hey alice",
+        meta: { peer: "bob", context_id: ctx },
+      },
     });
+  });
 
-    // Wait for the notification to arrive at our client.
-    const deadline = Date.now() + 1_000;
-    while (notifications.length === 0 && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 10));
-    }
-    expect(notifications).toHaveLength(1);
-    expect(notifications[0].method).toBe("notifications/claude/channel");
-    const taskId = notifications[0].params.meta.task_id;
-    expect(taskId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(notifications[0].params.content).toBe("is Rust memory-safe?");
-
-    // Claude calls the reply tool.
-    const toolResult = await client.callTool({
-      name: "claw_connect_reply",
-      arguments: { task_id: taskId, text: "Yes, by construction." },
+  it("send returns isError result when relay returns 403 (unknown agent)", async () => {
+    const result = await aliceClient.callTool({
+      name: "send",
+      arguments: { peer: "nonexistent", text: "hi" },
     });
-    expect((toolResult.content as any)[0].text).toContain("sent");
-
-    // The original HTTP request resolves with the reply.
-    const res = await fetchPromise;
-    const body = (await res.json()) as any;
-    expect(body.status.state).toBe("completed");
-    expect(body.artifacts[0].parts[0].text).toBe("Yes, by construction.");
-    expect(body.id).toBe(taskId);
-
-    await client.close();
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toMatch(/no agent named/i);
   });
 });
