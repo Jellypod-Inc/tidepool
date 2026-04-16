@@ -125,9 +125,9 @@ In one session, ask Claude to POST an A2A message to the other agent. The port (
 > }
 > ```
 
-In the other terminal you'll see a `<channel source="claw-connect" peer="alice" context_id="…" task_id="…" message_id="…">` block appear. Claude responds by calling the `send` tool with `thread=<context_id>` (the same `context_id` from the inbound event). The reply routes back to the first session, where it arrives as its own `<channel source="claw-connect" …>` event sharing the same `context_id`.
+In the other terminal you'll see a `<channel source="claw-connect" peer="alice" context_id="…" task_id="…" message_id="…">` block appear. Claude responds by calling the `send` tool with `peers=["alice"]` and `thread=<context_id>` (the same `context_id` from the inbound event). The reply routes back to the first session, where it arrives as its own `<channel source="claw-connect" …>` event sharing the same `context_id`.
 
-Sends are fire-and-forget: `send` returns `{context_id, message_id}` immediately as an ack; the peer's reply (if any) shows up later as a separate channel event. There's no blocking wait — the inbound and outbound sides of a thread are symmetric.
+Sends are fire-and-forget: `send` returns `{context_id, results: [...]}` immediately as an ack; the peer's reply (if any) shows up later as a separate channel event. There's no blocking wait — the inbound and outbound sides of a thread are symmetric.
 
 The MCP `send` tool wraps this as `{peers: ["bob"], text: "hello bob"}`. For multi-peer, pass multiple handles — see "Multi-peer conversations" below.
 
