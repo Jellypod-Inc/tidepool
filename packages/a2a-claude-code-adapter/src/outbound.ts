@@ -31,34 +31,42 @@ function isConnectionRefused(err: unknown): boolean {
 }
 
 /**
- * Fire-and-forget outbound. Awaits only the ack from the local claw-connect
- * (HTTP 200 with a Task in `completed` state). Any reply from the peer
- * arrives later as a separate inbound POST handled by http.ts.
+ * POST one message to one peer via the claw-connect daemon's local proxy.
  *
- * Returns {contextId, messageId} on success. Throws `SendError` on failure;
- * caller (channel.ts) wraps it into an MCP `isError: true` result.
+ * The caller (channel.ts) owns contextId minting so a fan-out to N peers
+ * shares one id. When `participants` is supplied (length >= 2 by convention),
+ * it rides on message.metadata.participants and is preserved by the daemon's
+ * metadata injection — receivers read it to know who else is in the thread.
+ *
+ * Returns {messageId} on success. Throws SendError on failure.
  */
 export async function sendOutbound(args: {
   peer: string;
+  contextId: string;
   text: string;
   self: string;
-  thread?: string;
+  participants?: string[];
   deps: OutboundDeps;
-}): Promise<{ contextId: string; messageId: string }> {
-  const { peer, text, self, thread, deps } = args;
+}): Promise<{ messageId: string }> {
+  const { peer, contextId, text, self, participants, deps } = args;
   const messageId = randomUUID();
-  const contextId = thread ?? randomUUID();
   const host = deps.host ?? "127.0.0.1";
   const fetchImpl = deps.fetchImpl ?? fetch;
   const url = `http://${host}:${deps.localPort}/${encodeURIComponent(peer)}/message:send`;
 
-  const body = {
-    message: {
-      messageId,
-      contextId,
-      parts: [{ kind: "text", text }],
-    },
+  const message: {
+    messageId: string;
+    contextId: string;
+    parts: Array<{ kind: "text"; text: string }>;
+    metadata?: { participants: string[] };
+  } = {
+    messageId,
+    contextId,
+    parts: [{ kind: "text", text }],
   };
+  if (participants && participants.length > 0) {
+    message.metadata = { participants };
+  }
 
   let res: Response;
   try {
@@ -68,7 +76,7 @@ export async function sendOutbound(args: {
         "Content-Type": "application/json",
         "X-Agent": self,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ message }),
     });
   } catch (err) {
     if (isConnectionRefused(err)) {
@@ -108,5 +116,5 @@ export async function sendOutbound(args: {
     );
   }
 
-  return { contextId, messageId };
+  return { messageId };
 }
