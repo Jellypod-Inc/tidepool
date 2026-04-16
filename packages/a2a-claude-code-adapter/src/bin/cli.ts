@@ -26,12 +26,6 @@ program
     "-c, --config-dir <path>",
     "claw-connect config dir (default: $CLAW_CONNECT_HOME or $HOME/.config/claw-connect)",
   )
-  .option(
-    "--reply-timeout-ms <n>",
-    "reply timeout in milliseconds",
-    (v) => parseInt(v, 10),
-    10 * 60_000,
-  )
   .action(async (opts) => {
     const configDir = opts.configDir ?? defaultConfigDir();
     const handle = await start({
