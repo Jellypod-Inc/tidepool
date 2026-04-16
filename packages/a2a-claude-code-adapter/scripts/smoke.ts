@@ -76,18 +76,22 @@ async function main() {
   const bobAdapter = await start({
     configDir: bobDir,
     agentName: "rust-expert",
-    replyTimeoutMs: 5_000,
     transport: serverT,
   });
   const client = new Client({ name: "smoke", version: "0.0.0" }, { capabilities: {} });
   await client.connect(clientT);
 
   client.setNotificationHandler(ChannelNotificationSchema, async (n) => {
-    const taskId = (n.params as any).meta.task_id;
+    const contextId = (n.params as any).meta.context_id;
+    const peer = (n.params as any).meta.peer;
     const inbound = n.params.content;
     await client.callTool({
-      name: "claw_connect_reply",
-      arguments: { task_id: taskId, text: `auto-reply to: ${inbound}` },
+      name: "send",
+      arguments: {
+        peer,
+        text: `auto-reply to: ${inbound}`,
+        thread: contextId,
+      },
     });
   });
 
