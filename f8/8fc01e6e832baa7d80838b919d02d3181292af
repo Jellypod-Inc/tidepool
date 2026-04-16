@@ -1,0 +1,38 @@
+packages/claw-connect/test/x-agent-validation.test.ts
+  965882ae8865935c 1-87
+packages/claw-connect/src/server.ts
+  965882ae8865935c 456-471
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "f88fc01e6e832baa7d80838b919d02d3181292af",
+  "prompts": {
+    "965882ae8865935c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a84d12bd-8737-4e61-be5e-9322d853f80a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 138,
+      "total_deletions": 35,
+      "accepted_lines": 103,
+      "overriden_lines": 0
+    },
+    "dbd4ffcb4a760eb1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2bb1041b-b4a7-4b19-9883-7b8ec7c974e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 44,
+      "overriden_lines": 0
+    }
+  }
+}
