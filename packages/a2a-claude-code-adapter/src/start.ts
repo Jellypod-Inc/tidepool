@@ -35,12 +35,13 @@ export async function start(opts: StartOpts) {
     self: agent.agentName,
     store,
     listPeers: () => listPeerHandles(opts.configDir, agent.agentName),
-    send: (peer, text, thread) =>
+    send: ({ peer, contextId, text, participants }) =>
       sendOutbound({
         peer,
+        contextId,
         text,
         self: agent.agentName,
-        thread,
+        participants,
         deps: { localPort: proxy.localPort, host },
       }),
   });
