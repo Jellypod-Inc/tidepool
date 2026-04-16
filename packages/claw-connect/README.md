@@ -156,15 +156,17 @@ mode = "warn"        # or "enforce"
 **Local agent A → local agent B (same peer):**
 ```
 adapter for A  →  POST http://127.0.0.1:9901/B/message:send
+                  (with header X-Agent: A)
                →  claw-connect sees B is a local agent
                →  forwards to agents.B.localEndpoint
                →  adapter for B receives the message
 ```
-No TLS. Agents on one peer trust each other implicitly.
+No TLS. Agents on one peer trust each other implicitly. All local POSTs to `127.0.0.1:9901` must include an `X-Agent: <agent-name>` header so the daemon knows who the sender is — the adapter sets this automatically, but raw HTTP clients must set it too.
 
 **Local agent A → remote peer's agent (via a `[remote]` entry):**
 ```
 adapter for A  →  POST http://127.0.0.1:9901/<remoteHandle>/message:send
+                  (with header X-Agent: A)
                →  claw-connect looks up [remotes.<remoteHandle>]
                →  mTLS out to https://<their-ip>:9900/<remoteTenant>/message:send
                   (presents peer identity.crt; pins remote fingerprint)

@@ -4,7 +4,7 @@ Make two Claude Code sessions talk to each other.
 
 This package is the glue that lets Claude Code send and receive agent-to-agent ([A2A](https://a2a-protocol.org)) messages. It works alongside [`claw-connect`](../claw-connect), which is the local server that routes those messages.
 
-Messages arriving for your agent show up in Claude Code as a `<channel source="claw-connect" task_id="...">` block. Claude replies by calling the `claw_connect_reply` tool, and the reply travels back to the sender. Claude can also initiate new conversations: `claw_connect_list_peers` to see who it can reach, `claw_connect_send` to open a thread — the peer's reply arrives as another channel event. `claw_connect_whoami` reports the session's own handle.
+Messages arriving for your agent show up in Claude Code as a `<channel source="claw-connect" peer="bob" context_id="..." task_id="..." message_id="...">` block. Claude replies by calling the `send` tool with `thread=<context_id>`, and the reply travels back to the sender as a separate channel event on that same thread. Claude can also initiate new conversations: `list_peers` to see who it can reach, `send` to open a thread — `send` returns an ack immediately (`{context_id, message_id}`) and the peer's reply arrives later as another channel event with the same `context_id`. `whoami` reports the session's own handle, and `list_threads` / `thread_history` let Claude inspect ongoing conversations.
 
 ---
 
@@ -112,9 +112,9 @@ Open a second terminal, `cd` into a different project, run the same command. You
 
 ## Step 3 — Send a message between the two sessions
 
-In one session, ask Claude to POST an A2A message to the other agent. The port (`9901`) is the daemon's fixed local proxy port; the agent name (`bob`) is whatever you registered:
+In one session, ask Claude to POST an A2A message to the other agent. The port (`9901`) is the daemon's fixed local proxy port; the agent name (`bob`) is whatever you registered. The `X-Agent` header identifies the sender to the daemon (the MCP tools set this automatically; raw HTTP clients must include it):
 
-> Send an A2A message to agent `bob`. POST to `http://127.0.0.1:9901/bob/message:send` with body:
+> Send an A2A message to agent `bob`. POST to `http://127.0.0.1:9901/bob/message:send` with header `X-Agent: alice` and body:
 > ```json
 > {
 >   "message": {
@@ -125,7 +125,9 @@ In one session, ask Claude to POST an A2A message to the other agent. The port (
 > }
 > ```
 
-In the other terminal you'll see a `<channel source="claw-connect" task_id="…">` block appear. Claude can reply by calling the `claw_connect_reply` tool with that task_id, and the reply routes back as the HTTP response to the first session.
+In the other terminal you'll see a `<channel source="claw-connect" peer="alice" context_id="…" task_id="…" message_id="…">` block appear. Claude responds by calling the `send` tool with `thread=<context_id>` (the same `context_id` from the inbound event). The reply routes back to the first session, where it arrives as its own `<channel source="claw-connect" …>` event sharing the same `context_id`.
+
+Sends are fire-and-forget: `send` returns `{context_id, message_id}` immediately as an ack; the peer's reply (if any) shows up later as a separate channel event. There's no blocking wait — the inbound and outbound sides of a thread are symmetric.
 
 That's the round-trip. Everything else is variations on this.
 
@@ -146,9 +148,9 @@ That's the round-trip. Everything else is variations on this.
 
 **Second session doesn't receive messages from the first.** Both sessions must be running (check `claw-connect status` shows the daemon is up). Both project directories must have their own `.mcp.json` pointing at different agents. The URL to POST to is `http://127.0.0.1:9901/<their-agent-name>/message:send` — `9901` is fixed (it's the daemon's local port), the agent name is the other session's name.
 
-**`claw_connect_send` reports "[claw-connect] send to X failed".** The channel event includes a `How to recover:` line tailored to the failure:
+**`send` reports "[claw-connect] send to X failed".** The channel event includes a `How to recover:` line tailored to the failure:
 - *"the claw-connect daemon isn't running"* — the daemon died or was stopped. Start it with `claw-connect claude-code:start` (or `claw-connect serve &`) and retry the send.
-- *"no agent named 'X' is registered"* — either you typo'd the handle or the other session has exited. Run `claw_connect_list_peers` (from inside Claude) to see who's reachable.
+- *"no agent named 'X' is registered"* — either you typo'd the handle or the other session has exited. Run `list_peers` (from inside Claude) to see who's reachable.
 - *"'X' is registered but didn't respond"* — X's adapter is unreachable (Claude session likely closed). Check the other terminal; rerun `claude-code:start` there.
 - Anything else — `claw-connect status` and `~/.config/claw-connect/logs/serve-<date>.log` are the next stops.
 
@@ -180,7 +182,6 @@ Cross-machine bootstrap may land as a `claw-connect claude-code:connect` command
 | -------------------------- | ---------------------------------------------------- |
 | `--agent <name>`           | the sole agent in `server.toml`                      |
 | `--config-dir <path>`      | `$CLAW_CONNECT_HOME` or `$HOME/.config/claw-connect` |
-| `--reply-timeout-ms <n>`   | `600000` (10 minutes)                                |
 
 ---
 
