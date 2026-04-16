@@ -37,6 +37,7 @@ import {
 import { proxyUpstreamOrFail, initSSEResponse } from "./streaming.js";
 import { buildFailedStatusEvent, MessageSchema } from "./a2a.js";
 import { validateWire } from "./wire-validation.js";
+import { injectMetadataFrom } from "./identity-injection.js";
 import type { RemoteAgent } from "./types.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
@@ -497,7 +498,7 @@ function createLocalApp(
             const upstreamResponse = await fetch(targetUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(req.body),
+              body: JSON.stringify(injectMetadataFrom(req.body, senderAgent)),
             });
 
             await proxyUpstreamOrFail({
@@ -519,7 +520,7 @@ function createLocalApp(
           const response = await fetch(targetUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(req.body),
+            body: JSON.stringify(injectMetadataFrom(req.body, senderAgent)),
           });
           const data = await response.json();
           res.status(response.status).json(data);
