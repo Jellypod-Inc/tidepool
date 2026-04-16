@@ -37,7 +37,6 @@ program
     const handle = await start({
       configDir,
       agentName: opts.agent,
-      replyTimeoutMs: opts.replyTimeoutMs,
     });
     process.stderr.write(
       `[a2a-adapter] serving agent "${handle.agent.agentName}" on http://127.0.0.1:${handle.agent.port}\n`,

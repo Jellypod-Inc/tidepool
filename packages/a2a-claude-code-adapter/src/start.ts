@@ -5,30 +5,45 @@ import {
   loadProxyConfig,
   listPeerHandles,
 } from "./config.js";
-import { PendingRegistry } from "./pending.js";
 import { startHttp, type InboundInfo } from "./http.js";
 import { createChannel } from "./channel.js";
 import { sendOutbound } from "./outbound.js";
+import { createThreadStore } from "./thread-store.js";
 
 export type StartOpts = {
   configDir: string;
   agentName?: string;
   host?: string;
-  replyTimeoutMs?: number;
-  /**
-   * Transport for the MCP server. Defaults to stdio (what Claude Code spawns).
-   * Tests pass an in-memory transport.
-   */
+  maxMessagesPerThread?: number;
+  maxThreads?: number;
+  /** MCP transport for tests; defaults to stdio. */
   transport?: Transport;
 };
 
 export async function start(opts: StartOpts) {
   const host = opts.host ?? "127.0.0.1";
-  const replyTimeoutMs = opts.replyTimeoutMs ?? 10 * 60_000;
 
   const agent = loadAgentConfig(opts.configDir, opts.agentName);
   const proxy = loadProxyConfig(opts.configDir);
-  const registry = new PendingRegistry();
+
+  const store = createThreadStore({
+    maxMessagesPerThread: opts.maxMessagesPerThread ?? 200,
+    maxThreads: opts.maxThreads ?? 100,
+  });
+
+  const channel = createChannel({
+    self: agent.agentName,
+    store,
+    listPeers: () => listPeerHandles(opts.configDir, agent.agentName),
+    send: (peer, text, thread) =>
+      sendOutbound({
+        peer,
+        text,
+        self: agent.agentName,
+        thread,
+        deps: { localPort: proxy.localPort, host },
+      }),
+  });
 
   const emitInbound = (info: InboundInfo): void => {
     channel.notifyInbound(info).catch((err) => {
@@ -38,37 +53,18 @@ export async function start(opts: StartOpts) {
     });
   };
 
-  const channel = createChannel({
-    registry,
-    self: agent.agentName,
-    listPeers: () => listPeerHandles(opts.configDir, agent.agentName),
-    send: (peer, text) =>
-      sendOutbound({
-        peer,
-        text,
-        deps: {
-          localPort: proxy.localPort,
-          host,
-          onReply: emitInbound,
-        },
-      }),
-  });
-
   const transport = opts.transport ?? new StdioServerTransport();
   await channel.server.connect(transport);
 
   const http = await startHttp({
     port: agent.port,
     host,
-    registry,
-    replyTimeoutMs,
     onInbound: emitInbound,
   });
 
   return {
     agent,
     close: async () => {
-      registry.closeAll(new Error("adapter shutting down"));
       await http.close();
       await channel.server.close();
     },
