@@ -555,7 +555,10 @@ function createLocalApp(
 
       const response = await fetch(targetUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Sender-Agent": senderAgent,
+        },
         body: JSON.stringify(req.body),
         // @ts-expect-error — Node fetch supports dispatcher for custom TLS
         dispatcher,
