@@ -4,7 +4,7 @@ Make two Claude Code sessions talk to each other.
 
 This package is the glue that lets Claude Code send and receive agent-to-agent ([A2A](https://a2a-protocol.org)) messages. It works alongside [`claw-connect`](../claw-connect), which is the local server that routes those messages.
 
-Messages arriving for your agent show up in Claude Code as a `<channel source="claw-connect" peer="bob" context_id="..." task_id="..." message_id="...">` block. Claude replies by calling the `send` tool with `thread=<context_id>`, and the reply travels back to the sender as a separate channel event on that same thread. Claude can also initiate new conversations: `list_peers` to see who it can reach, `send` to open a thread — `send` returns an ack immediately (`{context_id, message_id}`) and the peer's reply arrives later as another channel event with the same `context_id`. `whoami` reports the session's own handle, and `list_threads` / `thread_history` let Claude inspect ongoing conversations.
+Messages arriving for your agent show up in Claude Code as a `<channel source="claw-connect" peer="bob" context_id="..." task_id="..." message_id="...">` block. Claude replies by calling the `send` tool with `peers=[<peer>], thread=<context_id>`, and the reply travels back to the sender as a separate channel event on that same thread. Claude can also initiate new conversations: `list_peers` to see who it can reach, `send` to open a thread — `send` returns an ack immediately (`{context_id, results: [{peer, message_id} | {peer, error}]}`) and the peer's reply arrives later as another channel event with the same `context_id`. `whoami` reports the session's own handle, and `list_threads` / `thread_history` let Claude inspect ongoing conversations.
 
 ---
 
@@ -129,7 +129,44 @@ In the other terminal you'll see a `<channel source="claw-connect" peer="alice" 
 
 Sends are fire-and-forget: `send` returns `{context_id, message_id}` immediately as an ack; the peer's reply (if any) shows up later as a separate channel event. There's no blocking wait — the inbound and outbound sides of a thread are symmetric.
 
+The MCP `send` tool wraps this as `{peers: ["bob"], text: "hello bob"}`. For multi-peer, pass multiple handles — see "Multi-peer conversations" below.
+
 That's the round-trip. Everything else is variations on this.
+
+---
+
+## Multi-peer conversations
+
+`send` accepts an array of peers. When you pass more than one, the adapter:
+
+1. Mints **one** `context_id` shared by every recipient.
+2. Adds a `participants` list (every recipient plus yourself) onto each outbound message's metadata.
+3. Fans out pairwise deliveries over the existing daemon — no new wire shape, no room state, no membership.
+
+On the receiving side, inbound events look like:
+
+```
+<channel source="claw-connect" peer="wolverine" participants="wolverine alice bobby"
+         context_id="..." task_id="..." message_id="...">
+three-way kickoff
+</channel>
+```
+
+`peer` is the sender of this particular message; `participants` is everyone the sender considers part of the thread (including you and them). You choose how to respond:
+
+- **Reply to the sender only:** `send({peers: ["wolverine"], thread: <context_id>, text: "..."})`
+- **Reply-all:** `send({peers: <every participant except yourself>, thread: <context_id>, text: "..."})`
+- **Branch off:** `send({peers: ["alice"], text: "..."})` (no `thread`) — starts a fresh pairwise thread.
+
+There is no enforcement. There are no rooms. Agents negotiate these conventions the way humans do in group chat: sometimes you reply-all, sometimes you branch into a DM, sometimes your reply crosses someone else's in flight. This is intentional.
+
+Partial failure is first-class: if one recipient is unreachable, `results` carries the error for that peer and the others are still delivered. The tool call returns `isError: true` only when **every** peer fails.
+
+### Limits and caveats
+
+- **No membership primitive.** The daemon has no idea a thread is "multi-party." It just sees N pairwise deliveries with the same `context_id`. Participants are a sender-stated convention, not a server-validated fact.
+- **Trust the sender's list.** A receiver treats the `participants` list as informational — it's what the sender believes. If A sends to [B, C] and later sends to [B, D] on the same `context_id`, B sees the member set grow; D sees a participants list of `[A, B, D]` and doesn't know C was ever involved.
+- **Pairwise clients still work.** If a recipient's adapter predates this feature, it will ignore `message.metadata.participants` and reply pairwise — the multi-party convention is strictly opt-in.
 
 ---
 
