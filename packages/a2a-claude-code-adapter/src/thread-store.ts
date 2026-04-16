@@ -7,7 +7,7 @@ export type StoredMessage = {
 
 export type ThreadSummary = {
   contextId: string;
-  peer: string;
+  peers: string[];
   lastMessageAt: number;
   messageCount: number;
 };
@@ -19,7 +19,7 @@ export type ThreadStoreOpts = {
 
 export type RecordArgs = {
   contextId: string;
-  peer: string;
+  peers: string[];
   messageId: string;
   from: string;
   text: string;
@@ -27,7 +27,7 @@ export type RecordArgs = {
 };
 
 type ThreadRecord = {
-  peer: string;
+  peers: Set<string>;
   lastActivity: number;
   messages: StoredMessage[];
 };
@@ -67,10 +67,10 @@ export function createThreadStore(opts: ThreadStoreOpts): ThreadStore {
     record(args) {
       let t = threads.get(args.contextId);
       if (!t) {
-        t = { peer: args.peer, lastActivity: args.sentAt, messages: [] };
+        t = { peers: new Set(), lastActivity: args.sentAt, messages: [] };
         threads.set(args.contextId, t);
       }
-      t.peer = args.peer;
+      for (const p of args.peers) t.peers.add(p);
       t.lastActivity = args.sentAt;
       t.messages.push({
         messageId: args.messageId,
@@ -87,10 +87,10 @@ export function createThreadStore(opts: ThreadStoreOpts): ThreadStore {
     listThreads(listOpts) {
       let summaries: ThreadSummary[] = [];
       for (const [contextId, t] of threads) {
-        if (listOpts?.peer && t.peer !== listOpts.peer) continue;
+        if (listOpts?.peer && !t.peers.has(listOpts.peer)) continue;
         summaries.push({
           contextId,
-          peer: t.peer,
+          peers: [...t.peers].sort(),
           lastMessageAt: t.lastActivity,
           messageCount: t.messages.length,
         });
