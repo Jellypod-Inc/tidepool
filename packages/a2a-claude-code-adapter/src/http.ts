@@ -30,6 +30,7 @@ export async function startHttp(opts: StartHttpOpts) {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
 
+  // Express path encoding: ":" must be escaped in route definition.
   app.post("/message\\:send", async (req: Request, res: Response) => {
     const msg = req.body?.message;
     const textPart = msg?.parts?.[0]?.text;
@@ -58,6 +59,8 @@ export async function startHttp(opts: StartHttpOpts) {
       typeof msg.contextId === "string" ? msg.contextId : randomUUID();
     const messageId = typeof msg.messageId === "string" ? msg.messageId : taskId;
 
+    // Emit synchronously before responding; if onInbound throws, log and ack
+    // anyway — the message is "received" from the wire's perspective.
     try {
       opts.onInbound({
         taskId,

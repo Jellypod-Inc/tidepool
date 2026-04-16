@@ -146,4 +146,43 @@ describe("startHttp inbound endpoint", () => {
     expect(received).toHaveLength(1);
     expect(received[0].participants).toEqual(["bob"]);
   });
+
+  it("strips non-string entries from participants but keeps valid ones", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "M1",
+          contextId: "C1",
+          parts: [{ kind: "text", text: "hi" }],
+          metadata: {
+            from: "bob",
+            participants: ["alice", 42, "bob", "", null],
+          },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].participants).toEqual(["alice", "bob"]);
+  });
+
+  it("falls back to [peer] when participants array contains only invalid entries", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "M1",
+          contextId: "C1",
+          parts: [{ kind: "text", text: "hi" }],
+          metadata: { from: "bob", participants: [42, null, ""] },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].participants).toEqual(["bob"]);
+  });
 });
