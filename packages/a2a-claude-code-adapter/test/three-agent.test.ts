@@ -8,13 +8,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { start } from "../src/start.js";
 
-/**
- * Mock relay that stands in for claw-connect.
- * - Listens on a random port.
- * - Validates X-Agent header.
- * - Forwards POST /:tenant/message:send to the tenant's adapter HTTP port,
- *   injecting metadata.from = X-Agent value.
- */
 function startMockRelay(adapters: Record<string, { httpPort: number }>) {
   const app = express();
   app.use(express.json());
@@ -75,17 +68,19 @@ localEndpoint = "http://127.0.0.1:${httpPort}"
   return dir;
 }
 
-describe("symmetric round-trip via mock relay", () => {
+describe("three-agent multi-peer fan-out", () => {
   let relay: { port: number; close: () => Promise<void> };
-  let alice: { close: () => Promise<void>; port: number };
-  let bob: { close: () => Promise<void>; port: number };
+  let wolverine: { close: () => Promise<void> };
+  let alice: { close: () => Promise<void> };
+  let bobby: { close: () => Promise<void> };
+  let wolverineClient: Client;
   let aliceClient: Client;
-  let bobClient: Client;
+  let bobbyClient: Client;
+  let wolverineEvents: any[] = [];
   let aliceEvents: any[] = [];
-  let bobEvents: any[] = [];
+  let bobbyEvents: any[] = [];
 
   beforeAll(async () => {
-    // Pre-allocate adapter ports by binding+closing dummy servers
     const allocPort = () =>
       new Promise<number>((resolve) => {
         const s = http.createServer().listen(0, "127.0.0.1", () => {
@@ -93,105 +88,132 @@ describe("symmetric round-trip via mock relay", () => {
           s.close(() => resolve(p));
         });
       });
+    const wolverinePort = await allocPort();
     const alicePort = await allocPort();
-    const bobPort = await allocPort();
+    const bobbyPort = await allocPort();
     relay = await startMockRelay({
+      wolverine: { httpPort: wolverinePort },
       alice: { httpPort: alicePort },
-      bob: { httpPort: bobPort },
+      bobby: { httpPort: bobbyPort },
     });
 
+    const wolverineDir = makeConfigDir("wolverine", relay.port, wolverinePort);
     const aliceDir = makeConfigDir("alice", relay.port, alicePort);
-    const bobDir = makeConfigDir("bob", relay.port, bobPort);
+    const bobbyDir = makeConfigDir("bobby", relay.port, bobbyPort);
 
-    const [aliceServerTransport, aliceClientTransport] =
-      InMemoryTransport.createLinkedPair();
-    const [bobServerTransport, bobClientTransport] =
-      InMemoryTransport.createLinkedPair();
+    const [wsT, wcT] = InMemoryTransport.createLinkedPair();
+    const [asT, acT] = InMemoryTransport.createLinkedPair();
+    const [bsT, bcT] = InMemoryTransport.createLinkedPair();
 
-    const aliceStarted = await start({
+    wolverine = await start({
+      configDir: wolverineDir,
+      agentName: "wolverine",
+      transport: wsT,
+    });
+    alice = await start({
       configDir: aliceDir,
       agentName: "alice",
-      transport: aliceServerTransport,
+      transport: asT,
     });
-    const bobStarted = await start({
-      configDir: bobDir,
-      agentName: "bob",
-      transport: bobServerTransport,
+    bobby = await start({
+      configDir: bobbyDir,
+      agentName: "bobby",
+      transport: bsT,
     });
-    alice = { close: aliceStarted.close, port: alicePort };
-    bob = { close: bobStarted.close, port: bobPort };
 
+    wolverineClient = new Client({ name: "test-wolverine", version: "0.0.1" }, {});
     aliceClient = new Client({ name: "test-alice", version: "0.0.1" }, {});
-    bobClient = new Client({ name: "test-bob", version: "0.0.1" }, {});
+    bobbyClient = new Client({ name: "test-bobby", version: "0.0.1" }, {});
+    wolverineClient.fallbackNotificationHandler = async (n) => {
+      wolverineEvents.push(n);
+    };
     aliceClient.fallbackNotificationHandler = async (n) => {
       aliceEvents.push(n);
     };
-    bobClient.fallbackNotificationHandler = async (n) => {
-      bobEvents.push(n);
+    bobbyClient.fallbackNotificationHandler = async (n) => {
+      bobbyEvents.push(n);
     };
-    await aliceClient.connect(aliceClientTransport);
-    await bobClient.connect(bobClientTransport);
+    await wolverineClient.connect(wcT);
+    await aliceClient.connect(acT);
+    await bobbyClient.connect(bcT);
   });
 
   afterAll(async () => {
+    await wolverineClient.close();
     await aliceClient.close();
-    await bobClient.close();
+    await bobbyClient.close();
+    await wolverine.close();
     await alice.close();
-    await bob.close();
+    await bobby.close();
     await relay.close();
   });
 
-  it("alice sends → bob receives event with peer=alice; bob continues thread; alice receives same context_id", async () => {
+  it("wolverine sends to [alice, bobby] with one context_id; both receive with participants; alice reply-alls", async () => {
+    wolverineEvents = [];
     aliceEvents = [];
-    bobEvents = [];
+    bobbyEvents = [];
 
-    const sendResult = await aliceClient.callTool({
+    const sendResult = await wolverineClient.callTool({
       name: "send",
-      arguments: { peers: ["bob"], text: "hi bob" },
+      arguments: { peers: ["alice", "bobby"], text: "three-way kickoff" },
     });
     const sendData = JSON.parse((sendResult.content as any)[0].text);
+    expect(sendData.results).toHaveLength(2);
     const ctx = sendData.context_id;
-    expect(ctx).toBeTruthy();
-    expect(sendData.results).toHaveLength(1);
-    expect(sendData.results[0].peer).toBe("bob");
-    expect(typeof sendData.results[0].message_id).toBe("string");
 
-    await vi.waitFor(() => expect(bobEvents).toHaveLength(1));
-    expect(bobEvents[0]).toMatchObject({
-      method: "notifications/claude/channel",
-      params: {
-        content: "hi bob",
-        meta: { peer: "alice", context_id: ctx },
+    await vi.waitFor(() => {
+      expect(aliceEvents).toHaveLength(1);
+      expect(bobbyEvents).toHaveLength(1);
+    });
+
+    for (const ev of [aliceEvents[0], bobbyEvents[0]]) {
+      expect(ev).toMatchObject({
+        method: "notifications/claude/channel",
+        params: {
+          content: "three-way kickoff",
+          meta: {
+            peer: "wolverine",
+            context_id: ctx,
+            participants: "wolverine alice bobby",
+          },
+        },
+      });
+    }
+
+    // Alice reply-alls to the other participants on the same thread.
+    await aliceClient.callTool({
+      name: "send",
+      arguments: {
+        peers: ["wolverine", "bobby"],
+        text: "alice replies to all",
+        thread: ctx,
       },
     });
-    // Pairwise message — no participants attr.
-    expect(bobEvents[0].params.meta.participants).toBeUndefined();
 
-    const replyResult = await bobClient.callTool({
-      name: "send",
-      arguments: { peers: ["alice"], text: "hey alice", thread: ctx },
+    await vi.waitFor(() => {
+      expect(wolverineEvents).toHaveLength(1);
+      expect(bobbyEvents).toHaveLength(2);
     });
-    const replyData = JSON.parse((replyResult.content as any)[0].text);
-    expect(replyData.context_id).toBe(ctx);
 
-    await vi.waitFor(() => expect(aliceEvents).toHaveLength(1));
-    expect(aliceEvents[0]).toMatchObject({
-      method: "notifications/claude/channel",
+    expect(wolverineEvents[0]).toMatchObject({
       params: {
-        content: "hey alice",
-        meta: { peer: "bob", context_id: ctx },
+        content: "alice replies to all",
+        meta: {
+          peer: "alice",
+          context_id: ctx,
+          participants: "alice wolverine bobby",
+        },
       },
     });
-  });
-
-  it("send returns isError result when relay returns 404 (unknown tenant)", async () => {
-    const result = await aliceClient.callTool({
-      name: "send",
-      arguments: { peers: ["nonexistent"], text: "hi" },
+    expect(bobbyEvents[1]).toMatchObject({
+      params: {
+        content: "alice replies to all",
+        meta: {
+          peer: "alice",
+          context_id: ctx,
+          participants: "alice wolverine bobby",
+        },
+      },
     });
-    expect(result.isError).toBe(true);
-    const data = JSON.parse((result.content as any)[0].text);
-    expect(data.results).toHaveLength(1);
-    expect(data.results[0].error.kind).toBe("peer-not-registered");
   });
 });
