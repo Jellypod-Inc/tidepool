@@ -55,7 +55,8 @@ const INSTRUCTIONS =
   "participants=\"...\" context_id=\"...\" task_id=\"...\" message_id=\"...\"> " +
   "events. `peer` is the sender of that particular message; `participants` is " +
   "the full list of agents (including you) in the thread as the sender sees " +
-  "it. To reply to one peer, call `send` with `peers: [\"<peer>\"]` and " +
+  "it — present only on multi-party messages (2+ agents in the thread); " +
+  "absent on pairwise. To reply to one peer, call `send` with `peers: [\"<peer>\"]` and " +
   "`thread=<context_id>`. To reply-all in a multi-party thread, pass every " +
   "other participant: `peers: <all participants except your own handle>`. " +
   "To start a new conversation, call `send` without `thread`; a fresh " +
