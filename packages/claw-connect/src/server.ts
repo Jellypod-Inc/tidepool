@@ -37,7 +37,10 @@ import {
 import { proxyUpstreamOrFail, initSSEResponse } from "./streaming.js";
 import { buildFailedStatusEvent, MessageSchema } from "./a2a.js";
 import { validateWire } from "./wire-validation.js";
-import { injectMetadataFrom } from "./identity-injection.js";
+import {
+  injectMetadataFrom,
+  resolveLocalHandleForRemoteSender,
+} from "./identity-injection.js";
 import type { RemoteAgent } from "./types.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
@@ -83,6 +86,7 @@ export async function startServer(opts: StartServerOpts) {
     opts.configDir,
     serverBucket,
     getOrCreateAgentBucket,
+    remoteAgents,
   );
   const localApp = createLocalApp(holder, remoteAgents, opts.configDir);
 
@@ -141,6 +145,7 @@ function createPublicApp(
   configDir: string,
   serverBucket: TokenBucket,
   getOrCreateAgentBucket: (name: string) => TokenBucket | null,
+  remoteAgents: RemoteAgent[],
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -301,6 +306,25 @@ function createPublicApp(
         return;
       }
 
+      // --- Step 6.5: Translate remote sender agent → local handle ---
+      // The wire carries the remote tenant name in X-Sender-Agent; the local
+      // agent needs the local handle assigned to that (peer, agent) pair so
+      // metadata.from is authoritative and symmetric with local→local flows.
+      const senderAgentName = req.header("x-sender-agent");
+      if (!senderAgentName) {
+        res.status(400).json({ error: "X-Sender-Agent header required" });
+        return;
+      }
+      const localHandle = resolveLocalHandleForRemoteSender(
+        remoteAgents,
+        peerFingerprint,
+        senderAgentName,
+      );
+      if (!localHandle) {
+        res.status(403).json({ error: "unknown remote sender agent" });
+        return;
+      }
+
       // --- Step 7: Forward to local agent ---
       const targetUrl = `${agent.localEndpoint}/${action}`;
       const timeoutMs = agent.timeoutSeconds * 1000;
@@ -314,7 +338,7 @@ function createPublicApp(
           const upstreamResponse = await fetch(targetUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(req.body),
+            body: JSON.stringify(injectMetadataFrom(req.body, localHandle)),
           });
 
           await proxyUpstreamOrFail({
@@ -342,7 +366,7 @@ function createPublicApp(
         const response = await fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(req.body),
+          body: JSON.stringify(injectMetadataFrom(req.body, localHandle)),
           signal: controller.signal,
         });
 
