@@ -4,15 +4,20 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import type { PendingRegistry } from "./pending.js";
 import type { InboundInfo } from "./http.js";
+import type { ThreadStore } from "./thread-store.js";
+import type { SendError } from "./outbound.js";
 
 export type CreateChannelOpts = {
-  registry: PendingRegistry;
-  serverName?: string;
   self: string;
+  store: ThreadStore;
   listPeers: () => string[];
-  send: (peer: string, text: string) => Promise<{ taskId: string }>;
+  send: (
+    peer: string,
+    text: string,
+    thread?: string,
+  ) => Promise<{ contextId: string; messageId: string }>;
+  serverName?: string;
 };
 
 export type ToolCallRequest = {
@@ -21,29 +26,45 @@ export type ToolCallRequest = {
 };
 
 export type ToolCallResult = {
-  content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
+  content: Array<{ type: "text"; text: string }>;
 };
-
-const ReplyArgsSchema = z.object({
-  task_id: z.string().min(1),
-  text: z.string(),
-});
 
 const SendArgsSchema = z.object({
   peer: z.string().min(1),
   text: z.string().min(1),
+  thread: z.string().optional(),
+});
+
+const ListThreadsArgsSchema = z.object({
+  peer: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+const ThreadHistoryArgsSchema = z.object({
+  thread: z.string().min(1),
+  limit: z.number().int().positive().optional(),
 });
 
 const INSTRUCTIONS =
-  "This MCP server exposes the claw-connect agent-to-agent network. " +
-  "Inbound messages arrive as <channel source=\"claw-connect\" task_id=\"...\"> events; " +
-  "reply with the claw_connect_reply tool using the exact task_id from the tag. " +
-  "To initiate a conversation, call claw_connect_list_peers to see who you can reach, " +
-  "then claw_connect_send to open a new thread — the peer's reply will arrive later as " +
-  "another <channel source=\"claw-connect\"> event with the task_id returned by send. " +
-  "Use claw_connect_whoami to check your own handle. " +
-  "Never guess peer handles; always list first.";
+  "This MCP server connects you to peer agents over the claw-connect network. " +
+  "Inbound messages arrive as <channel source=\"claw-connect\" peer=\"...\" " +
+  "context_id=\"...\" task_id=\"...\" message_id=\"...\"> events. To respond, " +
+  "call `send` with thread=<context_id> from the tag — there is no separate " +
+  "reply tool. To start a new conversation, call `send` without thread. Use " +
+  "`list_peers` before sending; never guess handles. Use `list_threads` when " +
+  "interleaving multiple peers, and `thread_history` to re-load context after " +
+  "a gap.";
+
+function isSendError(err: unknown): err is SendError {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "kind" in err &&
+    "message" in err &&
+    "hint" in err
+  );
+}
 
 export function createChannel(opts: CreateChannelOpts) {
   const serverName = opts.serverName ?? "claw-connect";
@@ -61,107 +82,66 @@ export function createChannel(opts: CreateChannelOpts) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
-        name: "claw_connect_reply",
+        name: "send",
         description:
-          "Reply to an inbound claw-connect message. Call this when you see a <channel source=\"claw-connect\" task_id=\"...\"> event.",
+          "Send a message to a peer. Use `thread` to continue an existing conversation (pass the `context_id` from a prior <channel> event). Omit `thread` to start a new conversation. Replies arrive later as a separate <channel source=\"claw-connect\"> event with the same context_id. Always call `list_peers` before guessing a handle.",
         inputSchema: {
           type: "object",
           properties: {
-            task_id: {
-              type: "string",
-              description: "task_id attribute from the inbound <channel> tag",
-            },
-            text: {
-              type: "string",
-              description: "reply text to send back to the peer",
-            },
-          },
-          required: ["task_id", "text"],
-        },
-      },
-      {
-        name: "claw_connect_whoami",
-        description:
-          "Return this agent's own handle on the claw-connect network.",
-        inputSchema: {
-          type: "object",
-          properties: {},
-          additionalProperties: false,
-        },
-      },
-      {
-        name: "claw_connect_list_peers",
-        description:
-          "List the handles of peers this agent can reach on the claw-connect network. Call this before claw_connect_send — do not guess handles.",
-        inputSchema: {
-          type: "object",
-          properties: {},
-          additionalProperties: false,
-        },
-      },
-      {
-        name: "claw_connect_send",
-        description:
-          "Initiate a new conversation with a peer. Returns a task_id immediately; the peer's reply arrives later as a <channel source=\"claw-connect\" task_id=\"...\"> event.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            peer: {
+            peer: { type: "string", description: "peer handle from list_peers" },
+            text: { type: "string", description: "message text" },
+            thread: {
               type: "string",
               description:
-                "peer handle (from claw_connect_list_peers); do not guess",
-            },
-            text: {
-              type: "string",
-              description: "message text to send",
+                "context_id to continue a thread; omit to start a new one",
             },
           },
           required: ["peer", "text"],
         },
       },
+      {
+        name: "whoami",
+        description: "Return this agent's own handle on the claw-connect network.",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      },
+      {
+        name: "list_peers",
+        description:
+          "List handles of peers this agent can reach. Call before send; do not guess.",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      },
+      {
+        name: "list_threads",
+        description:
+          "List threads this agent is part of. A thread is a chain of messages with one peer, identified by context_id. Use to triage when multiple peers are active. Optionally filter by peer.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            peer: { type: "string", description: "filter to one peer" },
+            limit: { type: "number", description: "return at most N threads" },
+          },
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "thread_history",
+        description:
+          "Re-load messages from a thread you've been away from. Returns messages chronologically with sender and timestamp.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            thread: { type: "string", description: "context_id of the thread" },
+            limit: {
+              type: "number",
+              description: "return at most N most-recent messages",
+            },
+          },
+          required: ["thread"],
+          additionalProperties: false,
+        },
+      },
     ],
   }));
-
-  const handleReply = (req: ToolCallRequest): ToolCallResult => {
-    const parsed = ReplyArgsSchema.safeParse(req.arguments);
-    if (!parsed.success) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `invalid arguments: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
-          },
-        ],
-      };
-    }
-    const ok = opts.registry.resolve(parsed.data.task_id, parsed.data.text);
-    if (!ok) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `unknown task_id: ${parsed.data.task_id} (it may have already been replied to or timed out)`,
-          },
-        ],
-      };
-    }
-    return {
-      content: [{ type: "text", text: `sent (task_id=${parsed.data.task_id})` }],
-    };
-  };
-
-  const handleWhoami = (): ToolCallResult => ({
-    content: [{ type: "text", text: JSON.stringify({ handle: opts.self }) }],
-  });
-
-  const handleListPeers = (): ToolCallResult => {
-    const peers = opts.listPeers().map((handle) => ({ handle }));
-    return {
-      content: [{ type: "text", text: JSON.stringify({ peers }) }],
-    };
-  };
 
   const handleSend = async (req: ToolCallRequest): Promise<ToolCallResult> => {
     const parsed = SendArgsSchema.safeParse(req.arguments);
@@ -176,14 +156,123 @@ export function createChannel(opts: CreateChannelOpts) {
         ],
       };
     }
-    const { taskId } = await opts.send(parsed.data.peer, parsed.data.text);
+    try {
+      const { contextId, messageId } = await opts.send(
+        parsed.data.peer,
+        parsed.data.text,
+        parsed.data.thread,
+      );
+      opts.store.record({
+        contextId,
+        peer: parsed.data.peer,
+        messageId,
+        from: opts.self,
+        text: parsed.data.text,
+        sentAt: Date.now(),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              context_id: contextId,
+              message_id: messageId,
+            }),
+          },
+        ],
+      };
+    } catch (err) {
+      if (isSendError(err)) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[claw-connect] send to "${parsed.data.peer}" failed: ${err.message}\n\nHow to recover: ${err.hint}`,
+            },
+          ],
+        };
+      }
+      throw err;
+    }
+  };
+
+  const handleWhoami = (): ToolCallResult => ({
+    content: [{ type: "text", text: JSON.stringify({ handle: opts.self }) }],
+  });
+
+  const handleListPeers = (): ToolCallResult => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          peers: opts.listPeers().map((handle) => ({ handle })),
+        }),
+      },
+    ],
+  });
+
+  const handleListThreads = (req: ToolCallRequest): ToolCallResult => {
+    const parsed = ListThreadsArgsSchema.safeParse(req.arguments);
+    if (!parsed.success) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `invalid arguments: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+          },
+        ],
+      };
+    }
+    const summaries = opts.store.listThreads({
+      peer: parsed.data.peer,
+      limit: parsed.data.limit,
+    });
     return {
       content: [
         {
           type: "text",
           text: JSON.stringify({
-            task_id: taskId,
-            note: "reply will arrive as a <channel source=\"claw-connect\" task_id=\"...\"> event",
+            threads: summaries.map((s) => ({
+              context_id: s.contextId,
+              peer: s.peer,
+              last_message_at: s.lastMessageAt,
+              message_count: s.messageCount,
+            })),
+          }),
+        },
+      ],
+    };
+  };
+
+  const handleThreadHistory = (req: ToolCallRequest): ToolCallResult => {
+    const parsed = ThreadHistoryArgsSchema.safeParse(req.arguments);
+    if (!parsed.success) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `invalid arguments: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+          },
+        ],
+      };
+    }
+    const messages = opts.store.history(parsed.data.thread, {
+      limit: parsed.data.limit,
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            messages: messages.map((m) => ({
+              message_id: m.messageId,
+              from: m.from,
+              text: m.text,
+              sent_at: m.sentAt,
+            })),
           }),
         },
       ],
@@ -194,14 +283,16 @@ export function createChannel(opts: CreateChannelOpts) {
     req: ToolCallRequest,
   ): Promise<ToolCallResult> => {
     switch (req.name) {
-      case "claw_connect_reply":
-        return handleReply(req);
-      case "claw_connect_whoami":
-        return handleWhoami();
-      case "claw_connect_list_peers":
-        return handleListPeers();
-      case "claw_connect_send":
+      case "send":
         return handleSend(req);
+      case "whoami":
+        return handleWhoami();
+      case "list_peers":
+        return handleListPeers();
+      case "list_threads":
+        return handleListThreads(req);
+      case "thread_history":
+        return handleThreadHistory(req);
       default:
         throw new Error(`unknown tool: ${req.name}`);
     }
@@ -215,13 +306,24 @@ export function createChannel(opts: CreateChannelOpts) {
   });
 
   const notifyInbound = async (info: InboundInfo): Promise<void> => {
-    const meta: Record<string, string> = { task_id: info.taskId };
-    if (info.messageId) meta.message_id = info.messageId;
+    opts.store.record({
+      contextId: info.contextId,
+      peer: info.peer,
+      messageId: info.messageId,
+      from: info.peer,
+      text: info.text,
+      sentAt: Date.now(),
+    });
     await server.notification({
       method: "notifications/claude/channel",
       params: {
         content: info.text,
-        meta,
+        meta: {
+          peer: info.peer,
+          context_id: info.contextId,
+          task_id: info.taskId,
+          message_id: info.messageId,
+        },
       },
     });
   };

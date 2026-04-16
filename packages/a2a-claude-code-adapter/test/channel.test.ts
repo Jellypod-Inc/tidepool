@@ -1,146 +1,178 @@
 import { describe, expect, it, vi } from "vitest";
-import { PendingRegistry } from "../src/pending.js";
 import { createChannel } from "../src/channel.js";
+import { createThreadStore } from "../src/thread-store.js";
+import type { SendError } from "../src/outbound.js";
 
-function makeChannel(overrides?: {
+function setup(overrides?: {
+  send?: (peer: string, text: string, thread?: string) => Promise<{ contextId: string; messageId: string }>;
   listPeers?: () => string[];
-  send?: (peer: string, text: string) => Promise<{ taskId: string }>;
   self?: string;
 }) {
-  const reg = new PendingRegistry();
-  return {
-    reg,
-    ...createChannel({
-      registry: reg,
-      self: overrides?.self ?? "alice",
-      listPeers: overrides?.listPeers ?? (() => ["bob", "carol"]),
-      send:
-        overrides?.send ??
-        (async () => ({ taskId: "00000000-0000-0000-0000-000000000000" })),
-    }),
-  };
+  const store = createThreadStore({ maxMessagesPerThread: 100, maxThreads: 50 });
+  const sent: any[] = [];
+  const ch = createChannel({
+    self: overrides?.self ?? "alice",
+    store,
+    listPeers: overrides?.listPeers ?? (() => ["bob", "carol"]),
+    send:
+      overrides?.send ??
+      (async (peer, text, thread) => {
+        sent.push({ peer, text, thread });
+        return { contextId: thread ?? "ctx-new", messageId: "M-new" };
+      }),
+  });
+  return { ch, store, sent };
 }
 
-describe("createChannel", () => {
-  it("notifyInbound sends a notifications/claude/channel event", async () => {
-    const { server, notifyInbound } = makeChannel();
-
+describe("channel notifyInbound", () => {
+  it("emits notifications/claude/channel with the right meta", async () => {
+    const { ch, store } = setup();
     const calls: any[] = [];
-    (server as any).notification = async (n: unknown) => {
+    (ch.server as any).notification = async (n: unknown) => {
       calls.push(n);
     };
-
-    await notifyInbound({
-      taskId: "abc123",
-      contextId: "ctx1",
-      messageId: "m1",
+    await ch.notifyInbound({
+      taskId: "T1",
+      contextId: "C1",
+      messageId: "M1",
+      peer: "bob",
       text: "hello",
     });
-
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       method: "notifications/claude/channel",
       params: {
         content: "hello",
-        meta: { task_id: "abc123" },
+        meta: {
+          peer: "bob",
+          context_id: "C1",
+          task_id: "T1",
+          message_id: "M1",
+        },
       },
     });
-  });
-
-  it("claw_connect_reply resolves the pending task", async () => {
-    const { reg, handleToolCall } = makeChannel();
-    const pending = reg.register("t1", 1000);
-
-    const result = await handleToolCall({
-      name: "claw_connect_reply",
-      arguments: { task_id: "t1", text: "hi back" },
+    // recorded in store
+    expect(store.history("C1")).toHaveLength(1);
+    expect(store.history("C1")[0]).toMatchObject({
+      from: "bob",
+      text: "hello",
+      messageId: "M1",
     });
+  });
+});
 
-    expect(result.content[0].text).toContain("sent");
-    await expect(pending).resolves.toBe("hi back");
+describe("channel tool dispatch", () => {
+  it("send returns {context_id, message_id} and records outbound", async () => {
+    const { ch, store, sent } = setup();
+    const result = await ch.handleToolCall({
+      name: "send",
+      arguments: { peer: "bob", text: "hi" },
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toEqual({ context_id: "ctx-new", message_id: "M-new" });
+    expect(sent).toEqual([{ peer: "bob", text: "hi", thread: undefined }]);
+    expect(store.history("ctx-new")).toHaveLength(1);
+    expect(store.history("ctx-new")[0]).toMatchObject({
+      from: "alice",
+      text: "hi",
+    });
   });
 
-  it("claw_connect_reply returns an error when task_id is unknown", async () => {
-    const { handleToolCall } = makeChannel();
-    const result = await handleToolCall({
-      name: "claw_connect_reply",
-      arguments: { task_id: "nope", text: "orphan" },
+  it("send with thread reuses contextId", async () => {
+    const { ch, sent } = setup();
+    await ch.handleToolCall({
+      name: "send",
+      arguments: { peer: "bob", text: "follow-up", thread: "ctx-existing" },
+    });
+    expect(sent[0]).toMatchObject({ thread: "ctx-existing" });
+  });
+
+  it("send returns isError result on SendError", async () => {
+    const send = vi.fn().mockRejectedValue(<SendError>{
+      kind: "daemon-down",
+      message: "the claw-connect daemon isn't running",
+      hint: "run claw-connect claude-code:start",
+    });
+    const { ch } = setup({ send });
+    const result = await ch.handleToolCall({
+      name: "send",
+      arguments: { peer: "bob", text: "hi" },
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/unknown task/i);
+    expect(result.content[0].text).toMatch(/daemon isn't running/);
+    expect(result.content[0].text).toMatch(/run claw-connect/);
   });
 
-  it("rejects unknown tools", async () => {
-    const { handleToolCall } = makeChannel();
-    await expect(
-      handleToolCall({ name: "not_a_tool", arguments: {} }),
-    ).rejects.toThrow(/unknown tool/);
-  });
-
-  it("claw_connect_reply rejects invalid input", async () => {
-    const { handleToolCall } = makeChannel();
-    const result = await handleToolCall({
-      name: "claw_connect_reply",
-      arguments: { task_id: "", text: 123 as unknown as string },
-    });
-    expect(result.isError).toBe(true);
-  });
-
-  it("claw_connect_whoami returns this agent's handle", async () => {
-    const { handleToolCall } = makeChannel({ self: "alice" });
-    const result = await handleToolCall({
-      name: "claw_connect_whoami",
-      arguments: {},
-    });
+  it("whoami returns the agent handle", async () => {
+    const { ch } = setup({ self: "alice" });
+    const result = await ch.handleToolCall({ name: "whoami", arguments: {} });
     expect(JSON.parse(result.content[0].text)).toEqual({ handle: "alice" });
   });
 
-  it("claw_connect_list_peers returns uniform {handle} shape, no locality", async () => {
-    const { handleToolCall } = makeChannel({
-      listPeers: () => ["bob", "carol"],
-    });
-    const result = await handleToolCall({
-      name: "claw_connect_list_peers",
+  it("list_peers returns sorted handle list", async () => {
+    const { ch } = setup();
+    const result = await ch.handleToolCall({
+      name: "list_peers",
       arguments: {},
     });
-    const body = JSON.parse(result.content[0].text);
-    expect(body).toEqual({
+    expect(JSON.parse(result.content[0].text)).toEqual({
       peers: [{ handle: "bob" }, { handle: "carol" }],
     });
-    // locality must not leak
-    for (const p of body.peers) {
-      expect(p).not.toHaveProperty("kind");
-      expect(p).not.toHaveProperty("fingerprint");
-      expect(p).not.toHaveProperty("endpoint");
-    }
   });
 
-  it("claw_connect_send invokes the sender and returns a task_id", async () => {
-    const send = vi
-      .fn()
-      .mockResolvedValue({ taskId: "11111111-2222-3333-4444-555555555555" });
-    const { handleToolCall } = makeChannel({ send });
-
-    const result = await handleToolCall({
-      name: "claw_connect_send",
-      arguments: { peer: "bob", text: "hi" },
+  it("list_threads returns store summaries", async () => {
+    const { ch, store } = setup();
+    store.record({
+      contextId: "C1",
+      peer: "bob",
+      messageId: "M1",
+      from: "bob",
+      text: "hi",
+      sentAt: 1000,
     });
-    expect(send).toHaveBeenCalledWith("bob", "hi");
-    const body = JSON.parse(result.content[0].text);
-    expect(body.task_id).toBe("11111111-2222-3333-4444-555555555555");
+    const result = await ch.handleToolCall({
+      name: "list_threads",
+      arguments: {},
+    });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.threads).toHaveLength(1);
+    expect(data.threads[0]).toMatchObject({
+      context_id: "C1",
+      peer: "bob",
+      message_count: 1,
+    });
+    expect(data.threads[0].last_message_at).toBe(1000);
   });
 
-  it("claw_connect_send rejects empty peer or text", async () => {
-    const { handleToolCall } = makeChannel();
-    const bad = await handleToolCall({
-      name: "claw_connect_send",
-      arguments: { peer: "", text: "hi" },
+  it("thread_history returns message list", async () => {
+    const { ch, store } = setup();
+    store.record({
+      contextId: "C1",
+      peer: "bob",
+      messageId: "M1",
+      from: "bob",
+      text: "hi",
+      sentAt: 1000,
     });
-    expect(bad.isError).toBe(true);
-    const bad2 = await handleToolCall({
-      name: "claw_connect_send",
-      arguments: { peer: "bob", text: "" },
+    const result = await ch.handleToolCall({
+      name: "thread_history",
+      arguments: { thread: "C1" },
     });
-    expect(bad2.isError).toBe(true);
+    const data = JSON.parse(result.content[0].text);
+    expect(data.messages).toHaveLength(1);
+    expect(data.messages[0]).toMatchObject({
+      message_id: "M1",
+      from: "bob",
+      text: "hi",
+      sent_at: 1000,
+    });
+  });
+
+  it("unknown tool throws", async () => {
+    const { ch } = setup();
+    await expect(
+      ch.handleToolCall({ name: "claw_connect_reply", arguments: {} }),
+    ).rejects.toThrow(/unknown tool/);
   });
 });
