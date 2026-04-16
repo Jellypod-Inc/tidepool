@@ -453,6 +453,22 @@ function createLocalApp(
   // Outbound proxy — local agent sends A2A to a remote agent via local handle
   app.post("/:tenant/:action", async (req, res) => {
     const config = holder.server();
+
+    // Authenticate the sender agent. The local port has no transport-level
+    // identity, so we require an X-Agent header naming a locally-registered
+    // agent. Task 3 will use senderAgent to inject metadata.from.
+    const senderAgent = req.header("x-agent");
+    if (!senderAgent) {
+      res.status(403).json({ error: "X-Agent header required" });
+      return;
+    }
+    if (!config.agents[senderAgent]) {
+      res
+        .status(403)
+        .json({ error: `unknown agent in X-Agent: ${senderAgent}` });
+      return;
+    }
+
     const { tenant, action } = req.params;
 
     const inbound = validateWire(
