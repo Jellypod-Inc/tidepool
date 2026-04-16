@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, vi } from "vitest";
 import express from "express";
 import http from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -154,8 +154,7 @@ describe("symmetric round-trip via mock relay", () => {
     expect(ctx).toBeTruthy();
 
     // Bob should have received a channel notification
-    await new Promise((r) => setTimeout(r, 50));
-    expect(bobEvents).toHaveLength(1);
+    await vi.waitFor(() => expect(bobEvents).toHaveLength(1));
     expect(bobEvents[0]).toMatchObject({
       method: "notifications/claude/channel",
       params: {
@@ -173,8 +172,7 @@ describe("symmetric round-trip via mock relay", () => {
     expect(replyData.context_id).toBe(ctx);
 
     // Alice should have received a channel notification with the same context_id
-    await new Promise((r) => setTimeout(r, 50));
-    expect(aliceEvents).toHaveLength(1);
+    await vi.waitFor(() => expect(aliceEvents).toHaveLength(1));
     expect(aliceEvents[0]).toMatchObject({
       method: "notifications/claude/channel",
       params: {
@@ -184,7 +182,7 @@ describe("symmetric round-trip via mock relay", () => {
     });
   });
 
-  it("send returns isError result when relay returns 403 (unknown agent)", async () => {
+  it("send returns isError result when relay returns 404 (unknown tenant)", async () => {
     const result = await aliceClient.callTool({
       name: "send",
       arguments: { peer: "nonexistent", text: "hi" },

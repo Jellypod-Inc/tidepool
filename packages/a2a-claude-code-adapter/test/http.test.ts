@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { startHttp, type InboundInfo } from "../src/http.js";
+import { MAX_TEXT_BYTES, startHttp, type InboundInfo } from "../src/http.js";
 
 describe("startHttp inbound endpoint", () => {
   let server: Awaited<ReturnType<typeof startHttp>>;
@@ -72,7 +72,7 @@ describe("startHttp inbound endpoint", () => {
   });
 
   it("rejects oversized text with 413", async () => {
-    const big = "x".repeat(64 * 1024 + 1);
+    const big = "x".repeat(MAX_TEXT_BYTES + 1);
     const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

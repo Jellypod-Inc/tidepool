@@ -12,11 +12,16 @@ export type SendErrorKind =
   | "peer-unreachable"
   | "other";
 
-export type SendError = {
-  kind: SendErrorKind;
-  message: string;
-  hint: string;
-};
+export class SendError extends Error {
+  readonly kind: SendErrorKind;
+  readonly hint: string;
+  constructor(kind: SendErrorKind, message: string, hint: string) {
+    super(message);
+    this.name = "SendError";
+    this.kind = kind;
+    this.hint = hint;
+  }
+}
 
 function isConnectionRefused(err: unknown): boolean {
   const code = (err as { cause?: { code?: string } })?.cause?.code;
@@ -67,40 +72,40 @@ export async function sendOutbound(args: {
     });
   } catch (err) {
     if (isConnectionRefused(err)) {
-      throw <SendError>{
-        kind: "daemon-down",
-        message: "the claw-connect daemon isn't running",
-        hint: "Ask the user to run `claw-connect claude-code:start` (or `claw-connect serve &`) and retry.",
-      };
+      throw new SendError(
+        "daemon-down",
+        "the claw-connect daemon isn't running",
+        "Ask the user to run `claw-connect claude-code:start` (or `claw-connect serve &`) and retry.",
+      );
     }
-    throw <SendError>{
-      kind: "other",
-      message: err instanceof Error ? err.message : String(err),
-      hint: "Ask the user to check `claw-connect status` and the daemon log at ~/.config/claw-connect/logs/.",
-    };
+    throw new SendError(
+      "other",
+      err instanceof Error ? err.message : String(err),
+      "Ask the user to check `claw-connect status` and the daemon log at ~/.config/claw-connect/logs/.",
+    );
   }
 
   if (res.status === 403 || res.status === 404) {
-    throw <SendError>{
-      kind: "peer-not-registered",
-      message: `no agent named "${peer}" is registered`,
-      hint: "Call list_peers to see who's reachable. If the peer should exist, ask the user to confirm their session is running.",
-    };
+    throw new SendError(
+      "peer-not-registered",
+      `no agent named "${peer}" is registered`,
+      "Call list_peers to see who's reachable. If the peer should exist, ask the user to confirm their session is running.",
+    );
   }
   if (res.status === 504) {
-    throw <SendError>{
-      kind: "peer-unreachable",
-      message: `"${peer}" is registered but didn't respond`,
-      hint: `Check that "${peer}"'s session is still running.`,
-    };
+    throw new SendError(
+      "peer-unreachable",
+      `"${peer}" is registered but didn't respond`,
+      `Check that "${peer}"'s session is still running.`,
+    );
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw <SendError>{
-      kind: "other",
-      message: `HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
-      hint: "Ask the user to check `claw-connect status` and the daemon log.",
-    };
+    throw new SendError(
+      "other",
+      `HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
+      "Ask the user to check `claw-connect status` and the daemon log.",
+    );
   }
 
   return { contextId, messageId };

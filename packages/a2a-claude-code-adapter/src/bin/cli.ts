@@ -2,6 +2,7 @@
 import path from "node:path";
 import { Command } from "commander";
 import { start } from "../start.js";
+import { ADAPTER_VERSION } from "../version.js";
 
 function defaultConfigDir(): string {
   if (process.env.CLAW_CONNECT_HOME) return process.env.CLAW_CONNECT_HOME;
@@ -20,7 +21,7 @@ program
   .description(
     "MCP channel server for Claude Code. Wires a session into the claw-connect network: receive inbound messages as channel events, list peers, and send messages on new or existing threads.",
   )
-  .version("0.0.1")
+  .version(ADAPTER_VERSION)
   .option("-a, --agent <name>", "agent name in claw-connect's server.toml")
   .option(
     "-c, --config-dir <path>",

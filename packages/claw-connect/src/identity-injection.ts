@@ -18,6 +18,25 @@ export function injectMetadataFrom<T extends Record<string, unknown>>(
 }
 
 /**
+ * Strip any caller-supplied `metadata.from` from an A2A message body. Used on
+ * local→remote outbound: the receiving server is responsible for injecting
+ * `from` based on authenticated headers, so anything the caller set here is
+ * noise at best and a spoofing attempt at worst. Defense-in-depth; the
+ * receiver always overwrites.
+ */
+export function stripMetadataFrom<T extends Record<string, unknown>>(
+  body: T,
+): T {
+  const message = (body as { message?: Record<string, unknown> }).message;
+  if (!message || typeof message !== "object") return body;
+  const existing = message.metadata as Record<string, unknown> | undefined;
+  if (!existing || !("from" in existing)) return body;
+  const { from: _from, ...rest } = existing;
+  message.metadata = rest;
+  return body;
+}
+
+/**
  * Find the local handle the receiving host has assigned to a (peer, agent)
  * pair, from the static remotes config. Returns null if no match — caller
  * should reject with 403.

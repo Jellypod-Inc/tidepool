@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createChannel } from "../src/channel.js";
 import { createThreadStore } from "../src/thread-store.js";
-import type { SendError } from "../src/outbound.js";
+import { SendError } from "../src/outbound.js";
 
 function setup(overrides?: {
   send?: (peer: string, text: string, thread?: string) => Promise<{ contextId: string; messageId: string }>;
@@ -89,11 +89,13 @@ describe("channel tool dispatch", () => {
   });
 
   it("send returns isError result on SendError", async () => {
-    const send = vi.fn().mockRejectedValue(<SendError>{
-      kind: "daemon-down",
-      message: "the claw-connect daemon isn't running",
-      hint: "run claw-connect claude-code:start",
-    });
+    const send = vi.fn().mockRejectedValue(
+      new SendError(
+        "daemon-down",
+        "the claw-connect daemon isn't running",
+        "run claw-connect claude-code:start",
+      ),
+    );
     const { ch } = setup({ send });
     const result = await ch.handleToolCall({
       name: "send",

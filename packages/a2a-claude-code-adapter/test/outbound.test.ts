@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { sendOutbound } from "../src/outbound.js";
+import { SendError, sendOutbound } from "../src/outbound.js";
 
 function okAck() {
   return new Response(
@@ -97,5 +97,25 @@ describe("sendOutbound", () => {
         deps: { localPort: 9901, fetchImpl },
       }),
     ).rejects.toMatchObject({ kind: "peer-unreachable" });
+  });
+
+  it("rejected errors are SendError instances (and Error instances) with stack traces", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response("nope", { status: 404 }),
+    );
+    try {
+      await sendOutbound({
+        peer: "bob",
+        text: "hi",
+        self: "alice",
+        deps: { localPort: 9901, fetchImpl },
+      });
+      throw new Error("expected send to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(SendError);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as SendError).stack).toBeTruthy();
+      expect((err as SendError).name).toBe("SendError");
+    }
   });
 });

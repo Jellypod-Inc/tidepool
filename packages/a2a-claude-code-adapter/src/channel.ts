@@ -6,7 +6,8 @@ import {
 import { z } from "zod";
 import type { InboundInfo } from "./http.js";
 import type { ThreadStore } from "./thread-store.js";
-import type { SendError } from "./outbound.js";
+import { SendError } from "./outbound.js";
+import { ADAPTER_VERSION } from "./version.js";
 
 export type CreateChannelOpts = {
   self: string;
@@ -56,20 +57,11 @@ const INSTRUCTIONS =
   "interleaving multiple peers, and `thread_history` to re-load context after " +
   "a gap.";
 
-function isSendError(err: unknown): err is SendError {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "kind" in err &&
-    "message" in err &&
-    "hint" in err
-  );
-}
 
 export function createChannel(opts: CreateChannelOpts) {
   const serverName = opts.serverName ?? "claw-connect";
   const server = new Server(
-    { name: serverName, version: "0.0.1" },
+    { name: serverName, version: ADAPTER_VERSION },
     {
       capabilities: {
         experimental: { "claude/channel": {} },
@@ -84,7 +76,7 @@ export function createChannel(opts: CreateChannelOpts) {
       {
         name: "send",
         description:
-          "Send a message to a peer. Use `thread` to continue an existing conversation (pass the `context_id` from a prior <channel> event). Omit `thread` to start a new conversation. Replies arrive later as a separate <channel source=\"claw-connect\"> event with the same context_id. Always call `list_peers` before guessing a handle.",
+          "Send a message to a peer. Returns only an ack `{context_id, message_id}` — the peer's reply (if any) arrives later as a separate <channel source=\"claw-connect\"> event with the same context_id. Use `thread` to continue an existing conversation (pass the `context_id` from a prior <channel> event). Omit `thread` to start a new conversation. Always call `list_peers` before guessing a handle.",
         inputSchema: {
           type: "object",
           properties: {
@@ -182,7 +174,7 @@ export function createChannel(opts: CreateChannelOpts) {
         ],
       };
     } catch (err) {
-      if (isSendError(err)) {
+      if (err instanceof SendError) {
         return {
           isError: true,
           content: [
@@ -206,7 +198,9 @@ export function createChannel(opts: CreateChannelOpts) {
       {
         type: "text",
         text: JSON.stringify({
-          peers: opts.listPeers().map((handle) => ({ handle })),
+          peers: [...opts.listPeers()]
+            .sort()
+            .map((handle) => ({ handle })),
         }),
       },
     ],

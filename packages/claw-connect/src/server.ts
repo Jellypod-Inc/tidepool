@@ -39,6 +39,7 @@ import { buildFailedStatusEvent, MessageSchema } from "./a2a.js";
 import { validateWire } from "./wire-validation.js";
 import {
   injectMetadataFrom,
+  stripMetadataFrom,
   resolveLocalHandleForRemoteSender,
 } from "./identity-injection.js";
 import type { RemoteAgent } from "./types.js";
@@ -107,7 +108,7 @@ export async function startServer(opts: StartServerOpts) {
     `Public interface: https://${initialServer.server.host}:${initialServer.server.port}`,
   );
   console.log(
-    `Local interface: http://127.0.0.1:${initialServer.server.localPort}`,
+    `Local interface: http://127.0.0.1:${initialServer.server.localPort} (raw-HTTP clients must set X-Agent: <agent-name>)`,
   );
 
   return {
@@ -585,7 +586,7 @@ function createLocalApp(
           "Content-Type": "application/json",
           "X-Sender-Agent": senderAgent,
         },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify(stripMetadataFrom(req.body)),
         // @ts-expect-error — Node fetch supports dispatcher for custom TLS
         dispatcher,
       });

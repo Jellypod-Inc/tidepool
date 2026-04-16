@@ -40,6 +40,7 @@ export type ThreadStore = {
 
 export function createThreadStore(opts: ThreadStoreOpts): ThreadStore {
   const threads = new Map<string, ThreadRecord>();
+  let hasLoggedEviction = false;
 
   function evictIfFull() {
     while (threads.size > opts.maxThreads) {
@@ -53,6 +54,12 @@ export function createThreadStore(opts: ThreadStoreOpts): ThreadStore {
       }
       if (oldestKey === undefined) break;
       threads.delete(oldestKey);
+      if (!hasLoggedEviction) {
+        hasLoggedEviction = true;
+        process.stderr.write(
+          `[claw-connect-adapter] thread store at maxThreads=${opts.maxThreads} — evicting oldest by last_activity. Further evictions are silent.\n`,
+        );
+      }
     }
   }
 
