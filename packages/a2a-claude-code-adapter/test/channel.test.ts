@@ -199,6 +199,18 @@ describe("channel tool dispatch — send", () => {
     expect(data.results.every((r: any) => r.error)).toBe(true);
   });
 
+  it("all-failed: does NOT record anything in the thread store", async () => {
+    const sendFn = vi.fn(async () => {
+      throw new SendError("daemon-down", "daemon is down", "run serve");
+    });
+    const { ch, store } = setup({ send: sendFn });
+    await ch.handleToolCall({
+      name: "send",
+      arguments: { peers: ["bob", "carol"], text: "hi" },
+    });
+    expect(store.listThreads()).toHaveLength(0);
+  });
+
   it("rejects empty peers array", async () => {
     const { ch } = setup();
     const result = await ch.handleToolCall({

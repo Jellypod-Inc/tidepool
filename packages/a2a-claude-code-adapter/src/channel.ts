@@ -180,6 +180,9 @@ export function createChannel(opts: CreateChannelOpts) {
     const successfulPeers: string[] = [];
     let firstSuccessMessageId: string | undefined;
 
+    // Sequential fan-out: keeps results[] in input order and keeps error
+    // classification simple. If peer counts grow large or remote peers add real
+    // latency, switch to Promise.allSettled with a result-collation pass.
     for (const peer of uniquePeers) {
       try {
         const { messageId } = await opts.send({
@@ -204,8 +207,10 @@ export function createChannel(opts: CreateChannelOpts) {
     }
 
     // Record one store entry per send tool call (not per peer) — thread-store
-    // tracks the message once, peers union into the thread's member set. Use
-    // the first successful message_id as the canonical id for the record.
+    // tracks the message once, peers union into the thread's member set. The
+    // first successful message_id becomes the canonical id for local
+    // bookkeeping; per-peer message_ids are still surfaced in the response's
+    // results[] for callers that need per-recipient tracking.
     if (successfulPeers.length > 0 && firstSuccessMessageId) {
       opts.store.record({
         contextId,
@@ -219,7 +224,7 @@ export function createChannel(opts: CreateChannelOpts) {
 
     const allFailed = results.every((r) => "error" in r);
     return {
-      isError: allFailed ? true : undefined,
+      isError: allFailed,
       content: [
         {
           type: "text",
@@ -347,6 +352,9 @@ export function createChannel(opts: CreateChannelOpts) {
     const otherPeers = info.participants.filter((p) => p !== opts.self);
     opts.store.record({
       contextId: info.contextId,
+      // Fallback: if filtering self leaves zero peers (malformed inbound where
+      // the sender omitted themselves), fall back to the actual sender so the
+      // thread isn't peerless and list_threads still finds it.
       peers: otherPeers.length > 0 ? otherPeers : [info.peer],
       messageId: info.messageId,
       from: info.peer,
@@ -354,13 +362,15 @@ export function createChannel(opts: CreateChannelOpts) {
       sentAt: Date.now(),
     });
 
-    // Surface participants on the channel block only when multi-party.
+    // meta.peer is always the sender of *this* message. meta.participants,
+    // when present, is the full thread membership from the sender's view.
     const meta: Record<string, unknown> = {
       peer: info.peer,
       context_id: info.contextId,
       task_id: info.taskId,
       message_id: info.messageId,
     };
+    // Surface participants on the channel block only when multi-party.
     if (info.participants.length > 1) {
       // Space-separated string — renders cleanly as a <channel …> attribute and
       // is trivial to split on the agent side.
