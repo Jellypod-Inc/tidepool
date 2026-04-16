@@ -58,7 +58,7 @@ describe("runClaudeCodeStart — fresh repo (default)", () => {
     expect(cfg.agents.donkey).toBeDefined();
 
     const mcp = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
-    expect(mcp.mcpServers.a2a.args).toEqual(["--agent", "donkey"]);
+    expect(mcp.mcpServers["claw-connect"].args).toEqual(["--agent", "donkey"]);
 
     expect(fs.existsSync(path.join(configDir, "serve.pid"))).toBe(true);
 
@@ -66,7 +66,7 @@ describe("runClaudeCodeStart — fresh repo (default)", () => {
     expect(execCalls[0].cmd).toBe("claude");
     expect(execCalls[0].args).toEqual([
       "--dangerously-load-development-channels",
-      "server:a2a",
+      "server:claw-connect",
     ]);
     expect(execCalls[0].cwd).toBe(cwd);
   });
@@ -106,6 +106,42 @@ describe("runClaudeCodeStart — re-entry", () => {
     expect(Object.keys(secondCfg.agents)).toEqual(["donkey"]);
     expect(secondCfg.agents.donkey.localEndpoint).toBe(firstPort);
     expect(execCalls).toHaveLength(2);
+  });
+});
+
+describe("runClaudeCodeStart — swap agent", () => {
+  it("auto-unregisters the previous agent and rebinds the project to the new one", async () => {
+    const configDir = tmp("cc-swap-home-");
+    const cwd = tmp("cc-swap-cwd-");
+    const LOCAL_PORT = 52102;
+    const stub = await startStub(LOCAL_PORT);
+    servers.push(stub);
+
+    const fakeProcess = { pid: 99997, unref: () => {}, once: () => fakeProcess, kill: () => true };
+    const run = (agent: string) =>
+      runClaudeCodeStart({
+        configDir,
+        cwd,
+        explicitAgent: agent,
+        debug: false,
+        localPortOverride: LOCAL_PORT,
+        spawner: () => fakeProcess as never,
+        readinessTimeoutMs: 500,
+        claudeExecutor: () => {},
+        claudeOnPath: () => true,
+        rng: () => agent,
+      });
+
+    await run("bob");
+    const afterBob = loadServerConfig(path.join(configDir, "server.toml"));
+    expect(Object.keys(afterBob.agents)).toEqual(["bob"]);
+
+    await run("alice");
+    const afterAlice = loadServerConfig(path.join(configDir, "server.toml"));
+    expect(Object.keys(afterAlice.agents)).toEqual(["alice"]);
+
+    const mcp = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
+    expect(mcp.mcpServers["claw-connect"].args).toEqual(["--agent", "alice"]);
   });
 });
 

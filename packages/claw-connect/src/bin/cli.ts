@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { runInit } from "../cli/init.js";
 import { runRegister } from "../cli/register.js";
+import { runUnregister } from "../cli/unregister.js";
 import {
   runFriendAdd,
   runFriendList,
@@ -85,6 +86,15 @@ program
     });
     ok(`Registered agent "${name}"`);
     ok(`  peer fingerprint: ${result.peerFingerprint}`);
+  });
+
+program
+  .command("unregister <name>")
+  .description("Remove a local agent from server.toml")
+  .action(async (name: string) => {
+    const configDir = resolveConfigDir(program.opts());
+    await runUnregister({ configDir, name });
+    ok(`Unregistered agent "${name}"`);
   });
 
 const friend = program.command("friend").description("Manage friends");

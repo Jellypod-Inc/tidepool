@@ -18,7 +18,7 @@ const program = new Command();
 program
   .name("a2a-claude-code-adapter")
   .description(
-    "MCP channel server that receives A2A messages via claw-connect and lets Claude reply through the a2a_reply tool.",
+    "MCP channel server for Claude Code. Wires a session into the claw-connect network: receive inbound messages as channel events, list peers, initiate conversations, and reply.",
   )
   .version("0.0.1")
   .option("-a, --agent <name>", "agent name in claw-connect's server.toml")

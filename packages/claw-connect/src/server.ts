@@ -4,7 +4,7 @@ import http from "http";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { buildPinnedDispatcher } from "./outbound-tls.js";
-import { loadServerConfig, loadFriendsConfig } from "./config.js";
+import { createConfigHolder, type ConfigHolder } from "./config-holder.js";
 import {
   checkFriend,
   checkAgentScope,
@@ -37,7 +37,7 @@ import {
 import { proxyUpstreamOrFail, initSSEResponse } from "./streaming.js";
 import { buildFailedStatusEvent, MessageSchema } from "./a2a.js";
 import { validateWire } from "./wire-validation.js";
-import type { RemoteAgent, ServerConfig, FriendsConfig } from "./types.js";
+import type { RemoteAgent } from "./types.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
   for (const [key, value] of Object.entries(error.headers)) {
@@ -52,38 +52,38 @@ export interface StartServerOpts {
 }
 
 export async function startServer(opts: StartServerOpts) {
-  const serverConfig = loadServerConfig(
-    `${opts.configDir}/server.toml`,
-  );
-  const friendsConfig = loadFriendsConfig(
-    `${opts.configDir}/friends.toml`,
-  );
+  const holder = createConfigHolder(opts.configDir);
+  const initialServer = holder.server();
   const remoteAgents = opts.remoteAgents ?? [];
 
-  // Initialize rate limiters
-  const serverRateConfig = parseRateLimit(serverConfig.server.rateLimit);
+  // Server-wide rate limit uses the rateLimit config as of server start.
+  // Per-agent buckets are created lazily in getOrCreateAgentBucket so that
+  // agents registered *after* the daemon started also get a bucket.
+  const serverRateConfig = parseRateLimit(initialServer.server.rateLimit);
   const serverBucket = new TokenBucket(
     serverRateConfig.tokens,
     serverRateConfig.windowMs,
   );
 
   const agentBuckets = new Map<string, TokenBucket>();
-  for (const [name, agentConfig] of Object.entries(serverConfig.agents)) {
-    const agentRateConfig = parseRateLimit(agentConfig.rateLimit);
-    agentBuckets.set(
-      name,
-      new TokenBucket(agentRateConfig.tokens, agentRateConfig.windowMs),
-    );
-  }
+  const getOrCreateAgentBucket = (name: string): TokenBucket | null => {
+    const existing = agentBuckets.get(name);
+    if (existing) return existing;
+    const cfg = holder.server().agents[name];
+    if (!cfg) return null;
+    const parsed = parseRateLimit(cfg.rateLimit);
+    const bucket = new TokenBucket(parsed.tokens, parsed.windowMs);
+    agentBuckets.set(name, bucket);
+    return bucket;
+  };
 
   const publicApp = createPublicApp(
-    serverConfig,
-    friendsConfig,
+    holder,
     opts.configDir,
     serverBucket,
-    agentBuckets,
+    getOrCreateAgentBucket,
   );
-  const localApp = createLocalApp(serverConfig, remoteAgents, opts.configDir);
+  const localApp = createLocalApp(holder, remoteAgents, opts.configDir);
 
   // Public interface: mTLS
   const tlsOpts = buildTlsOptions(opts.configDir);
@@ -92,17 +92,17 @@ export async function startServer(opts: StartServerOpts) {
   const localServer = http.createServer(localApp);
 
   await new Promise<void>((resolve) => {
-    publicServer.listen(serverConfig.server.port, serverConfig.server.host, resolve);
+    publicServer.listen(initialServer.server.port, initialServer.server.host, resolve);
   });
   await new Promise<void>((resolve) => {
-    localServer.listen(serverConfig.server.localPort, "127.0.0.1", resolve);
+    localServer.listen(initialServer.server.localPort, "127.0.0.1", resolve);
   });
 
   console.log(
-    `Public interface: https://${serverConfig.server.host}:${serverConfig.server.port}`,
+    `Public interface: https://${initialServer.server.host}:${initialServer.server.port}`,
   );
   console.log(
-    `Local interface: http://127.0.0.1:${serverConfig.server.localPort}`,
+    `Local interface: http://127.0.0.1:${initialServer.server.localPort}`,
   );
 
   return {
@@ -111,6 +111,7 @@ export async function startServer(opts: StartServerOpts) {
     close: () => {
       publicServer.close();
       localServer.close();
+      holder.stop();
     },
   };
 }
@@ -135,11 +136,10 @@ function buildTlsOptions(configDir: string) {
 // --- Public interface (mTLS, for remote peers) ---
 
 function createPublicApp(
-  config: ServerConfig,
-  friends: FriendsConfig,
+  holder: ConfigHolder,
   configDir: string,
   serverBucket: TokenBucket,
-  agentBuckets: Map<string, TokenBucket>,
+  getOrCreateAgentBucket: (name: string) => TokenBucket | null,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -158,6 +158,7 @@ function createPublicApp(
   app.get(
     "/:tenant/.well-known/agent-card.json",
     (req, res) => {
+      const config = holder.server();
       const agent = resolveTenant(config, req.params.tenant);
       if (!agent) {
         res.status(404).json({ error: "Agent not found" });
@@ -180,6 +181,8 @@ function createPublicApp(
   app.post(
     "/:tenant/:action",
     async (req, res) => {
+      const config = holder.server();
+      const friends = holder.friends();
       const { tenant, action } = req.params;
       // Caller's messageId — threaded into every error response so clients
       // can correlate failures to the request that triggered them. May be
@@ -279,7 +282,7 @@ function createPublicApp(
       }
 
       // --- Step 5: Agent rate limit ---
-      const agentBucket = agentBuckets.get(tenant);
+      const agentBucket = getOrCreateAgentBucket(tenant);
       if (agentBucket) {
         const agentResult = agentBucket.consume();
         if (!agentResult.allowed) {
@@ -374,7 +377,7 @@ function createPublicApp(
 // --- Local interface (HTTP, for local agents) ---
 
 function createLocalApp(
-  config: ServerConfig,
+  holder: ConfigHolder,
   remoteAgents: RemoteAgent[],
   configDir: string,
 ): express.Application {
@@ -383,6 +386,7 @@ function createLocalApp(
 
   // Root Agent Card listing all available agents (local + remote)
   app.get("/.well-known/agent-card.json", (_req, res) => {
+    const config = holder.server();
     const allAgents = [
       ...Object.keys(config.agents),
       ...remoteAgents.map((r) => r.localHandle),
@@ -412,6 +416,7 @@ function createLocalApp(
 
   // Per-tenant Agent Card (remote agents)
   app.get("/:tenant/.well-known/agent-card.json", async (req, res) => {
+    const config = holder.server();
     const { tenant } = req.params;
     const remote = mapLocalTenantToRemote(remoteAgents, tenant);
 
@@ -447,6 +452,7 @@ function createLocalApp(
 
   // Outbound proxy — local agent sends A2A to a remote agent via local handle
   app.post("/:tenant/:action", async (req, res) => {
+    const config = holder.server();
     const { tenant, action } = req.params;
 
     const inbound = validateWire(

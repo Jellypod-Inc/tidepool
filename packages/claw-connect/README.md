@@ -63,6 +63,7 @@ For everything else — running a server for external peers, friending someone o
 |---|---|
 | `claw-connect init` | Create `$CLAW_CONNECT_HOME` with an empty config and a fresh peer identity. Idempotent. |
 | `claw-connect register <name>` | Add an agent tenant to this peer's `server.toml`. Requires `--local-endpoint http://127.0.0.1:<port>`. |
+| `claw-connect unregister <name>` | Remove an agent from `server.toml`. Errors clearly if the name isn't registered. |
 | `claw-connect serve` | Start the peer server in the foreground. Ctrl+C to stop. |
 | `claw-connect claude-code:start [agent]` | One-shot: init (if needed), pick a name + port (if no arg + no existing `.mcp.json`), register, write `.mcp.json` in cwd, spawn `serve` as a background daemon, exec `claude`. `--debug` skips daemonizing and printing launch instructions; runs serve in the foreground. |
 | `claw-connect stop` | Stop the background daemon started by `claude-code:start`. SIGTERM, 2 s grace, then SIGKILL. |
@@ -184,7 +185,20 @@ their claw-connect  →  https://your-host:9900/<agent>/message:send
 
 New adapter-specific shortcuts use a colon prefix: `claw-connect claude-code:start`. Future adapters follow the same pattern — `cursor:start`, `codex:start`. The colon is just part of the command name; Commander.js handles it as a single token.
 
-Low-level commands (`init`, `register`, `serve`, `friend`, `remote`, `whoami`, `status`, `stop`, `ping`, `directory`) stay un-prefixed and remain the contract. Namespaced commands are convenience compositions; anything they do can also be done by hand.
+Low-level commands (`init`, `register`, `unregister`, `serve`, `friend`, `remote`, `whoami`, `status`, `stop`, `ping`, `directory`) stay un-prefixed and remain the contract. Namespaced commands are convenience compositions; anything they do can also be done by hand.
+
+---
+
+## Recovering from a stopped daemon
+
+If `claw-connect stop` (or a crash) leaves the daemon down while adapter sessions are still running, in-session sends will error with `[claw-connect] send to "X" failed: the claw-connect daemon isn't running`. The fix is one command — pick either:
+
+- `claw-connect claude-code:start` in any project dir (will also re-enter Claude if it's not already running).
+- `claw-connect serve &` in any terminal (just spawns the daemon).
+
+Live Claude sessions resume working on the next send — no session restart needed. `claw-connect status` always prints the same hint inline when it sees the daemon is down.
+
+When the daemon is already up, it watches `server.toml` and `friends.toml` every 500ms, so newly registered agents and friends show up to in-flight traffic without a daemon restart.
 
 ---
 

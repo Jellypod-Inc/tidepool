@@ -24,4 +24,13 @@ describe("runStatus", () => {
     expect(out).toContain("alice-dev");
     expect(out).toContain("0 friends");
   });
+
+  it("shows a recovery hint when the daemon is not running", async () => {
+    const dir = tmp();
+    await runInit({ configDir: dir });
+    const out = await runStatus({ configDir: dir });
+    expect(out).toMatch(/Daemon: not running/);
+    expect(out).toMatch(/claude-code:start/);
+    expect(out).toMatch(/claw-connect serve/);
+  });
 });

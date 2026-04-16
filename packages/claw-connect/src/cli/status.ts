@@ -13,9 +13,13 @@ export async function runStatus(opts: RunStatusOpts): Promise<string> {
   const base = buildStatusOutput(server, friends);
 
   const daemon = await isServeRunning({ configDir: opts.configDir });
-  const daemonLine = daemon.running
+  const daemonBlock = daemon.running
     ? `Daemon: running (PID ${daemon.pid})`
-    : `Daemon: not running`;
+    : [
+        `Daemon: not running`,
+        `  → run 'claw-connect claude-code:start' in a project dir to start it,`,
+        `    or 'claw-connect serve &' in any terminal to just bring up the daemon.`,
+      ].join("\n");
 
-  return `${base}\n\n${daemonLine}`;
+  return `${base}\n\n${daemonBlock}`;
 }

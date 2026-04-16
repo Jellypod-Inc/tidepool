@@ -122,4 +122,105 @@ describe("local loopback — two agents on one claw-connect", () => {
       message: { messageId: "m-1", role: "user" },
     });
   });
+
+  it("picks up an agent registered AFTER the daemon started", async () => {
+    const dir = tmp("cc-reload-");
+    await runInit({ configDir: dir });
+
+    const PUBLIC_PORT = 49720;
+    const LOCAL_PORT = 49721;
+    const A_ENDPOINT_PORT = 49730;
+    const CAROL_ENDPOINT_PORT = 49731;
+
+    fs.writeFileSync(
+      path.join(dir, "server.toml"),
+      TOML.stringify({
+        server: {
+          port: PUBLIC_PORT,
+          host: "0.0.0.0",
+          localPort: LOCAL_PORT,
+          rateLimit: "100/hour",
+          streamTimeoutSeconds: 300,
+        },
+        agents: {},
+        connectionRequests: { mode: "deny" },
+        discovery: { providers: ["static"], cacheTtlSeconds: 300 },
+        validation: { mode: "warn" },
+      } as any),
+    );
+    await runRegister({
+      configDir: dir,
+      name: "alice",
+      localEndpoint: `http://127.0.0.1:${A_ENDPOINT_PORT}`,
+    });
+
+    const handle = await startServer({
+      configDir: dir,
+      remoteAgents: [],
+    });
+    servers.push({ close: () => handle.close() });
+
+    // Before carol is registered → 404
+    const pre = await fetch(
+      `http://127.0.0.1:${LOCAL_PORT}/carol/message:send`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            messageId: "pre-1",
+            role: "user",
+            parts: [{ kind: "text", text: "hello?" }],
+          },
+        }),
+      },
+    );
+    expect(pre.status).toBe(404);
+
+    // Register carol and spin up her endpoint while the daemon keeps running.
+    await runRegister({
+      configDir: dir,
+      name: "carol",
+      localEndpoint: `http://127.0.0.1:${CAROL_ENDPOINT_PORT}`,
+    });
+    const carolServer = await listenOn(CAROL_ENDPOINT_PORT, (_req, res) => {
+      res.status(200).json({
+        id: "t",
+        contextId: "c",
+        status: { state: "completed" },
+        artifacts: [
+          { artifactId: "r", parts: [{ kind: "text", text: "hi from carol" }] },
+        ],
+      });
+    });
+    servers.push(carolServer);
+
+    // Wait up to 2s for the holder's fs.watchFile poll (500ms) to catch up.
+    const deadline = Date.now() + 2_000;
+    let lastStatus = 404;
+    let lastBody: any = null;
+    while (Date.now() < deadline) {
+      const r = await fetch(
+        `http://127.0.0.1:${LOCAL_PORT}/carol/message:send`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: {
+              messageId: `m-${Date.now()}`,
+              role: "user",
+              parts: [{ kind: "text", text: "ping" }],
+            },
+          }),
+        },
+      );
+      lastStatus = r.status;
+      lastBody = await r.json().catch(() => null);
+      if (lastStatus === 200) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    expect(lastStatus).toBe(200);
+    expect(lastBody.artifacts[0].parts[0].text).toBe("hi from carol");
+  });
 });

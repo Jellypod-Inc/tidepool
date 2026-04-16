@@ -46,10 +46,14 @@ function readAgentFromMcpJson(filePath: string): string | null {
   } catch {
     return null;
   }
-  const a2a = (parsed as { mcpServers?: { a2a?: { args?: unknown[] } } })?.mcpServers?.a2a;
-  if (!a2a || !Array.isArray(a2a.args)) return null;
-  const idx = a2a.args.indexOf("--agent");
-  if (idx < 0 || idx + 1 >= a2a.args.length) return null;
-  const next = a2a.args[idx + 1];
+  const servers = (parsed as { mcpServers?: Record<string, { args?: unknown[] } | undefined> })
+    ?.mcpServers;
+  // Prefer the current key; fall back to the legacy `a2a` key so users who
+  // set up a workspace under the old name aren't forced through a migration.
+  const entry = servers?.["claw-connect"] ?? servers?.a2a;
+  if (!entry || !Array.isArray(entry.args)) return null;
+  const idx = entry.args.indexOf("--agent");
+  if (idx < 0 || idx + 1 >= entry.args.length) return null;
+  const next = entry.args[idx + 1];
   return typeof next === "string" ? next : null;
 }

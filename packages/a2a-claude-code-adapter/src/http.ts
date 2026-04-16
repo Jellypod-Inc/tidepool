@@ -64,7 +64,7 @@ export async function startHttp(opts: StartHttpOpts) {
 
     // If claw-connect (or any upstream) aborts the HTTP connection before we
     // reply, reject the pending task so the registry doesn't leak entries and
-    // any still-in-flight a2a_reply tool call surfaces a clear error.
+    // any still-in-flight reply tool call surfaces a clear error.
     res.on("close", () => {
       if (!res.writableEnded) {
         opts.registry.reject(taskId, new Error("client aborted"));

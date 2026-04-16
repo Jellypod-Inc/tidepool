@@ -86,7 +86,7 @@ async function main() {
     const taskId = (n.params as any).meta.task_id;
     const inbound = n.params.content;
     await client.callTool({
-      name: "a2a_reply",
+      name: "claw_connect_reply",
       arguments: { task_id: taskId, text: `auto-reply to: ${inbound}` },
     });
   });

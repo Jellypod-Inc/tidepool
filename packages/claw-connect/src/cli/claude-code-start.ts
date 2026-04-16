@@ -5,11 +5,15 @@ import { spawn as nodeSpawn } from "child_process";
 import type { ChildProcess, SpawnOptions } from "child_process";
 import { runInit } from "./init.js";
 import { runRegister } from "./register.js";
-import { loadServerConfig } from "../config.js";
+import { runUnregister } from "./unregister.js";
+import { loadServerConfig, loadFriendsConfig } from "../config.js";
+import { loadRemotesConfig } from "./remotes-config.js";
+import { readPeerFingerprint } from "../identity-paths.js";
 import { resolveAgentName } from "./name-resolver.js";
 import { pickFreeLoopbackPort } from "./free-port.js";
 import { ensureMcpJsonEntry } from "./mcp-json.js";
 import { isServeRunning, spawnServeDaemon } from "./serve-daemon.js";
+import type { ServerConfig } from "../types.js";
 
 type SpawnFn = (cmd: string, args: string[], options: SpawnOptions) => ChildProcess;
 type ClaudeExec = (
@@ -58,14 +62,31 @@ export async function runClaudeCodeStart(opts: RunClaudeCodeStartOpts): Promise<
     });
   }
 
-  // 4. write/merge .mcp.json
-  await ensureMcpJsonEntry({ cwd: opts.cwd, agentName });
+  // 4. write/merge .mcp.json, auto-prune the previous agent if the project swapped
+  const mcp = await ensureMcpJsonEntry({ cwd: opts.cwd, agentName });
+  if (
+    mcp.action === "updated" &&
+    mcp.previousAgent &&
+    mcp.previousAgent !== agentName
+  ) {
+    try {
+      await runUnregister({ configDir: opts.configDir, name: mcp.previousAgent });
+      process.stdout.write(
+        `\nnote: project was bound to "${mcp.previousAgent}" — swapped to "${agentName}" and removed "${mcp.previousAgent}" from server.toml.\n`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stdout.write(
+        `\nnote: swapped project from "${mcp.previousAgent}" → "${agentName}". Could not remove "${mcp.previousAgent}" from server.toml: ${msg}\n`,
+      );
+    }
+  }
 
   if (opts.debug) {
     // 5a. foreground serve — no daemon, no PID file, no auto-claude
     const runner = opts.debugServeRunner ?? defaultDebugServeRunner;
     process.stdout.write(
-      `\nIn another terminal, run:\n  cd ${opts.cwd} && claude --dangerously-load-development-channels server:a2a\n\n`,
+      `\nIn another terminal, run:\n  cd ${opts.cwd} && claude --dangerously-load-development-channels server:claw-connect\n\n`,
     );
     await runner(opts.configDir);
     return;
@@ -85,20 +106,79 @@ export async function runClaudeCodeStart(opts: RunClaudeCodeStartOpts): Promise<
     });
   }
 
-  // 6. exec claude (or print fallback if not on PATH)
+  // 6. print launch summary so the user sees agent name, fingerprint, etc.
+  const cfg3 = loadServerConfig(path.join(opts.configDir, "server.toml"));
+  printLaunchSummary({
+    configDir: opts.configDir,
+    cwd: opts.cwd,
+    agentName,
+    serverConfig: cfg3,
+  });
+
+  // 7. exec claude (or print fallback if not on PATH)
   const onPath = (opts.claudeOnPath ?? defaultClaudeOnPath)();
   if (onPath) {
     const exec = opts.claudeExecutor ?? defaultClaudeExecutor;
     exec(
       "claude",
-      ["--dangerously-load-development-channels", "server:a2a"],
+      ["--dangerously-load-development-channels", "server:claw-connect"],
       { cwd: opts.cwd, stdio: "inherit" },
     );
   } else {
     process.stdout.write(
-      `\nclaude is not on your PATH. Run this in a fresh terminal:\n  cd ${opts.cwd} && claude --dangerously-load-development-channels server:a2a\n`,
+      `\nclaude is not on your PATH. Run this in a fresh terminal:\n  cd ${opts.cwd} && claude --dangerously-load-development-channels server:claw-connect\n`,
     );
   }
+}
+
+function printLaunchSummary(args: {
+  configDir: string;
+  cwd: string;
+  agentName: string;
+  serverConfig: ServerConfig;
+}): void {
+  const { configDir, cwd, agentName, serverConfig } = args;
+
+  let fingerprint = "(unavailable)";
+  try {
+    fingerprint = readPeerFingerprint(configDir);
+  } catch {
+    // identity not initialized yet — shouldn't happen after runInit, but don't crash
+  }
+
+  const agent = serverConfig.agents[agentName];
+  const endpoint = agent?.localEndpoint ?? "(unknown)";
+
+  let friendCount = 0;
+  let remoteCount = 0;
+  try {
+    friendCount = Object.keys(
+      loadFriendsConfig(path.join(configDir, "friends.toml")).friends,
+    ).length;
+  } catch {
+    // ignore
+  }
+  try {
+    remoteCount = Object.keys(
+      loadRemotesConfig(path.join(configDir, "remotes.toml")).remotes,
+    ).length;
+  } catch {
+    // ignore
+  }
+
+  const lines = [
+    ``,
+    `claw-connect · launching Claude Code`,
+    `  Agent:        ${agentName}`,
+    `  Endpoint:     ${endpoint}`,
+    `  Peer port:    ${serverConfig.server.port} (public mTLS) · ${serverConfig.server.localPort} (local proxy)`,
+    `  Fingerprint:  ${fingerprint}`,
+    `  Home:         ${configDir}`,
+    `  Working dir:  ${cwd}`,
+    `  Friends:      ${friendCount}   Remotes: ${remoteCount}`,
+    ``,
+  ];
+  process.stdout.write(lines.join("\n") + "\n");
 }
 
 async function defaultDebugServeRunner(configDir: string): Promise<void> {

@@ -49,9 +49,13 @@ afterEach(async () => {
 describe("integration", () => {
   it("routes an A2A POST → channel notification → reply tool → A2A response", async () => {
     const port = await pickPort();
+    const localPort = await pickPort();
     fs.writeFileSync(
       path.join(tmp, "server.toml"),
-      `[agents.bob]
+      `[server]
+localPort = ${localPort}
+
+[agents.bob]
 localEndpoint = "http://127.0.0.1:${port}"
 `,
     );
@@ -104,7 +108,7 @@ localEndpoint = "http://127.0.0.1:${port}"
 
     // Claude calls the reply tool.
     const toolResult = await client.callTool({
-      name: "a2a_reply",
+      name: "claw_connect_reply",
       arguments: { task_id: taskId, text: "Yes, by construction." },
     });
     expect((toolResult.content as any)[0].text).toContain("sent");

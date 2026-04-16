@@ -4,7 +4,7 @@ Make two Claude Code sessions talk to each other.
 
 This package is the glue that lets Claude Code send and receive agent-to-agent ([A2A](https://a2a-protocol.org)) messages. It works alongside [`claw-connect`](../claw-connect), which is the local server that routes those messages.
 
-Messages arriving for your agent show up in Claude Code as a `<channel source="a2a" task_id="...">` block. Claude replies by calling the `a2a_reply` tool, and the reply travels back to the sender.
+Messages arriving for your agent show up in Claude Code as a `<channel source="claw-connect" task_id="...">` block. Claude replies by calling the `claw_connect_reply` tool, and the reply travels back to the sender. Claude can also initiate new conversations: `claw_connect_list_peers` to see who it can reach, `claw_connect_send` to open a thread — the peer's reply arrives as another channel event. `claw_connect_whoami` reports the session's own handle.
 
 ---
 
@@ -125,7 +125,7 @@ In one session, ask Claude to POST an A2A message to the other agent. The port (
 > }
 > ```
 
-In the other terminal you'll see a `<channel source="a2a" task_id="…">` block appear. Claude can reply by calling the `a2a_reply` tool with that task_id, and the reply routes back as the HTTP response to the first session.
+In the other terminal you'll see a `<channel source="claw-connect" task_id="…">` block appear. Claude can reply by calling the `claw_connect_reply` tool with that task_id, and the reply routes back as the HTTP response to the first session.
 
 That's the round-trip. Everything else is variations on this.
 
@@ -139,12 +139,20 @@ That's the round-trip. Everything else is variations on this.
 
 **`.mcp.json can't be parsed`.** You have an existing `.mcp.json` in the cwd with broken JSON. Fix the syntax or delete the file and rerun.
 
-**Claude Code starts but doesn't see A2A messages.**
-1. Run `claw-connect status` — if it says "Daemon: not running", rerun `claude-code:start` to bring it back.
+**Claude Code starts but doesn't see claw-connect messages.**
+1. Run `claw-connect status`. If it says "Daemon: not running", follow the recovery hint it prints — either rerun `claude-code:start` in a project dir, or run `claw-connect serve &` in any terminal.
 2. Confirm `.mcp.json` is in the directory you launched `claude` from. Run `pwd` and check.
-3. Confirm Claude was launched with `--dangerously-load-development-channels server:a2a`. Without that flag, the MCP channel isn't wired up.
+3. Confirm Claude was launched with `--dangerously-load-development-channels server:claw-connect`. Without that flag, the MCP channel isn't wired up.
 
-**Second session doesn't receive messages from the first.** Both sessions must be running (check `claw-connect status` shows one daemon). Both project directories must have their own `.mcp.json` pointing at different agents. The URL to POST to is `http://127.0.0.1:9901/<their-agent-name>/message:send` — `9901` is fixed (it's the daemon's local port), the agent name is the other session's name.
+**Second session doesn't receive messages from the first.** Both sessions must be running (check `claw-connect status` shows the daemon is up). Both project directories must have their own `.mcp.json` pointing at different agents. The URL to POST to is `http://127.0.0.1:9901/<their-agent-name>/message:send` — `9901` is fixed (it's the daemon's local port), the agent name is the other session's name.
+
+**`claw_connect_send` reports "[claw-connect] send to X failed".** The channel event includes a `How to recover:` line tailored to the failure:
+- *"the claw-connect daemon isn't running"* — the daemon died or was stopped. Start it with `claw-connect claude-code:start` (or `claw-connect serve &`) and retry the send.
+- *"no agent named 'X' is registered"* — either you typo'd the handle or the other session has exited. Run `claw_connect_list_peers` (from inside Claude) to see who's reachable.
+- *"'X' is registered but didn't respond"* — X's adapter is unreachable (Claude session likely closed). Check the other terminal; rerun `claude-code:start` there.
+- Anything else — `claw-connect status` and `~/.config/claw-connect/logs/serve-<date>.log` are the next stops.
+
+**I killed the daemon (`claw-connect stop`) and my Claude sessions can't send messages.** Expected — the adapters inside each Claude session can't respawn the daemon themselves. Run `claw-connect serve &` (or `claw-connect claude-code:start` in any project dir) to bring it back. The live sessions resume working on the next send; no restart needed.
 
 **"Agent 'X' is already registered."** Happens if you pass a name that was registered previously in a different cwd, or you manually registered it. Either pick a different name, or reuse the existing home's `.mcp.json` to reattach. `claw-connect whoami` lists all registered agents.
 
@@ -199,7 +207,7 @@ claw-connect register bob   --local-endpoint http://127.0.0.1:18801
 
 # In each project's .mcp.json, point Claude at the adapter:
 cat > ~/proj-a/.mcp.json <<'JSON'
-{ "mcpServers": { "a2a": { "command": "a2a-claude-code-adapter", "args": ["--agent", "alice"] } } }
+{ "mcpServers": { "claw-connect": { "command": "a2a-claude-code-adapter", "args": ["--agent", "alice"] } } }
 JSON
 
 # Start the server (pick one):
@@ -207,7 +215,7 @@ claw-connect serve                              # foreground, see output, Ctrl+C
 claw-connect claude-code:start --debug          # same, but also auto-generates .mcp.json
 
 # Launch each Claude Code session from its project dir:
-cd ~/proj-a && claude --dangerously-load-development-channels server:a2a
+cd ~/proj-a && claude --dangerously-load-development-channels server:claw-connect
 ```
 
 Every low-level command (`init`, `register`, `serve`, `friend`, `remote`, `whoami`, `status`, `stop`, `ping`) remains available. See the [`claw-connect` README](../claw-connect/README.md) for their reference.

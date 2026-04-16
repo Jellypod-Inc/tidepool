@@ -15,10 +15,11 @@ describe("ensureMcpJsonEntry", () => {
     expect(result).toEqual({ action: "created", previousAgent: null });
 
     const content = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
-    expect(content.mcpServers.a2a).toEqual({
+    expect(content.mcpServers["claw-connect"]).toEqual({
       command: "a2a-claude-code-adapter",
       args: ["--agent", "donkey"],
     });
+    expect(content.mcpServers.a2a).toBeUndefined();
   });
 
   it("preserves other mcpServers when merging", async () => {
@@ -34,35 +35,64 @@ describe("ensureMcpJsonEntry", () => {
     await ensureMcpJsonEntry({ cwd, agentName: "donkey" });
     const content = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
     expect(content.mcpServers.other).toEqual({ command: "foo", args: ["bar"] });
-    expect(content.mcpServers.a2a).toEqual({
+    expect(content.mcpServers["claw-connect"]).toEqual({
       command: "a2a-claude-code-adapter",
       args: ["--agent", "donkey"],
     });
   });
 
-  it("overwrites args when existing a2a points at a different agent", async () => {
+  it("overwrites args when existing claw-connect entry points at a different agent", async () => {
     const cwd = tmp();
     fs.writeFileSync(
       path.join(cwd, ".mcp.json"),
       JSON.stringify({
         mcpServers: {
-          a2a: { command: "a2a-claude-code-adapter", args: ["--agent", "zebra"] },
+          "claw-connect": {
+            command: "a2a-claude-code-adapter",
+            args: ["--agent", "zebra"],
+          },
         },
       }),
     );
     const result = await ensureMcpJsonEntry({ cwd, agentName: "donkey" });
     expect(result).toEqual({ action: "updated", previousAgent: "zebra" });
     const content = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
-    expect(content.mcpServers.a2a.args).toEqual(["--agent", "donkey"]);
+    expect(content.mcpServers["claw-connect"].args).toEqual(["--agent", "donkey"]);
   });
 
-  it("no-ops when args already match", async () => {
+  it("migrates a legacy `a2a` entry to `claw-connect`", async () => {
     const cwd = tmp();
     fs.writeFileSync(
       path.join(cwd, ".mcp.json"),
       JSON.stringify({
         mcpServers: {
-          a2a: { command: "a2a-claude-code-adapter", args: ["--agent", "donkey"] },
+          a2a: {
+            command: "a2a-claude-code-adapter",
+            args: ["--agent", "donkey"],
+          },
+        },
+      }),
+    );
+    const result = await ensureMcpJsonEntry({ cwd, agentName: "donkey" });
+    expect(result).toEqual({ action: "updated", previousAgent: "donkey" });
+    const content = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
+    expect(content.mcpServers.a2a).toBeUndefined();
+    expect(content.mcpServers["claw-connect"]).toEqual({
+      command: "a2a-claude-code-adapter",
+      args: ["--agent", "donkey"],
+    });
+  });
+
+  it("no-ops when args already match under the claw-connect key", async () => {
+    const cwd = tmp();
+    fs.writeFileSync(
+      path.join(cwd, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          "claw-connect": {
+            command: "a2a-claude-code-adapter",
+            args: ["--agent", "donkey"],
+          },
         },
       }),
     );
