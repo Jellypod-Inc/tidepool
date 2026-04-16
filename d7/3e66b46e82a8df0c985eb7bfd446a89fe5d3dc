@@ -1,0 +1,36 @@
+packages/a2a-claude-code-adapter/src/start.ts
+  965882ae8865935c 11,17-19,29-32,36,38,42-44,48-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "d73e66b46e82a8df0c985eb7bfd446a89fe5d3dc",
+  "prompts": {
+    "401cb399ba358dc9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7dba8ae9-55f2-40e9-b138-2be1cfb5a40b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 153,
+      "overriden_lines": 0
+    },
+    "965882ae8865935c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a84d12bd-8737-4e61-be5e-9322d853f80a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 21,
+      "total_deletions": 26,
+      "accepted_lines": 174,
+      "overriden_lines": 0
+    }
+  }
+}
