@@ -196,7 +196,10 @@ describe("outbound mTLS fingerprint pinning", () => {
       `http://127.0.0.1:${ALICE_LOCAL}/bobs-rust/message:send`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent": "alice-dev",
+        },
         body: JSON.stringify({
           message: {
             messageId: "mtls-pin-1",

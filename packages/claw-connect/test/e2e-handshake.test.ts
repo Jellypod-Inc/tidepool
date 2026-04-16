@@ -6,9 +6,10 @@ import http from "http";
 import express from "express";
 import TOML from "@iarna/toml";
 import { Agent as UndiciAgent } from "undici";
-import { generateIdentity } from "../src/identity.js";
+import { generateIdentity, getFingerprint } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 import { loadFriendsConfig } from "../src/config.js";
+import type { RemoteAgent } from "../src/types.js";
 
 describe("e2e: connection handshake", () => {
   let tmpDir: string;
@@ -105,9 +106,21 @@ describe("e2e: connection handshake", () => {
     });
     bobMockAgent = bobApp.listen(48801, "127.0.0.1");
 
+    // Register alice as a remote agent so Bob can translate her X-Sender-Agent
+    // back to a local handle when she posts after handshake. The handshake
+    // establishes the friend entry; remoteAgents lists the (peer, agent) →
+    // local handle mapping used for identity translation.
+    const aliceFingerprint = getFingerprint(aliceCert.toString("utf8"));
+    const aliceRemote: RemoteAgent = {
+      localHandle: "alice-dev",
+      remoteEndpoint: "https://alice.example.com:9900",
+      remoteTenant: "alice-dev",
+      certFingerprint: aliceFingerprint,
+    };
+
     bobServer = await startServer({
       configDir: bobConfigDir,
-      remoteAgents: [],
+      remoteAgents: [aliceRemote],
     });
 
     await new Promise((r) => setTimeout(r, 200));
@@ -216,7 +229,10 @@ describe("e2e: connection handshake", () => {
       "https://127.0.0.1:39900/rust-expert/message:send",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Sender-Agent": "alice-dev",
+        },
         body: JSON.stringify({
           message: {
             messageId: "test-post-friend",

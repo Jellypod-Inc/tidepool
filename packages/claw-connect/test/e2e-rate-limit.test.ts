@@ -8,6 +8,7 @@ import express from "express";
 import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
+import type { RemoteAgent } from "../src/types.js";
 
 function createMockAgent(port: number, name: string): http.Server {
   const app = express();
@@ -47,6 +48,7 @@ async function mTLSFetch(
   body: unknown,
   certPath: string,
   keyPath: string,
+  senderAgent: string = "peer-agent",
 ): Promise<{ status: number; headers: Record<string, string>; body: any }> {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
@@ -61,6 +63,7 @@ async function mTLSFetch(
         headers: {
           "Content-Type": "application/json",
           "Content-Length": Buffer.byteLength(postData),
+          "X-Sender-Agent": senderAgent,
         },
         cert: fs.readFileSync(certPath),
         key: fs.readFileSync(keyPath),
@@ -163,7 +166,19 @@ describe("e2e: rate limiting and timeout", () => {
     mockAgent = createMockAgent(58800, "fast-agent");
     slowAgent = createSlowAgent(58801);
 
-    server = await startServer({ configDir: serverConfigDir });
+    // Register peer-agent as a remote so inbound mTLS requests can be
+    // translated back to a local handle by fingerprint + X-Sender-Agent.
+    const peerRemote: RemoteAgent = {
+      localHandle: "peer-agent",
+      remoteEndpoint: "https://peer.example.com:9900",
+      remoteTenant: "peer-agent",
+      certFingerprint: peerIdentity.fingerprint,
+    };
+
+    server = await startServer({
+      configDir: serverConfigDir,
+      remoteAgents: [peerRemote],
+    });
   });
 
   afterAll(() => {

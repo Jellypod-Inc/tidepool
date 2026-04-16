@@ -170,7 +170,10 @@ describe("e2e: SSE streaming through local interface", () => {
       "http://127.0.0.1:59901/streaming-agent/message:stream",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent": "streaming-agent",
+        },
         body: JSON.stringify({
           message: {
             messageId: "stream-test-1",
@@ -269,7 +272,10 @@ describe("e2e: SSE stream timeout", () => {
       "http://127.0.0.1:59911/slow-agent/message:stream",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent": "slow-agent",
+        },
         body: JSON.stringify({
           message: {
             messageId: "timeout-test-1",
@@ -384,7 +390,10 @@ describe("upstream SSE validation: enforce mode", () => {
       "http://127.0.0.1:58951/strict-stream-agent/message:stream",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent": "strict-stream-agent",
+        },
         body: JSON.stringify({
           message: {
             messageId: "enforce-stream-1",
@@ -494,7 +503,10 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
       "http://127.0.0.1:58961/bad-json-agent/message:stream",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent": "bad-json-agent",
+        },
         body: JSON.stringify({
           message: {
             messageId: "enforce-bad-json-1",

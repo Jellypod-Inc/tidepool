@@ -164,7 +164,10 @@ describe("e2e: two Claw Connect servers", () => {
       "http://127.0.0.1:19901/bobs-rust/message:send",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent": "alice-dev",
+        },
         body: JSON.stringify({
           message: {
             messageId: "test-1",
@@ -189,7 +192,10 @@ describe("e2e: two Claw Connect servers", () => {
       "http://127.0.0.1:29901/alices-dev/message:send",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Agent": "rust-expert",
+        },
         body: JSON.stringify({
           message: {
             messageId: "test-2",

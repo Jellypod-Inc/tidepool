@@ -11,6 +11,7 @@ import { startServer } from "../src/server.js";
 import { loadFriendsConfig } from "../src/config.js";
 import { createDirectoryApp } from "../src/directory-server.js";
 import { DirectoryProvider } from "../src/discovery/directory-provider.js";
+import type { RemoteAgent } from "../src/types.js";
 
 /**
  * End-to-end: discovery → connect.
@@ -143,9 +144,18 @@ describe("e2e: discovery → connect → A2A", () => {
     });
     bobMockAgent = bobApp.listen(BOB_MOCK, "127.0.0.1");
 
+    // Register alice as a remote so Bob's inbound mTLS handler can translate
+    // alice's X-Sender-Agent back to a local handle after handshake.
+    const aliceRemote: RemoteAgent = {
+      localHandle: "alice-dev",
+      remoteEndpoint: "https://alice.example.com:9900",
+      remoteTenant: "alice-dev",
+      certFingerprint: aliceFingerprint,
+    };
+
     bobServer = await startServer({
       configDir: bobConfigDir,
-      remoteAgents: [],
+      remoteAgents: [aliceRemote],
     });
 
     // Bob advertises himself to the directory on boot. In production this
@@ -247,7 +257,10 @@ describe("e2e: discovery → connect → A2A", () => {
       `https://127.0.0.1:${BOB_PUBLIC}/rust-expert/message:send`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Sender-Agent": "alice-dev",
+        },
         body: JSON.stringify({
           message: {
             messageId: "discovery-post-friend",
