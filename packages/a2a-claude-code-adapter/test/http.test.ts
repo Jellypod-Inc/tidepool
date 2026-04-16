@@ -88,4 +88,62 @@ describe("startHttp inbound endpoint", () => {
     expect(res.status).toBe(413);
     expect(received).toHaveLength(0);
   });
+
+  it("extracts participants array from message.metadata.participants", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "M1",
+          contextId: "C1",
+          parts: [{ kind: "text", text: "hi all" }],
+          metadata: {
+            from: "alice",
+            participants: ["alice", "bob", "carol"],
+          },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].peer).toBe("alice");
+    expect(received[0].participants).toEqual(["alice", "bob", "carol"]);
+  });
+
+  it("defaults participants to [peer] when metadata.participants is absent", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "M1",
+          contextId: "C1",
+          parts: [{ kind: "text", text: "hi" }],
+          metadata: { from: "bob" },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].participants).toEqual(["bob"]);
+  });
+
+  it("ignores malformed participants (non-array or non-string entries)", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "M1",
+          contextId: "C1",
+          parts: [{ kind: "text", text: "hi" }],
+          metadata: { from: "bob", participants: "not-an-array" },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].participants).toEqual(["bob"]);
+  });
 });

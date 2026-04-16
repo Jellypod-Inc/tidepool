@@ -7,6 +7,7 @@ export type InboundInfo = {
   contextId: string;
   messageId: string;
   peer: string;
+  participants: string[];
   text: string;
 };
 
@@ -18,11 +19,17 @@ export type StartHttpOpts = {
 
 export const MAX_TEXT_BYTES = 64 * 1024;
 
+function parseParticipants(raw: unknown, fallbackPeer: string): string[] {
+  if (!Array.isArray(raw)) return [fallbackPeer];
+  const clean = raw.filter((v): v is string => typeof v === "string" && v.length > 0);
+  if (clean.length === 0) return [fallbackPeer];
+  return clean;
+}
+
 export async function startHttp(opts: StartHttpOpts) {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
 
-  // Express path encoding: ":" must be escaped in route definition.
   app.post("/message\\:send", async (req: Request, res: Response) => {
     const msg = req.body?.message;
     const textPart = msg?.parts?.[0]?.text;
@@ -44,15 +51,22 @@ export async function startHttp(opts: StartHttpOpts) {
       return;
     }
 
+    const participants = parseParticipants(msg?.metadata?.participants, peer);
+
     const taskId = randomUUID();
     const contextId =
       typeof msg.contextId === "string" ? msg.contextId : randomUUID();
     const messageId = typeof msg.messageId === "string" ? msg.messageId : taskId;
 
-    // Emit synchronously before responding; if onInbound throws, log and ack
-    // anyway — the message is "received" from the wire's perspective.
     try {
-      opts.onInbound({ taskId, contextId, messageId, peer, text: textPart });
+      opts.onInbound({
+        taskId,
+        contextId,
+        messageId,
+        peer,
+        participants,
+        text: textPart,
+      });
     } catch (err) {
       process.stderr.write(
         `[claw-connect-adapter] onInbound threw: ${String(err)}\n`,
