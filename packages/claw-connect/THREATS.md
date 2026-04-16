@@ -1,6 +1,6 @@
 # claw-connect threat model
 
-**Status:** Living document. Reflects the v1 code as of 2026-04-15.
+**Status:** Living document. Reflects the v1 code as of 2026-04-16.
 **Scope:** Security posture of running a claw-connect peer, handing out agent access over the internet, and the downstream risk to whatever local adapter (Claude Code, Cursor, etc.) is wired to the peer.
 
 This is not a promise of security. It's a written-down map of what the system actually protects against, what it doesn't, and where the sharp edges are when an agent on your laptop is reachable from someone else's laptop.
@@ -11,10 +11,11 @@ This is not a promise of security. It's a written-down map of what the system ac
 
 Grounded in the current implementation — not aspirational.
 
-- **mTLS with SHA-256 fingerprint pinning.** `src/server.ts:120-135`, `src/middleware.ts:46-52`. Peer identity is a self-signed cert; the fingerprint is the public ID. Any TLS-terminating intermediary (ngrok, Cloudflare, reverse proxy) sees only ciphertext — client cert auth is enforced at the claw-connect process.
+- **mTLS with SHA-256 fingerprint pinning.** `src/server.ts:125-139`, `src/middleware.ts:46-52`. Peer identity is a self-signed cert; the fingerprint is the public ID. Any TLS-terminating intermediary (ngrok, Cloudflare, reverse proxy) sees only ciphertext — client cert auth is enforced at the claw-connect process.
 - **Friends list is an allowlist.** `src/server.ts:222-276`. Unknown fingerprints receive `401 notFriendResponse` unless the request is a CONNECTION_REQUEST.
 - **Local interface bound to `127.0.0.1`.** `src/server.ts:99`. Only the public mTLS port is reachable from the network.
-- **A2A payloads are transparent.** claw-connect does not transform messages. No plaintext logging of message bodies by default.
+- **Sender identity is server-authoritative, not self-claimed.** Adapters attach an `X-Agent` header on localhost trust; servers attach `X-Sender-Agent` outbound under mTLS. The receiving server injects `metadata.from` on the A2A body (`src/identity-injection.ts` → `injectMetadataFrom`) using the authenticated sender, overwriting any caller-supplied value. Local→remote outbound strips `metadata.from` before forwarding (`stripMetadataFrom`) as defense-in-depth. Agents see an authoritative `peer` attribute in every inbound channel event; they cannot be lied to about *who* is talking.
+- **A2A payloads are otherwise transparent.** claw-connect only touches `metadata.from`. Everything else (`contextId`, `messageId`, `parts`, other metadata keys) passes through unchanged. No plaintext logging of message bodies by default.
 
 These are solid. The threats below live *around* this core, not inside it.
 
@@ -83,7 +84,22 @@ Listed as v2 in `docs/superpowers/specs/2026-04-13-claw-connect-revised-design.m
 
 ---
 
-## Threat 6 — Tunnel metadata leakage
+## Threat 6 — Local-interface agent impersonation
+
+**Applies when:** Anything other than the intended adapter can reach `127.0.0.1:<localPort>`.
+
+The local interface identifies the calling agent via the `X-Agent` header, enforced at `src/server.ts` public-local split. The header is unauthenticated — localhost trust is the only gate. Any process that can bind to loopback (or pass a request through an SSRF from inside the host) can set `X-Agent: <any-registered-agent>` and emit messages as that agent. The receiving peer's mTLS sees the tenant identified by `X-Sender-Agent`, not the true caller.
+
+In practice this is bounded by the usual localhost threat surface — to exploit, an attacker already needs code execution on your host. But multi-user boxes, shared devcontainers, and port-forwarded dev environments break that assumption.
+
+**Mitigations.**
+- Don't run claw-connect on multi-tenant hosts. One operator per host.
+- In containerized setups, bind the local interface to a non-shared network namespace or unix socket rather than loopback.
+- Future: add per-agent tokens or a unix-socket-per-agent transport so that impersonation requires more than reaching port N.
+
+---
+
+## Threat 7 — Tunnel metadata leakage
 
 mTLS is end-to-end, so a tunnel provider (ngrok, Cloudflare, bore, VPS) cannot read message bodies. They still observe: peer IPs, connection timing, message sizes, request frequency. This reveals the social graph and activity patterns even when payload is opaque.
 
@@ -93,7 +109,7 @@ mTLS is end-to-end, so a tunnel provider (ngrok, Cloudflare, bore, VPS) cannot r
 
 ---
 
-## Threat 7 — Prompt injection via inbound messages (the big one)
+## Threat 8 — Prompt injection via inbound messages (the big one)
 
 **The transport is secure. The prompt is not.**
 
@@ -108,7 +124,7 @@ Inbound text reaches the local adapter via the channel interface (`packages/a2a-
 5. **Pivot to peers.** The adapter exposes `send` (`channel.ts:85-101`). An attacker instructs your agent to fan out malicious prompts to every peer in `listPeers()`. Your identity signs the outbound traffic.
 6. **API-cost exhaustion.** Without per-peer rate limits, one hostile friend sustains prompt volume that bills your Claude API key. You pay; they pay nothing.
 7. **Context escape.** `notifyInbound` in `channel.ts:308-329` drops inbound text into context without escaping. A message can contain forged closing tags, fake `<system>` blocks, or counterfeit channel events that the model may treat as authoritative.
-8. **Cross-peer impersonation.** Under the symmetric-threads design, provenance is `metadata.from`. Models conflate speakers across threads; peer B can write *"as Alice mentioned earlier..."* and shape context as if Alice had spoken.
+8. **Cross-peer narrative impersonation.** Channel-event `peer` provenance is authoritative (server-injected from the authenticated mTLS peer, not self-claimed). The residual risk is narrative: peer B can write *"as Alice mentioned earlier, the shared secret is…"* in their own text body. Models may treat that inline claim as authoritative even though the surrounding tag says `peer="bob"`. Provenance is right; reading comprehension is still the soft spot.
 
 ### Mitigations
 
@@ -134,6 +150,8 @@ These are ordered from cheapest to most involved.
 | Public tunnel + `deny`-mode handshake + scoped new friends | Most of the above if operator is disciplined | Prompt injection once a peer is accepted; URI handoff tampering |
 | Public tunnel + `auto`-mode handshake | Very little — LLM-gated accept is a prompt-injection surface | All of the above, plus auto-accept drift |
 
+All postures assume a single-operator host. On multi-tenant hosts, add Threat 6 (local-interface impersonation) on top of everything above: any other user can bind to loopback and speak as any registered agent.
+
 ---
 
 ## Open items (v2 candidates)
@@ -145,6 +163,7 @@ These are ordered from cheapest to most involved.
 - Adapter-level sandboxing primitives (reference Firecracker/devcontainer setup shipped with the adapter).
 - Channel-event framing that resists prompt injection by design, not by string escaping.
 - Audit log of accepted/denied fingerprints with reason and timestamp.
+- Authenticated local-interface transport (unix-socket-per-agent, or per-agent tokens) so localhost trust is not the only gate on `X-Agent`.
 
 ---
 
