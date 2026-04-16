@@ -1,144 +1,91 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PendingRegistry } from "../src/pending.js";
-import { startHttp } from "../src/http.js";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { startHttp, type InboundInfo } from "../src/http.js";
 
-let server: Awaited<ReturnType<typeof startHttp>> | null = null;
-let registry: PendingRegistry;
+describe("startHttp inbound endpoint", () => {
+  let server: Awaited<ReturnType<typeof startHttp>>;
+  let received: InboundInfo[] = [];
 
-async function pickPort(): Promise<number> {
-  const net = await import("node:net");
-  return new Promise<number>((resolve, reject) => {
-    const s = net.createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const addr = s.address();
-      if (typeof addr === "object" && addr) {
-        const p = addr.port;
-        s.close(() => resolve(p));
-      } else {
-        s.close(() => reject(new Error("no port")));
-      }
+  beforeEach(async () => {
+    received = [];
+    server = await startHttp({
+      port: 0,
+      host: "127.0.0.1",
+      onInbound: (info) => received.push(info),
     });
   });
-}
 
-beforeEach(() => {
-  registry = new PendingRegistry();
-});
-
-afterEach(async () => {
-  if (server) {
+  afterEach(async () => {
     await server.close();
-    server = null;
-  }
-});
+  });
 
-describe("startHttp", () => {
-  it("notifies onInbound and returns the A2A response after resolve", async () => {
-    const port = await pickPort();
-    const inbound: Array<{ taskId: string; text: string }> = [];
-    server = await startHttp({
-      port,
-      host: "127.0.0.1",
-      registry,
-      replyTimeoutMs: 1_000,
-      onInbound: (info) => {
-        inbound.push({ taskId: info.taskId, text: info.text });
-        setImmediate(() => registry.resolve(info.taskId, "pong"));
-      },
-    });
-
-    const res = await fetch(`http://127.0.0.1:${port}/message:send`, {
+  it("emits InboundInfo with peer/contextId/messageId/text on POST /message:send", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: {
-          messageId: "m1",
-          role: "user",
-          parts: [{ kind: "text", text: "ping" }],
+          messageId: "M1",
+          contextId: "C1",
+          metadata: { from: "alice" },
+          parts: [{ kind: "text", text: "hello" }],
         },
       }),
     });
-    const body = (await res.json()) as any;
-
-    expect(inbound).toHaveLength(1);
-    expect(inbound[0].text).toBe("ping");
+    expect(res.status).toBe(200);
+    const body = await res.json();
     expect(body.status.state).toBe("completed");
-    expect(body.artifacts[0].parts[0].text).toBe("pong");
-    expect(body.id).toBe(inbound[0].taskId);
+    expect(body.contextId).toBe("C1");
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({
+      contextId: "C1",
+      messageId: "M1",
+      peer: "alice",
+      text: "hello",
+    });
+    expect(received[0].taskId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it("responds 504 when the pending task times out", async () => {
-    const port = await pickPort();
-    server = await startHttp({
-      port,
-      host: "127.0.0.1",
-      registry,
-      replyTimeoutMs: 10,
-      onInbound: () => {
-        // never resolve
-      },
-    });
-
-    const res = await fetch(`http://127.0.0.1:${port}/message:send`, {
+  it("returns 400 when message.parts[0].text is missing", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: {
-          messageId: "m1",
-          role: "user",
-          parts: [{ kind: "text", text: "ping" }],
-        },
-      }),
+      body: JSON.stringify({ message: { messageId: "M1", contextId: "C1" } }),
     });
-
-    expect(res.status).toBe(504);
-    const body = (await res.json()) as any;
-    expect(body.status.state).toBe("failed");
-  });
-
-  it("returns 400 when the body is missing message.parts", async () => {
-    const port = await pickPort();
-    server = await startHttp({
-      port,
-      host: "127.0.0.1",
-      registry,
-      replyTimeoutMs: 1_000,
-      onInbound: () => {},
-    });
-
-    const res = await fetch(`http://127.0.0.1:${port}/message:send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: {} }),
-    });
-
     expect(res.status).toBe(400);
+    expect(received).toHaveLength(0);
   });
 
-  it("returns 413 when the text exceeds MAX_TEXT_BYTES", async () => {
-    const port = await pickPort();
-    server = await startHttp({
-      port,
-      host: "127.0.0.1",
-      registry,
-      replyTimeoutMs: 1_000,
-      onInbound: () => {},
-    });
-
-    // 64 KB + 1 byte
-    const huge = "a".repeat(64 * 1024 + 1);
-    const res = await fetch(`http://127.0.0.1:${port}/message:send`, {
+  it("returns 400 when metadata.from is missing (server-injected — its absence is a bug)", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: {
-          messageId: "m1",
-          role: "user",
-          parts: [{ kind: "text", text: huge }],
+          messageId: "M1",
+          contextId: "C1",
+          parts: [{ kind: "text", text: "hi" }],
         },
       }),
     });
+    expect(res.status).toBe(400);
+    expect(received).toHaveLength(0);
+  });
 
+  it("rejects oversized text with 413", async () => {
+    const big = "x".repeat(64 * 1024 + 1);
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "M1",
+          contextId: "C1",
+          metadata: { from: "alice" },
+          parts: [{ kind: "text", text: big }],
+        },
+      }),
+    });
     expect(res.status).toBe(413);
+    expect(received).toHaveLength(0);
   });
 });

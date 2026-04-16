@@ -1,37 +1,28 @@
 import express, { Request, Response } from "express";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
-import type { PendingRegistry } from "./pending.js";
 
 export type InboundInfo = {
   taskId: string;
-  // contextId is echoed back to the peer in the A2A response; the adapter itself
-  // does not use it. We preserve what the peer sent (or mint a UUID if absent).
   contextId: string;
-  // Peer-assigned message id, if any. Forwarded to the channel notification meta
-  // so Claude can correlate the reply with the peer's original log line.
-  messageId: string | null;
+  messageId: string;
+  peer: string;
   text: string;
 };
 
 export type StartHttpOpts = {
   port: number;
   host: string;
-  registry: PendingRegistry;
-  replyTimeoutMs: number;
   onInbound: (info: InboundInfo) => void;
 };
 
-// 64 KB of UTF-8 text. A2A messages are typed conversations, not file uploads,
-// and this sits well below Claude's context budget. Claw-connect already caps
-// request bodies via its own rate-limit + size checks; this is defense in depth
-// against an authenticated-but-hostile peer trying to flood context.
 export const MAX_TEXT_BYTES = 64 * 1024;
 
 export async function startHttp(opts: StartHttpOpts) {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
 
+  // Express path encoding: ":" must be escaped in route definition.
   app.post("/message\\:send", async (req: Request, res: Response) => {
     const msg = req.body?.message;
     const textPart = msg?.parts?.[0]?.text;
@@ -46,56 +37,33 @@ export async function startHttp(opts: StartHttpOpts) {
       return;
     }
 
-    const taskId = randomUUID();
-    const contextId =
-      typeof msg.contextId === "string" ? msg.contextId : randomUUID();
-    const messageId = typeof msg.messageId === "string" ? msg.messageId : null;
-
-    // randomUUID collisions are effectively impossible, but if register ever
-    // throws for any reason, fail the request with a 500 rather than crash.
-    let pending: Promise<string>;
-    try {
-      pending = opts.registry.register(taskId, opts.replyTimeoutMs);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: message });
+    const peer =
+      typeof msg?.metadata?.from === "string" ? msg.metadata.from : null;
+    if (!peer) {
+      res.status(400).json({ error: "message.metadata.from is required" });
       return;
     }
 
-    // If claw-connect (or any upstream) aborts the HTTP connection before we
-    // reply, reject the pending task so the registry doesn't leak entries and
-    // any still-in-flight reply tool call surfaces a clear error.
-    res.on("close", () => {
-      if (!res.writableEnded) {
-        opts.registry.reject(taskId, new Error("client aborted"));
-      }
-    });
+    const taskId = randomUUID();
+    const contextId =
+      typeof msg.contextId === "string" ? msg.contextId : randomUUID();
+    const messageId = typeof msg.messageId === "string" ? msg.messageId : taskId;
 
-    opts.onInbound({ taskId, contextId, messageId, text: textPart });
-
+    // Emit synchronously before responding; if onInbound throws, log and ack
+    // anyway — the message is "received" from the wire's perspective.
     try {
-      const replyText = await pending;
-      if (res.writableEnded) return;
-      res.json({
-        id: taskId,
-        contextId,
-        status: { state: "completed" },
-        artifacts: [
-          {
-            artifactId: "response",
-            parts: [{ kind: "text", text: replyText }],
-          },
-        ],
-      });
+      opts.onInbound({ taskId, contextId, messageId, peer, text: textPart });
     } catch (err) {
-      if (res.writableEnded) return;
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(504).json({
-        id: taskId,
-        contextId,
-        status: { state: "failed", message },
-      });
+      process.stderr.write(
+        `[claw-connect-adapter] onInbound threw: ${String(err)}\n`,
+      );
     }
+
+    res.json({
+      id: taskId,
+      contextId,
+      status: { state: "completed" },
+    });
   });
 
   const server: http.Server = await new Promise((resolve) => {
