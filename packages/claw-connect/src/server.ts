@@ -481,7 +481,9 @@ function createLocalApp(
 
     // Authenticate the sender agent. The local port has no transport-level
     // identity, so we require an X-Agent header naming a locally-registered
-    // agent. Task 3 will use senderAgent to inject metadata.from.
+    // agent. senderAgent is used below: injected into metadata.from for
+    // local-to-local (Task 3) and forwarded as X-Sender-Agent for
+    // local-to-remote (Task 4).
     const senderAgent = req.header("x-agent");
     if (!senderAgent) {
       res.status(403).json({ error: "X-Agent header required" });

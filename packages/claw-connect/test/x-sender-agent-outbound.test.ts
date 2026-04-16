@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "vitest";
 
 // Full mTLS wire-level assertion requires cert generation harness. The unit-
 // level resolution behavior is covered in identity-injection.test.ts (Task 1);

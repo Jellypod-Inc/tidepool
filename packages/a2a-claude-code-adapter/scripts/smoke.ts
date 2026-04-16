@@ -135,6 +135,11 @@ async function main() {
       }),
     });
     const body = (await res.json()) as any;
+    // TODO(task-17-followup): These assertions are stale. Under fire-and-forget,
+    // the HTTP ack doesn't carry the reply text — the reply arrives asynchronously
+    // as a channel notification (see Task 9 / Task 11). To restore end-to-end
+    // smoke coverage, the script needs to await the notification rather than
+    // assert on `body.artifacts[0].parts[0].text`.
     ok(`status: ${body.status.state}`);
     ok(`body:   ${body.artifacts[0].parts[0].text}`);
     if (body.status.state !== "completed") throw new Error("expected completed");

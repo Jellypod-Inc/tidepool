@@ -390,14 +390,13 @@ describe("local loopback — two agents on one claw-connect", () => {
     expect(aliceReceived.message.parts[0].text).toBe("hey alice");
   });
 
-  it("does not persist thread state across daemon restarts (ephemeral)", async () => {
-    // The claw-connect daemon itself carries no thread store — threads live in
-    // the adapter's in-memory ephemeral store. After restart, the daemon has
-    // no way to replay a previous conversation; the only "memory" is what the
-    // caller supplies in the message body (contextId) or what the adapter
-    // remembers. This test proves the daemon-level property: restarting the
-    // daemon loses no state because there is none to lose, and subsequent
-    // requests work purely from static config.
+  it("daemon holds no session state across restarts", async () => {
+    // The claw-connect daemon itself carries no thread/session state —
+    // threads live in the adapter's in-memory ephemeral store, which is
+    // covered separately (see adapter's thread-store.test.ts and
+    // integration.test.ts). This test proves the daemon-level property:
+    // restarting the daemon loses no state because there is none to lose,
+    // and subsequent requests work purely from static config.
     const dir = tmp("cc-ephemeral-");
     await runInit({ configDir: dir });
 
