@@ -92,3 +92,38 @@ export interface ConnectionRequest {
 export interface PendingRequests {
   requests: ConnectionRequest[];
 }
+
+/**
+ * Fragment of an agent card contributed by the adapter at registration.
+ * Daemon merges this with its own transport-layer fields to produce the
+ * public agent card.
+ */
+export interface AgentCardFragment {
+  description?: string;
+  skills?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    tags?: string[];
+  }>;
+  capabilities?: {
+    streaming?: boolean;
+    pushNotifications?: boolean;
+    extensions?: Array<{ uri: string; description?: string; required?: boolean }>;
+  };
+  defaultInputModes?: string[];
+  defaultOutputModes?: string[];
+  iconUrl?: string;
+  documentationUrl?: string;
+}
+
+/**
+ * Inputs the daemon owns when constructing a public agent card.
+ */
+export interface AgentCardTransport {
+  name: string;
+  publicUrl: string;
+  tenant: string;
+  version?: string;
+  provider?: { organization?: string; url?: string };
+}
