@@ -30,6 +30,21 @@ export async function startHttp(opts: StartHttpOpts) {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
 
+  // Stub out tasks/* endpoints with UnsupportedOperationError (A2A JSON-RPC shape).
+  const stub = (req: Request, res: Response) => {
+    res.status(405).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32006,
+        message: `Operation not supported: ${req.method} ${req.path}`,
+      },
+      id: req.body?.id ?? "",
+    });
+  };
+  app.get("/tasks", stub);
+  app.get("/tasks/:id", stub);
+  app.post("/tasks/:id\\:cancel", stub);
+
   // Express path encoding: ":" must be escaped in route definition.
   app.post("/message\\:send", async (req: Request, res: Response) => {
     const msg = req.body?.message;
