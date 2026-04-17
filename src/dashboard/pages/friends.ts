@@ -129,6 +129,7 @@ export function handleAddFriend(
     });
 
     writeFriendsConfig(path.join(configDir, "friends.toml"), updated);
+    holder.setFriends(updated);
     res.send(renderFriendsTable(updated));
   } catch (err) {
     res.status(400).send(String(err));
@@ -146,6 +147,7 @@ export function handleRemoveFriend(
   try {
     const updated = removeFriend(holder.friends(), handle);
     writeFriendsConfig(path.join(configDir, "friends.toml"), updated);
+    holder.setFriends(updated);
     res.send(renderFriendsTable(updated));
   } catch (err) {
     res.status(400).send(String(err));

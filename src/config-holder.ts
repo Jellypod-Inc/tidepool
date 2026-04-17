@@ -5,6 +5,7 @@ import type { ServerConfig, FriendsConfig } from "./types.js";
 export interface ConfigHolder {
   server: () => ServerConfig;
   friends: () => FriendsConfig;
+  setFriends: (cfg: FriendsConfig) => void;
   stop: () => void;
 }
 
@@ -51,6 +52,7 @@ export function createConfigHolder(configDir: string): ConfigHolder {
   return {
     server: () => serverCfg,
     friends: () => friendsCfg,
+    setFriends: (cfg: FriendsConfig) => { friendsCfg = cfg; },
     stop: () => {
       fs.unwatchFile(serverPath, onServerChange);
       fs.unwatchFile(friendsPath, onFriendsChange);
