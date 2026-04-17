@@ -11,6 +11,11 @@ export interface MountSessionOpts {
   friendsSnapshot: () => Array<{ handle: string; did: string | null }>;
 }
 
+export interface MountedSession {
+  /** Broadcast a fresh peers.snapshot to all connected adapters. */
+  notifyFriendsChanged(): void;
+}
+
 const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
   "Cache-Control": "no-cache, no-transform",
@@ -23,7 +28,23 @@ function writeEvent(res: Response, event: string, data: unknown): void {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-export function mountSessionEndpoint(app: Express, opts: MountSessionOpts): void {
+export function mountSessionEndpoint(
+  app: Express,
+  opts: MountSessionOpts,
+): MountedSession {
+  const subscribers = new Set<Response>();
+
+  const broadcastFriends = () => {
+    const snap = opts.friendsSnapshot();
+    for (const res of subscribers) {
+      try {
+        writeEvent(res, "peers.snapshot", snap);
+      } catch {
+        // socket is dying; cleanup handler will remove it
+      }
+    }
+  };
+
   app.post(
     "/.well-known/tidepool/agents/:name/session",
     (req: Request, res: Response) => {
@@ -78,25 +99,22 @@ export function mountSessionEndpoint(app: Express, opts: MountSessionOpts): void
       res.writeHead(200, SSE_HEADERS);
       res.flushHeaders?.();
 
-      writeEvent(res, "session.registered", {
-        sessionId: result.session.sessionId,
-      });
+      writeEvent(res, "session.registered", { sessionId: result.session.sessionId });
       writeEvent(res, "peers.snapshot", opts.friendsSnapshot());
 
-      // Keepalive
+      subscribers.add(res);
+
       const keepalive = setInterval(() => {
         try {
           res.write(`: ping\n\n`);
         } catch {
-          // cleanup handled by close event
+          // cleanup handled below
         }
       }, 15_000);
 
-      let cleaned = false;
       const cleanup = () => {
-        if (cleaned) return;
-        cleaned = true;
         clearInterval(keepalive);
+        subscribers.delete(res);
         opts.registry.deregister(result.session.sessionId);
       };
 
@@ -105,4 +123,6 @@ export function mountSessionEndpoint(app: Express, opts: MountSessionOpts): void
       res.on("close", cleanup);
     },
   );
+
+  return { notifyFriendsChanged: broadcastFriends };
 }
