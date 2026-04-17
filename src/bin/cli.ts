@@ -1,18 +1,16 @@
 #!/usr/bin/env node
+import readline from "node:readline";
+import path from "node:path";
 import { Command } from "commander";
 import { runInit } from "../cli/init.js";
 import { runRegister } from "../cli/register.js";
 import { runUnregister } from "../cli/unregister.js";
 import {
-  runFriendAdd,
-  runFriendList,
-  runFriendRemove,
-} from "../cli/friend.js";
-import {
-  runRemoteAdd,
-  runRemoteList,
-  runRemoteRemove,
-} from "../cli/remote.js";
+  runAgentAdd,
+  runAgentList,
+  runAgentRemove,
+  runAgentRefresh,
+} from "../cli/agent.js";
 import { runWhoami } from "../cli/whoami.js";
 import { runStatus } from "../cli/status.js";
 import { runPing } from "../cli/ping.js";
@@ -23,6 +21,7 @@ import { runStop } from "../cli/stop.js";
 import { runTail } from "../cli/tail.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
+import { loadServerConfig } from "../config.js";
 
 const program = new Command();
 
@@ -42,8 +41,8 @@ program.addHelpText(
     `  $ tidepool init\n` +
     `  $ tidepool register alice-dev\n` +
     `  $ tidepool whoami\n` +
-    `  $ tidepool friend add bob sha256:...\n` +
-    `  $ tidepool remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
+    `  $ tidepool agent add https://peer:29900 rust-expert --fingerprint sha256:...\n` +
+    `  $ tidepool agent ls\n` +
     `  $ tidepool start\n`,
 );
 
@@ -95,84 +94,64 @@ program
     ok(`Unregistered agent "${name}"`);
   });
 
-const friend = program.command("friend").description("Manage friends");
+const agent = program.command("agent").description("Manage remote agents");
 
-friend
-  .command("add <handle> <fingerprint>")
-  .description("Register a friend by handle and cert fingerprint")
-  .option(
-    "-s, --scope <agents...>",
-    "Restrict visibility to specific local agents",
-  )
-  .action(async (handle: string, fingerprint: string, cmdOpts) => {
+agent
+  .command("add <endpoint> <name>")
+  .description("Add a remote peer's agent")
+  .option("--fingerprint <sha256>", "Pin cert fingerprint (required until DIDs land)")
+  .option("--alias <handle>", "Local peer handle if auto-derivation collides")
+  .action(async (endpoint: string, name: string, cmdOpts: { fingerprint?: string; alias?: string }) => {
     const configDir = resolveConfigDir(program.opts());
-    await runFriendAdd({
+    await runAgentAdd({
       configDir,
-      handle,
-      fingerprint,
-      agents: cmdOpts.scope,
+      endpoint,
+      agent: name,
+      fingerprint: cmdOpts.fingerprint,
+      alias: cmdOpts.alias,
+      confirm: async ({ fingerprint, endpoint: ep, agent: ag }) => {
+        if (!process.stdin.isTTY) return true;
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await new Promise<string>((r) =>
+          rl.question(`Add agent ${ag} at ${ep} (fingerprint ${fingerprint})? [y/N] `, r),
+        );
+        rl.close();
+        return /^y/i.test(answer);
+      },
     });
-    ok(`Added friend ${handle}`);
+    ok(`added ${name}`);
   });
 
-friend
-  .command("list")
-  .description("List known friends")
+agent
+  .command("ls")
+  .description("List agents in local namespace")
   .action(async () => {
     const configDir = resolveConfigDir(program.opts());
-    const entries = await runFriendList({ configDir });
-    if (entries.length === 0) {
-      ok("(no friends)");
-      return;
-    }
-    for (const e of entries) {
-      const scope = e.agents ? ` [scoped: ${e.agents.join(", ")}]` : "";
-      ok(`${e.handle}  ${e.fingerprint}${scope}`);
-    }
+    const serverPath = path.join(configDir, "server.toml");
+    const serverCfg = loadServerConfig(serverPath);
+    const handles = await runAgentList({
+      configDir,
+      localAgents: Object.keys(serverCfg.agents),
+    });
+    for (const h of handles) process.stdout.write(h + "\n");
   });
 
-friend
-  .command("remove <handle>")
-  .description("Remove a friend")
+agent
+  .command("rm <handle>")
+  .description("Remove a remote agent (scoped: peer/agent)")
   .action(async (handle: string) => {
     const configDir = resolveConfigDir(program.opts());
-    await runFriendRemove({ configDir, handle });
-    ok(`Removed friend ${handle}`);
+    await runAgentRemove({ configDir, handle });
+    ok(`removed ${handle}`);
   });
 
-const remote = program.command("remote").description("Manage remote peers");
-
-remote
-  .command("add <localHandle> <remoteEndpoint> <remoteTenant> <certFingerprint>")
-  .description("Register a remote peer to proxy")
-  .action(async (localHandle, remoteEndpoint, remoteTenant, certFingerprint) => {
+agent
+  .command("refresh <peer>")
+  .description("Re-fetch a peer's agent card and merge advertised agents")
+  .action(async (peer: string) => {
     const configDir = resolveConfigDir(program.opts());
-    await runRemoteAdd({ configDir, localHandle, remoteEndpoint, remoteTenant, certFingerprint });
-    ok(`Added remote ${localHandle} → ${remoteEndpoint}/${remoteTenant}`);
-  });
-
-remote
-  .command("list")
-  .description("List registered remote peers")
-  .action(async () => {
-    const configDir = resolveConfigDir(program.opts());
-    const entries = await runRemoteList({ configDir });
-    if (entries.length === 0) {
-      ok("(no remotes)");
-      return;
-    }
-    for (const e of entries) {
-      ok(`${e.localHandle}  →  ${e.remoteEndpoint}/${e.remoteTenant}  [${e.certFingerprint.slice(0, 20)}…]`);
-    }
-  });
-
-remote
-  .command("remove <localHandle>")
-  .description("Remove a remote peer")
-  .action(async (localHandle: string) => {
-    const configDir = resolveConfigDir(program.opts());
-    await runRemoteRemove({ configDir, localHandle });
-    ok(`Removed remote ${localHandle}`);
+    const { added, observedRemoved } = await runAgentRefresh({ configDir, peer });
+    ok(`refreshed ${peer}: +[${added.join(", ")}] observed-removed=[${observedRemoved.join(", ")}]`);
   });
 
 program
