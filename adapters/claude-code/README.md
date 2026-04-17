@@ -1,8 +1,8 @@
-# a2a-claude-code-adapter
+# @jellypod/tidepool-claude-code
 
 Make two Claude Code sessions talk to each other.
 
-This package is the glue that lets Claude Code send and receive agent-to-agent ([A2A](https://a2a-protocol.org)) messages. It works alongside [`tidepool`](../tidepool), which is the local server that routes those messages.
+This package is the glue that lets Claude Code send and receive agent-to-agent ([A2A](https://a2a-protocol.org)) messages. It works alongside [`@jellypod/tidepool`](../../README.md), the local daemon that routes those messages.
 
 Messages arriving for your agent show up in Claude Code as a `<channel source="tidepool" peer="bob" context_id="..." task_id="..." message_id="...">` block. Claude replies by calling the `send` tool with `peers=[<peer>], thread=<context_id>`, and the reply travels back to the sender as a separate channel event on that same thread. Claude can also initiate new conversations: `list_peers` to see who it can reach, `send` to open a thread — `send` returns an ack immediately (`{context_id, results: [{peer, message_id} | {peer, error}]}`) and the peer's reply arrives later as another channel event with the same `context_id`. `whoami` reports the session's own handle, and `list_threads` / `thread_history` let Claude inspect ongoing conversations.
 
@@ -47,24 +47,22 @@ You'll need:
 If you're just using the published packages:
 
 ```bash
-npm i -g tidepool a2a-claude-code-adapter
+npm i -g @jellypod/tidepool @jellypod/tidepool-claude-code
 ```
 
 If you're developing from this monorepo:
 
 ```bash
-cd /path/to/tidepool      # the repo root
+cd /path/to/tidepool
 pnpm install
-pnpm -r build
-pnpm link --global --filter tidepool
-pnpm link --global --filter a2a-claude-code-adapter
+pnpm build
 ```
 
 Verify both commands are on your PATH:
 
 ```bash
 which tidepool
-which a2a-claude-code-adapter
+which tidepool-claude-code
 ```
 
 Both should print a path. If they don't, the install didn't land.
@@ -83,9 +81,9 @@ What this does, in order:
 
 1. Sets up a Tidepool "home" at `~/.config/tidepool` (first run only).
 2. Generates a friendly name for this agent (e.g. `donkey`) if you don't provide one.
-3. Picks a free local port and registers the agent.
+3. Registers the agent in `server.toml`.
 4. Writes or merges `.mcp.json` in the current directory so Claude Code loads the adapter.
-5. Starts `tidepool serve` in the background (PID at `~/.config/tidepool/serve.pid`, logs in `~/.config/tidepool/logs/`).
+5. Starts the daemon in the background (logs in `~/.config/tidepool/logs/`). Lifecycle is port-based — no pidfile.
 6. Launches Claude Code with the development-channels flag.
 
 Pass a name if you want a specific one:
@@ -105,8 +103,9 @@ Open a second terminal, `cd` into a different project, run the same command. You
 | Command | Purpose |
 |---|---|
 | `tidepool stop` | Stop the background daemon |
-| `tidepool status` | Show config summary + daemon state (PID, log path) |
-| `tidepool claude-code:start --debug` | Run the server in the foreground and print the `cd <dir> && claude …` command to paste into a second terminal. Use this when the daemon fails to start and you want to see its output live. |
+| `tidepool status` | Show config summary + peers + daemon state |
+| `tidepool agent ls` | List all agents reachable in this session's namespace |
+| `tidepool claude-code:start --debug` | Run the daemon in the foreground and print the `cd <dir> && claude …` command to paste into a second terminal. Use this when the daemon fails to start and you want to see its output live. |
 
 ---
 
@@ -179,19 +178,19 @@ Partial failure is first-class: if one recipient is unreachable, `results` carri
 **`.mcp.json can't be parsed`.** You have an existing `.mcp.json` in the cwd with broken JSON. Fix the syntax or delete the file and rerun.
 
 **Claude Code starts but doesn't see tidepool messages.**
-1. Run `tidepool status`. If it says "Daemon: not running", follow the recovery hint it prints — either rerun `claude-code:start` in a project dir, or run `tidepool serve &` in any terminal.
+1. Run `tidepool status`. If it says "Daemon: not running", follow the recovery hint it prints — either rerun `claude-code:start` in a project dir, or run `tidepool start &` in any terminal.
 2. Confirm `.mcp.json` is in the directory you launched `claude` from. Run `pwd` and check.
 3. Confirm Claude was launched with `--dangerously-load-development-channels server:tidepool`. Without that flag, the MCP channel isn't wired up.
 
 **Second session doesn't receive messages from the first.** Both sessions must be running (check `tidepool status` shows the daemon is up). Both project directories must have their own `.mcp.json` pointing at different agents. The URL to POST to is `http://127.0.0.1:9901/<their-agent-name>/message:send` — `9901` is fixed (it's the daemon's local port), the agent name is the other session's name.
 
 **`send` reports "[tidepool] send to X failed".** The channel event includes a `How to recover:` line tailored to the failure:
-- *"the tidepool daemon isn't running"* — the daemon died or was stopped. Start it with `tidepool claude-code:start` (or `tidepool serve &`) and retry the send.
+- *"the tidepool daemon isn't running"* — the daemon died or was stopped. Start it with `tidepool claude-code:start` (or `tidepool start &`) and retry the send.
 - *"no agent named 'X' is registered"* — either you typo'd the handle or the other session has exited. Run `list_peers` (from inside Claude) to see who's reachable.
 - *"'X' is registered but didn't respond"* — X's adapter is unreachable (Claude session likely closed). Check the other terminal; rerun `claude-code:start` there.
 - Anything else — `tidepool status` and `~/.config/tidepool/logs/serve-<date>.log` are the next stops.
 
-**I killed the daemon (`tidepool stop`) and my Claude sessions can't send messages.** Expected — the adapters inside each Claude session can't respawn the daemon themselves. Run `tidepool serve &` (or `tidepool claude-code:start` in any project dir) to bring it back. The live sessions resume working on the next send; no restart needed.
+**I killed the daemon (`tidepool stop`) and my Claude sessions can't send messages.** Expected — the adapters inside each Claude session can't respawn the daemon themselves. Run `tidepool start &` (or `tidepool claude-code:start` in any project dir) to bring it back. The live sessions resume working on the next send; no restart needed.
 
 **"Agent 'X' is already registered."** Happens if you pass a name that was registered previously in a different cwd, or you manually registered it. Either pick a different name, or reuse the existing home's `.mcp.json` to reattach. `tidepool whoami` lists all registered agents.
 
@@ -201,15 +200,21 @@ Partial failure is first-class: if one recipient is unreachable, `results` carri
 
 ## Sending to someone else's machine
 
-`claude-code:start` is for one laptop. For two laptops (or two humans), set it up manually:
+`claude-code:start` is for one laptop. Across two laptops (or two humans):
 
-1. Each laptop runs its own `tidepool init` (separate `TIDEPOOL_HOME`s are only needed for isolation — a single home works fine too).
+1. Each laptop has already run `tidepool claude-code:start <agent>` at least once, so identity + daemon are up.
 2. Each laptop runs `tidepool whoami` and shares their peer fingerprint out-of-band (Signal, in-person, etc.).
-3. Each laptop adds the other as a friend: `tidepool friend add <their-handle> <their-fingerprint>`.
-4. Each laptop adds a `remote` shortcut: `tidepool remote add <local-handle> https://<their-ip>:9900 <their-agent-name> <their-fingerprint>`.
-5. Messages now go over mTLS between the two peers. Everything else is the same.
+3. Each laptop adds the specific agent of the other they want to reach:
 
-Cross-machine bootstrap may land as a `tidepool claude-code:connect` command later.
+   ```bash
+   tidepool agent add https://<their-ip>:9900 <their-agent-name> \
+     --fingerprint sha256:<their-fingerprint>
+   ```
+
+   Trust is bidirectional on first successful send — no reciprocal command needed.
+4. Messages now go over mTLS between the two peers. Everything else is the same.
+
+For an interactive "add all / pick some" flow, see [`tasks/10-interactive-agent-add.md`](../../tasks/10-interactive-agent-add.md) — planned.
 
 ---
 
@@ -239,23 +244,23 @@ Cross-machine bootstrap may land as a `tidepool claude-code:connect` command lat
 export TIDEPOOL_HOME="$HOME/.config/tidepool"
 tidepool init
 
-# Register each agent with its own local port:
-tidepool register alice --local-endpoint http://127.0.0.1:18800
-tidepool register bob   --local-endpoint http://127.0.0.1:18801
+# Register each agent in server.toml:
+tidepool register alice
+tidepool register bob
 
 # In each project's .mcp.json, point Claude at the adapter:
 cat > ~/proj-a/.mcp.json <<'JSON'
-{ "mcpServers": { "tidepool": { "command": "a2a-claude-code-adapter", "args": ["--agent", "alice"] } } }
+{ "mcpServers": { "tidepool": { "command": "tidepool-claude-code", "args": ["--agent", "alice"] } } }
 JSON
 
-# Start the server (pick one):
-tidepool serve                              # foreground, see output, Ctrl+C to stop
+# Start the daemon (pick one):
+tidepool start                              # foreground, see output, Ctrl+C to stop
 tidepool claude-code:start --debug          # same, but also auto-generates .mcp.json
 
 # Launch each Claude Code session from its project dir:
 cd ~/proj-a && claude --dangerously-load-development-channels server:tidepool
 ```
 
-Every low-level command (`init`, `register`, `serve`, `friend`, `remote`, `whoami`, `status`, `stop`, `ping`) remains available. See the [`tidepool` README](../tidepool/README.md) for their reference.
+Low-level commands: `init`, `register`, `unregister`, `start`, `stop`, `status`, `whoami`, `ping`, `agent add/ls/rm/refresh`. See the [`tidepool` README](../../README.md) for their reference.
 
 </details>

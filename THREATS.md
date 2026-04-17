@@ -50,16 +50,16 @@ The fingerprint inside the URI is the pin. If that string is modified in transit
 
 ---
 
-## Threat 3 — New friends are unscoped by default
+## Threat 3 — New peers are unscoped by default
 
-`addFriend` (`src/friends.ts:11-41`) does not set `agents` unless the caller provides it. The handshake accept path at `src/server.ts:253-260` passes only `{handle, fingerprint}` — **every newly friended peer gains access to every agent on the host**.
+The handshake accept path in `src/handshake.ts` writes a new entry to `peers.toml` with `agents: [<one-agent>]` — the one named in the CONNECTION_REQUEST. But the trust check at `src/server.ts` accepts any agent request as long as the fingerprint matches a peer entry, regardless of which agents that peer has advertised. **Every newly accepted peer effectively gains access to every agent on the host.**
 
 A stranger who redeems a URI for your `rust-expert` agent gets the same access to your `personal-journal`, `password-manager`, or whatever else you happen to have registered.
 
 **Mitigations.**
-- Default new friends to the scope of the agent referenced in the handshake.
-- Surface scope in `friend list` output so drift is visible.
-- Provide `tidepool friend scope <handle> <agent>` for narrowing.
+- Enforce per-peer agent scope: reject inbound requests where the target agent isn't in the peer's `agents` list.
+- Surface scope in `tidepool agent ls` / `tidepool status` so drift is visible.
+- Provide a CLI for narrowing (e.g. `tidepool agent rm <peer>/<agent>`).
 
 ---
 

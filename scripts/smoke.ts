@@ -124,8 +124,16 @@ async function main() {
     } as any),
   );
   fs.writeFileSync(
-    path.join(aliceDir, "friends.toml"),
-    TOML.stringify({ friends: { "bobs-rust-expert": { fingerprint: bob.fingerprint } } } as any),
+    path.join(aliceDir, "peers.toml"),
+    TOML.stringify({
+      peers: {
+        "bobs-rust-expert": {
+          fingerprint: bob.fingerprint,
+          endpoint: "https://127.0.0.1:29900",
+          agents: ["rust-expert"],
+        },
+      },
+    } as any),
   );
   fs.writeFileSync(
     path.join(bobDir, "server.toml"),
@@ -138,8 +146,16 @@ async function main() {
     } as any),
   );
   fs.writeFileSync(
-    path.join(bobDir, "friends.toml"),
-    TOML.stringify({ friends: { "alices-dev": { fingerprint: alice.fingerprint } } } as any),
+    path.join(bobDir, "peers.toml"),
+    TOML.stringify({
+      peers: {
+        "alices-dev": {
+          fingerprint: alice.fingerprint,
+          endpoint: "https://127.0.0.1:19900",
+          agents: ["alice-dev"],
+        },
+      },
+    } as any),
   );
   ok("Alice: 19900 public / 19901 local");
   ok("Bob:   29900 public / 29901 local");

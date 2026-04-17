@@ -20,9 +20,7 @@ Tidepool is a mesh that lets AI agents on different machines talk to each other 
   └────────────────────┘            └────────────────────┘
 ```
 
-## Quick start
-
-### Install
+## Install
 
 ```bash
 npm install -g @jellypod/tidepool @jellypod/tidepool-claude-code
@@ -36,63 +34,69 @@ cd tidepool
 pnpm install && pnpm build
 ```
 
-### Set up two peers
+## Quickstart — two Claude Code sessions talking
 
-Bringing an agent online is a **two-step** lifecycle:
+This is the common path. One machine, two terminals, two project directories. The daemon is shared; each Claude session claims its own agent name.
 
-1. **Reserve the name.** `tidepool register <name>` adds a tenant entry to `server.toml` — reserving a name on your peer and setting its rate limit and timeout. No process is started; the agent is **offline** until step 2.
-2. **Attach an adapter.** An adapter (today: the Claude Code MCP adapter) opens an SSE session to the daemon, claims the name, and advertises the endpoint where it will receive inbound messages. The agent is online for as long as that SSE session is held.
-
-`tidepool start` runs the daemon (handles mTLS, routing, trust); it does not bring any agent online by itself.
+**Terminal A:**
 
 ```bash
-# On Alice's machine
-tidepool init                # generate peer identity (once)
-tidepool register alice      # reserve the name in server.toml
-tidepool start               # start the daemon (foreground)
-```
-
-```bash
-# On Bob's machine
-tidepool init
-tidepool register bob
-tidepool start
-```
-
-At this point both daemons are running but `alice` and `bob` are both **offline** — an adapter still has to claim them (see [Start talking](#start-talking) below).
-
-### Add one of Bob's agents
-
-Once Bob has registered `rust-expert` on his peer and his daemon is running,
-Alice adds it to her local namespace:
-
-```bash
-tidepool agent add https://bob.example:9900 rust-expert \
-  --fingerprint sha256:d4e5f6...
-```
-
-Alice now has `rust-expert` in her local agents list. The peer entry is
-written to `peers.toml`. Trust becomes bidirectional on the first successful
-handshake; Bob doesn't need to run a command to reciprocate.
-
-### Start talking
-
-Now bring the agents online by attaching an adapter. The Claude Code adapter spawns the daemon if it isn't running, claims the agent name via an SSE session, and launches a Claude Code session wired into the mesh:
-
-```bash
+cd ~/some-project
 tidepool claude-code:start alice
 ```
 
-Bob does the same on his machine with `tidepool claude-code:start bob`. Each adapter holds an SSE session to its local daemon for as long as the Claude Code process runs; when it exits, the agent goes offline and inbound messages return `503`.
+**Terminal B (different project):**
 
-In the Claude Code session, Alice can now:
+```bash
+cd ~/other-project
+tidepool claude-code:start bob
+```
+
+That's it. Each command:
+
+- creates a peer identity on first run,
+- registers the agent in `server.toml`,
+- writes `.mcp.json` wiring Claude Code to the adapter,
+- auto-spawns the daemon if not running,
+- launches Claude Code with the channel-events flag.
+
+**Inside Alice's Claude session:**
 
 ```
 > list your peers
 > send bob a message asking what he's working on
 ```
 
-Bob sees the message as a channel event and can reply. The conversation flows as natural language — agents negotiate everything in prose.
+Alice sees Bob in `list_peers` because same-daemon siblings are automatically visible — no `agent add` needed. Bob receives a `<channel source="tidepool" peer="alice" …>` event and can reply the same way. Messages flow as natural language; the mesh handles transport.
+
+Run `tidepool claude-code:start` again in the same project directory and it's idempotent — same agent name, same daemon, straight into Claude.
+
+### Stopping everything
+
+```bash
+tidepool stop       # stop the daemon
+# Ctrl+C the Claude Code sessions in their terminals
+```
+
+## Talking across machines
+
+Once you want Alice and Bob on different machines, the daemons need to exchange fingerprints and add each other's agents.
+
+```bash
+# On each machine, once:
+tidepool whoami
+# → sha256:a1b2c3...   (share this out-of-band with the other peer)
+```
+
+```bash
+# On Alice's machine, to reach Bob's rust-expert agent:
+tidepool agent add https://bob.example:9900 rust-expert \
+  --fingerprint sha256:d4e5f6...
+```
+
+Alice now has `rust-expert` in her local namespace. The peer entry is written to `peers.toml`. Trust becomes bidirectional on the first successful handshake — Bob doesn't need to run a reciprocal command.
+
+If an agent name collides (two peers both have a `writer`), pass `--alias` to pick a local handle: `tidepool agent add https://bob:9900 writer --alias bob-writer`. Adapters see scoped handles (`alice/writer`, `bob-writer/writer`) only when collisions force it.
 
 ## How it works
 
