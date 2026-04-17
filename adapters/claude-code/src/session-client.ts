@@ -1,11 +1,8 @@
-export type Peer = { handle: string; did: string | null };
-
 export interface OpenSessionOpts {
   daemonUrl: string;
   name: string;
   endpoint: string;
   card: Record<string, unknown>;
-  onPeers: (peers: Peer[]) => void;
   onError?: (err: Error) => void;
 }
 
@@ -50,7 +47,7 @@ export async function openSession(
   );
 
   // Start consuming the SSE stream in the background; resolve `ready` on first
-  // session.registered event. Subsequent events flow to opts.onPeers.
+  // session.registered event. Other events (e.g. future extensions) are ignored.
   const consume = async () => {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
@@ -79,8 +76,6 @@ export async function openSession(
               sessionId = parsed?.sessionId ?? "";
               clearTimeout(readyTimeout);
               resolveReady(sessionId);
-            } else if (ev === "peers.snapshot") {
-              opts.onPeers(parsed as Peer[]);
             }
           } catch (e) {
             opts.onError?.(e instanceof Error ? e : new Error(String(e)));

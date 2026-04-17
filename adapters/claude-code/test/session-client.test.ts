@@ -4,7 +4,7 @@ import http from "node:http";
 import { openSession } from "../src/session-client.js";
 
 describe("openSession", () => {
-  it("POSTs registration payload and yields initial peers snapshot", async () => {
+  it("POSTs registration payload and resolves on session.registered", async () => {
     const app = express();
     app.use(express.json());
     let received: any = null;
@@ -12,7 +12,8 @@ describe("openSession", () => {
       received = { name: req.params.name, body: req.body };
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       res.write(`event: session.registered\ndata: {"sessionId":"s-1"}\n\n`);
-      res.write(`event: peers.snapshot\ndata: [{"handle":"bob","did":null}]\n\n`);
+      // An unrecognized event should be ignored without error
+      res.write(`event: something.unexpected\ndata: {"nope":true}\n\n`);
       // Leave open (simulate a real SSE session)
     });
     const server = await new Promise<http.Server>((resolve) => {
@@ -21,24 +22,20 @@ describe("openSession", () => {
     const daemonPort = (server.address() as any).port;
 
     try {
-      const peers: any[] = [];
       const handle = await openSession({
         daemonUrl: `http://127.0.0.1:${daemonPort}`,
         name: "alice",
         endpoint: "http://127.0.0.1:9999",
         card: { description: "test" },
-        onPeers: (snap) => peers.push(snap),
       });
 
-      // Wait for initial events
-      await new Promise((r) => setTimeout(r, 100));
+      // Give the reader a tick to consume unknown events
+      await new Promise((r) => setTimeout(r, 50));
 
       expect(received?.name).toBe("alice");
       expect(received?.body?.endpoint).toBe("http://127.0.0.1:9999");
       expect(received?.body?.card?.description).toBe("test");
       expect(handle.sessionId).toBe("s-1");
-      expect(peers).toHaveLength(1);
-      expect(peers[0][0].handle).toBe("bob");
 
       await handle.close();
     } finally {
@@ -65,7 +62,6 @@ describe("openSession", () => {
           name: "alice",
           endpoint: "http://127.0.0.1:1",
           card: {},
-          onPeers: () => {},
         }),
       ).rejects.toThrow(/409/);
     } finally {
