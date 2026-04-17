@@ -8,7 +8,7 @@ import TOML from "@iarna/toml";
 import { Agent as UndiciAgent } from "undici";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
-import { loadFriendsConfig } from "../src/config.js";
+import { loadPeersConfig } from "../src/peers/config.js";
 import { createDirectoryApp } from "../src/directory-server.js";
 import { DirectoryProvider } from "../src/discovery/directory-provider.js";
 import type { RemoteAgent } from "../src/types.js";
@@ -247,13 +247,13 @@ describe("e2e: discovery → connect → A2A", () => {
     expect(data.metadata["https://tidepool.dev/ext/connection/v1"].type).toBe("accepted");
   });
 
-  it("Bob's friends.toml now contains Alice's fingerprint", () => {
-    const friendsConfig = loadFriendsConfig(
-      path.join(bobConfigDir, "friends.toml"),
+  it("Bob's peers.toml now contains Alice's fingerprint", () => {
+    const peersConfig = loadPeersConfig(
+      path.join(bobConfigDir, "peers.toml"),
     );
 
-    const aliceEntry = Object.entries(friendsConfig.friends).find(
-      ([, friend]) => friend.fingerprint === aliceFingerprint,
+    const aliceEntry = Object.entries(peersConfig.peers).find(
+      ([, peer]) => peer.fingerprint === aliceFingerprint,
     );
     expect(aliceEntry).toBeDefined();
   });

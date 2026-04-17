@@ -8,7 +8,7 @@ import TOML from "@iarna/toml";
 import { Agent as UndiciAgent } from "undici";
 import { generateIdentity, getFingerprint } from "../src/identity.js";
 import { startServer } from "../src/server.js";
-import { loadFriendsConfig } from "../src/config.js";
+import { loadPeersConfig } from "../src/peers/config.js";
 import type { RemoteAgent } from "../src/types.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
@@ -215,15 +215,15 @@ describe("e2e: connection handshake", () => {
     ).toBe("accepted");
   });
 
-  it("persisted the new friend to friends.toml", () => {
-    const friendsConfig = loadFriendsConfig(
-      path.join(bobConfigDir, "friends.toml"),
+  it("persisted the new peer to peers.toml", () => {
+    const peersConfig = loadPeersConfig(
+      path.join(bobConfigDir, "peers.toml"),
     );
 
-    const friendHandles = Object.keys(friendsConfig.friends);
-    expect(friendHandles.length).toBeGreaterThanOrEqual(1);
+    const peerHandles = Object.keys(peersConfig.peers);
+    expect(peerHandles.length).toBeGreaterThanOrEqual(1);
 
-    const aliceEntry = Object.entries(friendsConfig.friends).find(
+    const aliceEntry = Object.entries(peersConfig.peers).find(
       ([handle]) => handle.startsWith("alice"),
     );
     expect(aliceEntry).toBeDefined();

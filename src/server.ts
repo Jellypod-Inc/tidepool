@@ -24,7 +24,7 @@ import {
   buildRichRemoteAgentCard,
 } from "./agent-card.js";
 import { handleConnectionRequest } from "./handshake.js";
-import { addFriend, writeFriendsConfig } from "./friends.js";
+import { writePeersConfig } from "./peers/config.js";
 import { projectHandles } from "./peers/resolve.js";
 import { TokenBucket, parseRateLimit } from "./rate-limiter.js";
 import {
@@ -327,10 +327,14 @@ function createPublicApp(
 
           try {
             const result = await runSerial(async () => {
+              const peersPath = `${configDir}/peers.toml`;
+              const currentPeers = holder.peers();
               const r = await handleConnectionRequest({
                 config: config.connectionRequests,
-                friends,
+                peers: currentPeers,
+                writePeers: (cfg) => writePeersConfig(peersPath, cfg),
                 fingerprint: peerFingerprint,
+                endpoint: new URL(metadata.agentCardUrl).origin,
                 reason: metadata.reason,
                 agentCardUrl: metadata.agentCardUrl,
                 fetchAgentCard: async (url: string) => {
@@ -342,15 +346,6 @@ function createPublicApp(
                 },
                 pendingRequestsPath: `${configDir}/pending-requests.json`,
               });
-
-              if (r.newFriend) {
-                const updated = addFriend(friends, {
-                  handle: r.newFriend.handle,
-                  fingerprint: r.newFriend.fingerprint,
-                });
-                friends.friends = updated.friends;
-                writeFriendsConfig(`${configDir}/friends.toml`, updated);
-              }
               return r;
             });
 

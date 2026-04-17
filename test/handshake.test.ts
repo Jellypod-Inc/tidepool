@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -7,13 +7,23 @@ import {
   buildAcceptedResponse,
   buildDeniedResponse,
   deriveHandle,
+  findPeerByFingerprint,
   storePendingRequest,
   loadPendingRequests,
 } from "../src/handshake.js";
 import type {
   ConnectionRequestConfig,
-  FriendsConfig,
+  PeersConfig,
 } from "../src/types.js";
+
+const FINGERPRINT =
+  "sha256:newcert1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+const ENDPOINT = "https://example.com";
+const AGENT_CARD_URL = "https://example.com/.well-known/agent-card.json";
+
+function emptyPeers(): PeersConfig {
+  return { peers: {} };
+}
 
 describe("buildAcceptedResponse", () => {
   it("returns a v1.0 Message with accepted extension metadata", () => {
@@ -42,79 +52,175 @@ describe("buildDeniedResponse", () => {
 });
 
 describe("deriveHandle", () => {
-  it("uses the agent card name as handle", () => {
-    const handle = deriveHandle("alice-dev", {});
-    expect(handle).toBe("alice-dev");
+  it("uses the agent card name (sanitised) as handle", () => {
+    expect(deriveHandle("alice-dev", FINGERPRINT)).toBe("alice-dev");
   });
 
-  it("appends suffix on collision", () => {
-    const existing: FriendsConfig = {
-      friends: {
-        "alice-dev": { fingerprint: "sha256:aaaa" },
-      },
-    };
-    const handle = deriveHandle("alice-dev", existing);
-    expect(handle).toBe("alice-dev-2");
+  it("strips illegal characters from agent card name", () => {
+    expect(deriveHandle("alice dev!", FINGERPRINT)).toBe("alicedev");
   });
 
-  it("increments suffix on multiple collisions", () => {
-    const existing: FriendsConfig = {
-      friends: {
-        "alice-dev": { fingerprint: "sha256:aaaa" },
-        "alice-dev-2": { fingerprint: "sha256:bbbb" },
-      },
-    };
-    const handle = deriveHandle("alice-dev", existing);
-    expect(handle).toBe("alice-dev-3");
-  });
-});
-
-describe("handleConnectionRequest — accept mode", () => {
-  it("auto-approves and returns accepted response", async () => {
-    const config: ConnectionRequestConfig = { mode: "accept" };
-    const friends: FriendsConfig = { friends: {} };
-
-    const result = await handleConnectionRequest({
-      config,
-      friends,
-      fingerprint: "sha256:newcert1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      reason: "Want to learn Rust",
-      agentCardUrl: "https://example.com/.well-known/agent-card.json",
-      fetchAgentCard: async () => ({ name: "alice-dev" }),
-    });
-
-    expect(result.response.role).toBe("agent");
-    expect(result.response.metadata?.["https://tidepool.dev/ext/connection/v1"]).toEqual({ type: "accepted" });
-    expect(result.newFriend).toBeDefined();
-    expect(result.newFriend!.handle).toBe("alice-dev");
-    expect(result.newFriend!.fingerprint).toBe(
-      "sha256:newcert1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  it("falls back to peer-<first8hex> when name is empty/undefined", () => {
+    expect(deriveHandle(undefined, "sha256:abcdef1234567890abcdef")).toBe(
+      "peer-abcdef12",
+    );
+    expect(deriveHandle("", "sha256:abcdef1234567890abcdef")).toBe(
+      "peer-abcdef12",
     );
   });
 });
 
-describe("handleConnectionRequest — deny mode", () => {
-  it("rejects all connection requests", async () => {
-    const config: ConnectionRequestConfig = { mode: "deny" };
-    const friends: FriendsConfig = { friends: {} };
+describe("findPeerByFingerprint", () => {
+  it("returns the handle when fingerprint matches", () => {
+    const peers: PeersConfig = {
+      peers: {
+        "alice-dev": {
+          fingerprint: FINGERPRINT,
+          endpoint: ENDPOINT,
+          agents: ["alice-dev"],
+        },
+      },
+    };
+    expect(findPeerByFingerprint(peers, FINGERPRINT)).toBe("alice-dev");
+  });
+
+  it("returns null when fingerprint is not present", () => {
+    expect(findPeerByFingerprint(emptyPeers(), FINGERPRINT)).toBeNull();
+  });
+
+  it("is case-insensitive", () => {
+    const fp = "sha256:" + "ab".repeat(32);
+    const peers: PeersConfig = {
+      peers: {
+        bob: {
+          fingerprint: fp.toUpperCase().replace("SHA256:", "sha256:"),
+          endpoint: ENDPOINT,
+          agents: [],
+        },
+      },
+    };
+    expect(findPeerByFingerprint(peers, fp)).toBe("bob");
+  });
+});
+
+describe("handleConnectionRequest — accept mode", () => {
+  it("persists accepted CONNECTION_REQUEST into peers.toml", async () => {
+    const config: ConnectionRequestConfig = { mode: "accept" };
+    const peers = emptyPeers();
+    const writePeers = vi.fn();
 
     const result = await handleConnectionRequest({
       config,
-      friends,
-      fingerprint: "sha256:newcert",
+      peers,
+      writePeers,
+      fingerprint: FINGERPRINT,
+      endpoint: ENDPOINT,
       reason: "Want to learn Rust",
-      agentCardUrl: "https://example.com/.well-known/agent-card.json",
+      agentCardUrl: AGENT_CARD_URL,
       fetchAgentCard: async () => ({ name: "alice-dev" }),
     });
 
     expect(result.response.role).toBe("agent");
-    expect(result.response.metadata?.["https://tidepool.dev/ext/connection/v1"]).toMatchObject({ type: "denied" });
-    expect(result.newFriend).toBeUndefined();
+    expect(
+      result.response.metadata?.["https://tidepool.dev/ext/connection/v1"],
+    ).toEqual({ type: "accepted" });
+
+    expect(writePeers).toHaveBeenCalledOnce();
+    const written: PeersConfig = writePeers.mock.calls[0][0];
+    expect(written.peers["alice-dev"]).toMatchObject({
+      fingerprint: FINGERPRINT,
+      endpoint: ENDPOINT,
+      agents: ["alice-dev"],
+    });
+  });
+
+  it("does not create a duplicate when fingerprint already in peers.toml", async () => {
+    const config: ConnectionRequestConfig = { mode: "accept" };
+    const peers: PeersConfig = {
+      peers: {
+        "alice-dev": {
+          fingerprint: FINGERPRINT,
+          endpoint: ENDPOINT,
+          agents: ["alice-dev"],
+        },
+      },
+    };
+    const writePeers = vi.fn();
+
+    await handleConnectionRequest({
+      config,
+      peers,
+      writePeers,
+      fingerprint: FINGERPRINT,
+      endpoint: ENDPOINT,
+      reason: "Duplicate attempt",
+      agentCardUrl: AGENT_CARD_URL,
+      fetchAgentCard: async () => ({ name: "alice-dev" }),
+    });
+
+    expect(writePeers).not.toHaveBeenCalled();
+  });
+
+  it("uses fingerprint-derived handle when name collides with a different peer", async () => {
+    const config: ConnectionRequestConfig = { mode: "accept" };
+    const otherFingerprint = "sha256:" + "bb".repeat(32);
+    const peers: PeersConfig = {
+      peers: {
+        "alice-dev": {
+          fingerprint: otherFingerprint,
+          endpoint: "https://other.example.com",
+          agents: ["alice-dev"],
+        },
+      },
+    };
+    const writePeers = vi.fn();
+
+    await handleConnectionRequest({
+      config,
+      peers,
+      writePeers,
+      fingerprint: FINGERPRINT,
+      endpoint: ENDPOINT,
+      reason: "Name collision test",
+      agentCardUrl: AGENT_CARD_URL,
+      fetchAgentCard: async () => ({ name: "alice-dev" }),
+    });
+
+    expect(writePeers).toHaveBeenCalledOnce();
+    const written: PeersConfig = writePeers.mock.calls[0][0];
+    // Should have used the fingerprint-derived handle, not "alice-dev"
+    const newHandle = "peer-" + FINGERPRINT.replace("sha256:", "").slice(0, 8);
+    expect(written.peers[newHandle]).toBeDefined();
+    expect(written.peers[newHandle].fingerprint).toBe(FINGERPRINT);
+  });
+});
+
+describe("handleConnectionRequest — deny mode", () => {
+  it("rejects all connection requests without writing peers", async () => {
+    const config: ConnectionRequestConfig = { mode: "deny" };
+    const writePeers = vi.fn();
+
+    const result = await handleConnectionRequest({
+      config,
+      peers: emptyPeers(),
+      writePeers,
+      fingerprint: "sha256:newcert" + "0".repeat(58),
+      endpoint: ENDPOINT,
+      reason: "Want to learn Rust",
+      agentCardUrl: AGENT_CARD_URL,
+      fetchAgentCard: async () => ({ name: "alice-dev" }),
+    });
+
+    expect(result.response.role).toBe("agent");
+    expect(
+      result.response.metadata?.["https://tidepool.dev/ext/connection/v1"],
+    ).toMatchObject({ type: "denied" });
+    expect(writePeers).not.toHaveBeenCalled();
   });
 });
 
 describe("handleConnectionRequest — auto mode", () => {
-  it("approves when LLM returns accept", async () => {
+  it("approves when LLM returns accept and persists into peers", async () => {
     const config: ConnectionRequestConfig = {
       mode: "auto",
       auto: {
@@ -123,26 +229,33 @@ describe("handleConnectionRequest — auto mode", () => {
         policy: "Accept agents with a clear reason.",
       },
     };
-    const friends: FriendsConfig = { friends: {} };
+    const writePeers = vi.fn();
 
     const result = await handleConnectionRequest({
       config,
-      friends,
-      fingerprint: "sha256:newcert1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      peers: emptyPeers(),
+      writePeers,
+      fingerprint: FINGERPRINT,
+      endpoint: ENDPOINT,
       reason: "I want to learn Rust error handling patterns",
-      agentCardUrl: "https://example.com/.well-known/agent-card.json",
+      agentCardUrl: AGENT_CARD_URL,
       fetchAgentCard: async () => ({ name: "alice-dev" }),
-      evaluateWithLLM: async () => ({
-        decision: "accept" as const,
-      }),
+      evaluateWithLLM: async () => ({ decision: "accept" as const }),
     });
 
     expect(result.response.role).toBe("agent");
-    expect(result.response.metadata?.["https://tidepool.dev/ext/connection/v1"]).toEqual({ type: "accepted" });
-    expect(result.newFriend).toBeDefined();
+    expect(
+      result.response.metadata?.["https://tidepool.dev/ext/connection/v1"],
+    ).toEqual({ type: "accepted" });
+    expect(writePeers).toHaveBeenCalledOnce();
+    const written: PeersConfig = writePeers.mock.calls[0][0];
+    expect(written.peers["alice-dev"]).toMatchObject({
+      fingerprint: FINGERPRINT,
+      endpoint: ENDPOINT,
+    });
   });
 
-  it("denies when LLM returns deny", async () => {
+  it("denies when LLM returns deny and does not write peers", async () => {
     const config: ConnectionRequestConfig = {
       mode: "auto",
       auto: {
@@ -151,14 +264,16 @@ describe("handleConnectionRequest — auto mode", () => {
         policy: "Only accept agents from the acme.com domain.",
       },
     };
-    const friends: FriendsConfig = { friends: {} };
+    const writePeers = vi.fn();
 
     const result = await handleConnectionRequest({
       config,
-      friends,
-      fingerprint: "sha256:newcert",
+      peers: emptyPeers(),
+      writePeers,
+      fingerprint: "sha256:newcert" + "0".repeat(58),
+      endpoint: ENDPOINT,
       reason: "Random request",
-      agentCardUrl: "https://example.com/.well-known/agent-card.json",
+      agentCardUrl: AGENT_CARD_URL,
       fetchAgentCard: async () => ({ name: "spammer" }),
       evaluateWithLLM: async () => ({
         decision: "deny" as const,
@@ -167,19 +282,22 @@ describe("handleConnectionRequest — auto mode", () => {
     });
 
     expect(result.response.role).toBe("agent");
-    expect(result.response.metadata?.["https://tidepool.dev/ext/connection/v1"]).toMatchObject({ type: "denied" });
-    expect(result.newFriend).toBeUndefined();
+    expect(
+      result.response.metadata?.["https://tidepool.dev/ext/connection/v1"],
+    ).toMatchObject({ type: "denied" });
+    expect(writePeers).not.toHaveBeenCalled();
   });
 
   it("throws if auto mode configured but no auto config", async () => {
     const config: ConnectionRequestConfig = { mode: "auto" };
-    const friends: FriendsConfig = { friends: {} };
 
     await expect(
       handleConnectionRequest({
         config,
-        friends,
-        fingerprint: "sha256:newcert",
+        peers: emptyPeers(),
+        writePeers: vi.fn(),
+        fingerprint: "sha256:newcert" + "0".repeat(58),
+        endpoint: ENDPOINT,
         reason: "test",
         agentCardUrl: "https://example.com/card.json",
         fetchAgentCard: async () => ({ name: "test" }),

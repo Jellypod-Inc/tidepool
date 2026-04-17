@@ -5,22 +5,19 @@ import type { Message } from "./a2a.js";
 import type {
   ConnectionRequestConfig,
   ConnectionRequest,
-  FriendsConfig,
+  PeersConfig,
 } from "./types.js";
 
 // The handshake response is a v1.0 Message with the connection-extension
 // metadata attached. Callers expose it as the body of a message:send reply.
 type ConnectionResponse = Message;
 
-interface NewFriend {
-  handle: string;
-  fingerprint: string;
-}
-
 interface HandleConnectionRequestOpts {
   config: ConnectionRequestConfig;
-  friends: FriendsConfig;
+  peers: PeersConfig;
+  writePeers: (cfg: PeersConfig) => void;
   fingerprint: string;
+  endpoint: string;
   reason: string;
   agentCardUrl: string;
   fetchAgentCard: (url: string) => Promise<{ name: string }>;
@@ -35,7 +32,6 @@ interface HandleConnectionRequestOpts {
 
 interface HandleConnectionRequestResult {
   response: ConnectionResponse;
-  newFriend?: NewFriend;
 }
 
 export function buildAcceptedResponse(): ConnectionResponse {
@@ -60,28 +56,52 @@ export function buildDeniedResponse(reason: string): ConnectionResponse {
   };
 }
 
-export function deriveHandle(
-  name: string,
-  existingFriends: FriendsConfig | Record<string, unknown>,
-): string {
-  const friends =
-    "friends" in existingFriends
-      ? (existingFriends as FriendsConfig).friends
-      : (existingFriends as Record<string, unknown>);
-
-  if (!(name in friends)) return name;
-
-  let suffix = 2;
-  while (`${name}-${suffix}` in friends) {
-    suffix++;
+export function findPeerByFingerprint(
+  peers: PeersConfig,
+  fp: string,
+): string | null {
+  const t = fp.toLowerCase();
+  for (const [handle, entry] of Object.entries(peers.peers)) {
+    if (entry.fingerprint?.toLowerCase() === t) return handle;
   }
-  return `${name}-${suffix}`;
+  return null;
+}
+
+export function deriveHandle(
+  agentCardName: string | undefined,
+  fingerprint: string,
+): string {
+  const safe = (agentCardName ?? "").replace(/[^A-Za-z0-9_-]/g, "");
+  if (safe) return safe;
+  return "peer-" + fingerprint.replace("sha256:", "").slice(0, 8);
+}
+
+function persistPeer(
+  opts: HandleConnectionRequestOpts,
+  agentCardName: string,
+): void {
+  // Idempotent: skip if fingerprint already present
+  if (findPeerByFingerprint(opts.peers, opts.fingerprint)) return;
+
+  const handle = deriveHandle(agentCardName, opts.fingerprint);
+  // Fall back to fingerprint-derived handle if name collides with a different peer
+  const finalHandle =
+    opts.peers.peers[handle] !== undefined
+      ? deriveHandle(undefined, opts.fingerprint)
+      : handle;
+
+  opts.peers.peers[finalHandle] = {
+    fingerprint: opts.fingerprint,
+    endpoint: opts.endpoint,
+    agents: [agentCardName],
+  };
+  opts.writePeers(opts.peers);
 }
 
 export async function handleConnectionRequest(
   opts: HandleConnectionRequestOpts,
 ): Promise<HandleConnectionRequestResult> {
-  const { config, friends, fingerprint, reason, agentCardUrl } = opts;
+  const { config, fingerprint, reason, agentCardUrl } = opts;
 
   switch (config.mode) {
     case "deny": {
@@ -100,12 +120,8 @@ export async function handleConnectionRequest(
 
     case "accept": {
       const agentCard = await opts.fetchAgentCard(agentCardUrl);
-      const handle = deriveHandle(agentCard.name, friends);
-
-      return {
-        response: buildAcceptedResponse(),
-        newFriend: { handle, fingerprint },
-      };
+      persistPeer(opts, agentCard.name);
+      return { response: buildAcceptedResponse() };
     }
 
     case "auto": {
@@ -127,11 +143,8 @@ export async function handleConnectionRequest(
       });
 
       if (decision.decision === "accept") {
-        const handle = deriveHandle(agentCard.name, friends);
-        return {
-          response: buildAcceptedResponse(),
-          newFriend: { handle, fingerprint },
-        };
+        persistPeer(opts, agentCard.name);
+        return { response: buildAcceptedResponse() };
       }
 
       return {
