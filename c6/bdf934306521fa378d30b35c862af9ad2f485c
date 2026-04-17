@@ -1,0 +1,51 @@
+src/session/endpoint.ts
+  800c4366ee11d352 12,96-99,103
+test/session-endpoint.test.ts
+  800c4366ee11d352 8,44,55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "c6bdf934306521fa378d30b35c862af9ad2f485c",
+  "prompts": {
+    "655ea5a9b26de87d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0b483778-b88c-41a6-a2d0-f5ebbffe4f1c",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 225,
+      "overriden_lines": 0
+    },
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2270,
+      "overriden_lines": 0
+    },
+    "800c4366ee11d352": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b8ffd7be-58ff-4e7e-927a-eccd63ae3556",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 121,
+      "accepted_lines": 10,
+      "overriden_lines": 0
+    }
+  }
+}
