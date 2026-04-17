@@ -15,6 +15,7 @@ import type { RemoteAgent } from "../src/types.js";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 import { AgentCardSchema } from "../src/a2a.js";
+import { runInit } from "../src/cli/init.js";
 
 describe("buildLocalAgentCard", () => {
   it("builds a v1.0 Agent Card for a locally registered agent", () => {
@@ -199,6 +200,79 @@ describe("v1.0 conformance: Agent Card emitted by the server validates against A
       expect((parsed.data.capabilities as any).stateTransitionHistory).toBeUndefined();
       // mtls scheme uses v1.0 tagged-union shape
       expect(parsed.data.securitySchemes.mtls).toMatchObject({ type: "mtls" });
+    }
+  });
+});
+
+describe("local agent-card.json merges fragment from session", () => {
+  it("reflects adapter-supplied description after session registers", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tp-card-merge-"));
+    await runInit({ configDir: dir });
+    // Override to use unique ports for this test
+    fs.writeFileSync(
+      path.join(dir, "server.toml"),
+      `[server]\nport = 57710\nhost = "127.0.0.1"\nlocalPort = 57712\nrateLimit = "1000/hour"\nstreamTimeoutSeconds = 30\n[connectionRequests]\nmode = "deny"\n[discovery]\nproviders = ["static"]\ncacheTtlSeconds = 300\n[validation]\nmode = "warn"\n`,
+    );
+    const handle = await startServer({ configDir: dir });
+    const port = (handle.localServer.address() as any).port;
+
+    try {
+      // Register alice via SSE (keep the connection open)
+      const controller = new AbortController();
+      const reg = fetch(
+        `http://127.0.0.1:${port}/.well-known/tidepool/agents/alice/session`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            endpoint: "http://127.0.0.1:1",
+            card: { description: "alice says hi", skills: [{ id: "chat", name: "chat" }] },
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      // Let the session settle
+      await new Promise((r) => setTimeout(r, 100));
+
+      const cardRes = await fetch(
+        `http://127.0.0.1:${port}/alice/.well-known/agent-card.json`,
+      );
+      expect(cardRes.status).toBe(200);
+      const card = await cardRes.json();
+      expect(card.name).toBe("alice");
+      expect(card.description).toBe("alice says hi");
+      expect(card.skills).toEqual([{ id: "chat", name: "chat" }]);
+
+      controller.abort();
+      await reg.catch(() => {});
+    } finally {
+      handle.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns 503 agent_offline when no session and not a remote agent", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tp-card-offline-"));
+    await runInit({ configDir: dir });
+    // Override to use unique ports for this test
+    fs.writeFileSync(
+      path.join(dir, "server.toml"),
+      `[server]\nport = 57711\nhost = "127.0.0.1"\nlocalPort = 57713\nrateLimit = "1000/hour"\nstreamTimeoutSeconds = 30\n[connectionRequests]\nmode = "deny"\n[discovery]\nproviders = ["static"]\ncacheTtlSeconds = 300\n[validation]\nmode = "warn"\n`,
+    );
+    const handle = await startServer({ configDir: dir });
+    const port = (handle.localServer.address() as any).port;
+
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${port}/nobody/.well-known/agent-card.json`,
+      );
+      expect(res.status).toBe(503);
+      const body = await res.json();
+      expect(body.error.code).toBe("agent_offline");
+    } finally {
+      handle.close();
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

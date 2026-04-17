@@ -48,6 +48,10 @@ import type { RemoteAgent } from "./types.js";
 import { mountDashboard, MessageLog } from "./dashboard/index.js";
 import { isOriginAllowed, isHostAllowed } from "./origin-check.js";
 import { originDeniedResponse } from "./errors.js";
+import { createSessionRegistry, type SessionRegistry } from "./session/registry.js";
+import { mountSessionEndpoint } from "./session/endpoint.js";
+import { mergeAgentCard } from "./session/card-merge.js";
+import { agentOfflineResponse } from "./errors.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
   for (const [key, value] of Object.entries(error.headers)) {
@@ -115,6 +119,7 @@ export async function startServer(opts: StartServerOpts) {
 
   const messageLog = new MessageLog(200);
   const startedAt = new Date();
+  const sessionRegistry = createSessionRegistry();
 
   // Public interface: mTLS
   const tlsOpts = buildTlsOptions(opts.configDir);
@@ -138,8 +143,9 @@ export async function startServer(opts: StartServerOpts) {
     getOrCreateAgentBucket,
     remoteAgents,
     messageLog,
+    sessionRegistry,
   );
-  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, startedAt, localPort);
+  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, startedAt, localPort, sessionRegistry);
 
   publicServer.on("request", publicApp);
   localServer.on("request", localApp);
@@ -191,6 +197,7 @@ function createPublicApp(
   getOrCreateAgentBucket: (name: string) => TokenBucket | null,
   remoteAgents: RemoteAgent[],
   messageLog: MessageLog,
+  _sessionRegistry: SessionRegistry,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -459,6 +466,7 @@ function createLocalApp(
   messageLog: MessageLog,
   startedAt: Date,
   port: number,
+  sessionRegistry: SessionRegistry,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -467,6 +475,19 @@ function createLocalApp(
   // Dashboard routes must be registered before /:tenant/:action to avoid
   // the parameterized route matching /dashboard/* paths.
   mountDashboard(app, holder, configDir, messageLog, startedAt);
+
+  const mounted = mountSessionEndpoint(app, {
+    registry: sessionRegistry,
+    port,
+    friendsSnapshot: () => {
+      const friends = holder.friends();
+      return Object.keys(friends.friends)
+        .sort()
+        .map((handle) => ({ handle, did: null as string | null }));
+    },
+  });
+  // mounted.notifyFriendsChanged could be wired to config-holder in a later task
+  void mounted;
 
   // Tidepool extensions (origin guard is now global, no per-route guard needed).
   app.get("/.well-known/tidepool/peers", (_req, res) => {
@@ -507,40 +528,40 @@ function createLocalApp(
     });
   });
 
-  // Per-tenant Agent Card (remote agents)
+  // Per-tenant Agent Card
   app.get("/:tenant/.well-known/agent-card.json", async (req, res) => {
     const config = holder.server();
     const { tenant } = req.params;
-    const remote = mapLocalTenantToRemote(remoteAgents, tenant);
 
+    // 1. If a session is registered for this handle, build a merged card
+    const session = sessionRegistry.get(tenant);
+    if (session) {
+      const publicUrl = `http://127.0.0.1:${port}`;
+      const card = mergeAgentCard(
+        { name: tenant, publicUrl, tenant },
+        session.card,
+      );
+      res.json(card);
+      return;
+    }
+
+    // 2. If a remote agent, fetch and enrich (existing behavior)
+    const remote = mapLocalTenantToRemote(remoteAgents, tenant);
     if (remote) {
-      // Try to fetch the remote agent's actual Agent Card for rich metadata
       const agentCardUrl = `${remote.remoteEndpoint}/${remote.remoteTenant}/.well-known/agent-card.json`;
       const remoteCard = await fetchRemoteAgentCard(agentCardUrl);
-
       const card = buildRichRemoteAgentCard({
         remote,
-        localUrl: `http://127.0.0.1:${config.server.localPort}`,
+        localUrl: `http://127.0.0.1:${port}`,
         remoteCard,
       });
       res.json(card);
       return;
     }
 
-    // Could be a local agent
-    const agent = config.agents[tenant];
-    if (agent) {
-      const card = buildLocalAgentCard({
-        name: tenant,
-        description: agent.description,
-        publicUrl: `http://127.0.0.1:${config.server.localPort}`,
-        tenant,
-      });
-      res.json(card);
-      return;
-    }
-
-    res.status(404).json({ error: "Agent not found" });
+    // 3. Neither session nor remote → agent offline
+    const err = agentOfflineResponse(tenant);
+    res.status(err.statusCode).json(err.body);
   });
 
   // Stub out tasks/* endpoints with UnsupportedOperationError
