@@ -1,14 +1,11 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import {
-  loadAgentConfig,
-  loadProxyConfig,
-  listPeerHandles,
-} from "./config.js";
+import { loadAgentConfig, loadProxyConfig } from "./config.js";
 import { startHttp, type InboundInfo } from "./http.js";
 import { createChannel } from "./channel.js";
 import { sendOutbound } from "./outbound.js";
 import { createThreadStore } from "./thread-store.js";
+import { openSession, type Peer } from "./session-client.js";
 
 export type StartOpts = {
   configDir: string;
@@ -31,10 +28,13 @@ export async function start(opts: StartOpts) {
     maxThreads: opts.maxThreads ?? 100,
   });
 
+  // Mutable peer list populated by SSE snapshots
+  const peersBox: { current: Peer[] } = { current: [] };
+
   const channel = createChannel({
     self: agent.agentName,
     store,
-    listPeers: () => listPeerHandles(opts.configDir, agent.agentName),
+    listPeers: () => peersBox.current.map((p) => p.handle),
     send: ({ peer, contextId, text, participants }) =>
       sendOutbound({
         peer,
@@ -57,16 +57,37 @@ export async function start(opts: StartOpts) {
   const transport = opts.transport ?? new StdioServerTransport();
   await channel.server.connect(transport);
 
-  const http = await startHttp({
-    port: agent.port,
+  // Bind the HTTP inbound server first so we know our endpoint URL
+  const httpServer = await startHttp({
+    port: agent.port ?? 0,
     host,
     onInbound: emitInbound,
+  });
+
+  const inboundEndpoint = `http://${host}:${httpServer.port}`;
+
+  // Open the SSE session to register our endpoint and receive peer updates
+  const session = await openSession({
+    daemonUrl: `http://${host}:${proxy.localPort}`,
+    name: agent.agentName,
+    endpoint: inboundEndpoint,
+    card: {
+      description: "",
+      skills: [{ id: "chat", name: "chat" }],
+      capabilities: { streaming: false, extensions: [] },
+      defaultInputModes: ["text/plain"],
+      defaultOutputModes: ["text/plain"],
+    },
+    onPeers: (peers) => {
+      peersBox.current = peers;
+    },
   });
 
   return {
     agent,
     close: async () => {
-      await http.close();
+      await session.close();
+      await httpServer.close();
       await channel.server.close();
     },
   };

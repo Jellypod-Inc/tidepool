@@ -18,6 +18,13 @@ import { start } from "../src/start.js";
 function startMockRelay(adapters: Record<string, { httpPort: number }>) {
   const app = express();
   app.use(express.json());
+  // Stub session endpoint so start() can register without a real daemon.
+  app.post("/.well-known/tidepool/agents/:name/session", (req, res) => {
+    res.writeHead(200, { "Content-Type": "text/event-stream" });
+    res.write(`event: session.registered\ndata: {"sessionId":"mock-session"}\n\n`);
+    res.write(`event: peers.snapshot\ndata: ${JSON.stringify(Object.keys(adapters).filter((k) => k !== req.params.name).map((h) => ({ handle: h, did: null })))}\n\n`);
+    // Leave open to keep the SSE session alive
+  });
   app.post("/:tenant/message\\:send", async (req, res) => {
     const sender = req.header("x-agent");
     if (!sender || !adapters[sender]) {
