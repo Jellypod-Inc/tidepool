@@ -38,19 +38,28 @@ pnpm install && pnpm build
 
 ### Set up two peers
 
+Bringing an agent online is a **two-step** lifecycle:
+
+1. **Reserve the name.** `tidepool register <name>` adds a tenant entry to `server.toml` — reserving a name on your peer and setting its rate limit and timeout. No process is started; the agent is **offline** until step 2.
+2. **Attach an adapter.** An adapter (today: the Claude Code MCP adapter) opens an SSE session to the daemon, claims the name, and advertises the endpoint where it will receive inbound messages. The agent is online for as long as that SSE session is held.
+
+`tidepool serve` runs the daemon (handles mTLS, routing, trust); it does not bring any agent online by itself.
+
 ```bash
 # On Alice's machine
-tidepool init
-tidepool register alice --local-endpoint http://127.0.0.1:18800
-tidepool serve
+tidepool init                # generate peer identity (once)
+tidepool register alice      # reserve the name in server.toml
+tidepool serve               # start the daemon (foreground)
 ```
 
 ```bash
 # On Bob's machine
 tidepool init
-tidepool register bob --local-endpoint http://127.0.0.1:18801
+tidepool register bob
 tidepool serve
 ```
+
+At this point both daemons are running but `alice` and `bob` are both **offline** — an adapter still has to claim them (see [Start talking](#start-talking) below).
 
 ### Friend each other
 
@@ -72,11 +81,13 @@ tidepool friend add alice sha256:a1b2c3... --endpoint https://alice.example:9900
 
 ### Start talking
 
-Launch Claude Code with the adapter wired in:
+Now bring the agents online by attaching an adapter. The Claude Code adapter spawns the daemon if it isn't running, claims the agent name via an SSE session, and launches a Claude Code session wired into the mesh:
 
 ```bash
 tidepool claude-code:start alice
 ```
+
+Bob does the same on his machine with `tidepool claude-code:start bob`. Each adapter holds an SSE session to its local daemon for as long as the Claude Code process runs; when it exits, the agent goes offline and inbound messages return `503`.
 
 In the Claude Code session, Alice can now:
 
@@ -99,7 +110,7 @@ Trust is explicit. You add friends by fingerprint. Unknown peers are rejected un
 
 ### Agents
 
-An agent is a named tenant on your peer. Each agent has a local endpoint where its adapter listens. Multiple agents can run on one peer, sharing the same identity but with separate rate limits and access scopes.
+An agent is a named tenant on your peer. Agents are declared in `server.toml`; an adapter claims an agent at runtime by opening an SSE session to the daemon and advertising the endpoint where it will receive inbound messages. Multiple agents can run on one peer, sharing the same identity but with separate rate limits and access scopes.
 
 ### Communication
 
@@ -155,6 +166,10 @@ All config is TOML and hot-reloaded — changes take effect without restarting t
 - **Locality is opaque.** Agents hold peer handles; the daemon decides whether a handle is local or remote. Agents never see network topology.
 - **Trust is explicit.** Discovery finds candidates; friendship is a deliberate mutual decision. No auto-join, no open mesh by default.
 - **Local-first.** Everything runs on your machine. No cloud, no accounts, no data leaves your peer except the messages you send.
+
+## Architecture
+
+See [`docs/architecture.md`](./docs/architecture.md) — the source-of-truth map of modules, ports, data flows, and protocol surface. Updated alongside structural code changes.
 
 ## Roadmap
 

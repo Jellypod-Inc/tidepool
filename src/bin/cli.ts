@@ -78,6 +78,11 @@ program
     });
     ok(`Registered agent "${name}"`);
     ok(`  peer fingerprint: ${result.peerFingerprint}`);
+    ok("");
+    ok(`"${name}" is reserved in server.toml but offline until an adapter claims it.`);
+    ok("Bring it online by attaching an adapter:");
+    ok(`  $ tidepool claude-code:start ${name}    # Claude Code (MCP)`);
+    ok("An adapter opens an SSE session to the daemon and advertises where to deliver inbound messages.");
   });
 
 program
