@@ -9,15 +9,37 @@ function tmp(): string {
 }
 
 describe("runInit", () => {
-  it("creates server.toml, friends.toml, and remotes.toml with defaults", async () => {
+  it("creates server.toml with defaults", async () => {
     const dir = tmp();
     await runInit({ configDir: dir });
     expect(fs.existsSync(path.join(dir, "server.toml"))).toBe(true);
-    expect(fs.existsSync(path.join(dir, "friends.toml"))).toBe(true);
-    expect(fs.existsSync(path.join(dir, "remotes.toml"))).toBe(true);
     const server = fs.readFileSync(path.join(dir, "server.toml"), "utf-8");
     expect(server).toMatch(/port = 9_?900/);
     expect(server).toContain("mode = \"warn\"");
+  });
+
+  it("creates peers.toml", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "init-peers-"));
+    try {
+      await runInit({ configDir: dir });
+      expect(fs.existsSync(path.join(dir, "peers.toml"))).toBe(true);
+      const contents = fs.readFileSync(path.join(dir, "peers.toml"), "utf-8");
+      // Empty peers table — may be serialized as inline `peers = { }` or section header `[peers]`
+      expect(contents).toMatch(/^\s*(\[peers\]|peers\s*=\s*\{[^}]*\})?\s*$/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not create friends.toml or remotes.toml", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "init-no-old-"));
+    try {
+      await runInit({ configDir: dir });
+      expect(fs.existsSync(path.join(dir, "friends.toml"))).toBe(false);
+      expect(fs.existsSync(path.join(dir, "remotes.toml"))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("is idempotent — second init does not overwrite edits", async () => {

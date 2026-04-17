@@ -4,10 +4,9 @@ import {
   defaultServerConfig,
   writeServerConfig,
 } from "../config-writer.js";
-import { writeFriendsConfig } from "../friends.js";
-import { writeRemotesConfig } from "./remotes-config.js";
 import { generateIdentity } from "../identity.js";
 import { peerCertPath, peerKeyPath } from "../identity-paths.js";
+import { writePeersConfig } from "../peers/config.js";
 
 interface RunInitOpts {
   configDir: string;
@@ -21,14 +20,9 @@ export async function runInit(opts: RunInitOpts): Promise<void> {
     writeServerConfig(serverPath, defaultServerConfig());
   }
 
-  const friendsPath = path.join(opts.configDir, "friends.toml");
-  if (!fs.existsSync(friendsPath)) {
-    writeFriendsConfig(friendsPath, { friends: {} });
-  }
-
-  const remotesPath = path.join(opts.configDir, "remotes.toml");
-  if (!fs.existsSync(remotesPath)) {
-    writeRemotesConfig(remotesPath, { remotes: {} });
+  const peersPath = path.join(opts.configDir, "peers.toml");
+  if (!fs.existsSync(peersPath)) {
+    writePeersConfig(peersPath, { peers: {} });
   }
 
   const certPath = peerCertPath(opts.configDir);
