@@ -141,7 +141,7 @@ export function handleRemoveFriend(
   holder: ConfigHolder,
   configDir: string,
 ): void {
-  const { handle } = req.params;
+  const handle = Array.isArray(req.params.handle) ? req.params.handle[0] : req.params.handle;
 
   try {
     const updated = removeFriend(holder.friends(), handle);
