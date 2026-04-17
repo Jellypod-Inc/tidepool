@@ -34,6 +34,7 @@ import {
   malformedRequestResponse,
   peerNotFoundResponse,
   unsupportedOperationResponse,
+  structuredError,
   type A2AErrorResponse,
 } from "./errors.js";
 import { proxyUpstreamOrFail, initSSEResponse } from "./streaming.js";
@@ -154,7 +155,7 @@ export async function startServer(opts: StartServerOpts) {
     `Public interface: https://${initialServer.server.host}:${initialServer.server.port}`,
   );
   console.log(
-    `Local interface: http://127.0.0.1:${localPort} (raw-HTTP clients must set X-Agent: <agent-name>)`,
+    `Local interface: http://127.0.0.1:${localPort} (adapters register via SSE session; senders pass X-Session-Id)`,
   );
   console.log(
     `Dashboard: http://127.0.0.1:${localPort}/dashboard`,
@@ -587,22 +588,33 @@ function createLocalApp(
       return;
     }
 
-    // Authenticate the sender agent. The local port has no transport-level
-    // identity, so we require an X-Agent header naming a locally-registered
-    // agent. senderAgent is used below: injected into metadata.from for
-    // local-to-local (Task 3) and forwarded as X-Sender-Agent for
-    // local-to-remote (Task 4).
-    const senderAgent = req.header("x-agent");
-    if (!senderAgent) {
-      res.status(403).json({ error: "X-Agent header required" });
+    // Authenticate the sender via their active session. Post-Task-19 adapters
+    // send X-Session-Id (the sessionId returned from openSession). We look up
+    // the session to recover the sender's agent name, which is then injected
+    // as metadata.from on outbound messages.
+    const sessionId = req.header("x-session-id");
+    if (!sessionId) {
+      const err = structuredError(
+        403,
+        "invalid_request",
+        "X-Session-Id header required",
+        "Open a session via POST /.well-known/tidepool/agents/<name>/session and pass the returned sessionId as X-Session-Id on subsequent requests.",
+      );
+      res.status(err.statusCode).json(err.body);
       return;
     }
-    if (!config.agents[senderAgent]) {
-      res
-        .status(403)
-        .json({ error: `unknown agent in X-Agent: ${senderAgent}` });
+    const senderSession = sessionRegistry.getBySessionId(sessionId);
+    if (!senderSession) {
+      const err = structuredError(
+        403,
+        "invalid_request",
+        "X-Session-Id does not match any active session",
+        "The session may have been closed. Re-open via POST /.well-known/tidepool/agents/<name>/session.",
+      );
+      res.status(err.statusCode).json(err.body);
       return;
     }
+    const senderAgent = senderSession.name;
 
     const contextId: string | undefined = req.body?.message?.contextId;
     messageLog.record({ contextId, agent: senderAgent });

@@ -12,6 +12,7 @@ export interface SessionRegistry {
   ): RegisterResult;
   deregister(sessionId: string): void;
   get(name: string): RegisteredSession | undefined;
+  getBySessionId(sessionId: string): RegisteredSession | undefined;
   list(): RegisteredSession[];
   onChange(cb: () => void): () => void;
 }
@@ -54,6 +55,11 @@ export function createSessionRegistry(): SessionRegistry {
       emit();
     },
     get(name) {
+      return byName.get(name);
+    },
+    getBySessionId(sessionId) {
+      const name = bySessionId.get(sessionId);
+      if (!name) return undefined;
       return byName.get(name);
     },
     list() {

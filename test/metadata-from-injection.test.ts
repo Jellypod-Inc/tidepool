@@ -54,6 +54,7 @@ describe("metadata.from injection on local→local forward", () => {
   let bobServer: http.Server;
   let configDir: string;
   let localUrl: string;
+  let aliceSession: TestSession;
   let bobSession: TestSession;
   const received: Array<Record<string, unknown>> = [];
 
@@ -87,6 +88,13 @@ describe("metadata.from injection on local→local forward", () => {
     if (typeof addr !== "object" || !addr) throw new Error("no address");
     localUrl = `http://127.0.0.1:${addr.port}`;
 
+    // Register alice's session so she has a valid sessionId for outbound requests.
+    aliceSession = await registerTestSession(
+      LOCAL_PORT,
+      "alice",
+      "http://127.0.0.1:19998",
+    );
+
     // Register bob's session so the daemon can route inbound messages to his endpoint.
     bobSession = await registerTestSession(
       LOCAL_PORT,
@@ -96,8 +104,9 @@ describe("metadata.from injection on local→local forward", () => {
   });
 
   afterAll(async () => {
+    aliceSession?.controller.abort();
     bobSession?.controller.abort();
-    await bobSession?.done;
+    await Promise.all([aliceSession?.done, bobSession?.done]);
     server.close();
     await new Promise<void>((resolve) => bobServer.close(() => resolve()));
   });
@@ -106,7 +115,7 @@ describe("metadata.from injection on local→local forward", () => {
     received.length = 0;
     const res = await fetch(`${localUrl}/bob/message:send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Agent": "alice" },
+      headers: { "Content-Type": "application/json", "X-Session-Id": aliceSession.sessionId },
       body: JSON.stringify({
         message: {
           messageId: "m-1",
@@ -124,11 +133,11 @@ describe("metadata.from injection on local→local forward", () => {
     expect(got.message.contextId).toBe("ctx-original");
   });
 
-  it("overwrites caller-supplied metadata.from with the X-Agent handle", async () => {
+  it("overwrites caller-supplied metadata.from with the session agent name", async () => {
     received.length = 0;
     const res = await fetch(`${localUrl}/bob/message:send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Agent": "alice" },
+      headers: { "Content-Type": "application/json", "X-Session-Id": aliceSession.sessionId },
       body: JSON.stringify({
         message: {
           messageId: "m-2",

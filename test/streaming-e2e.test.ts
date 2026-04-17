@@ -191,7 +191,7 @@ describe("e2e: SSE streaming through local interface", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "streaming-agent",
+          "X-Session-Id": agentSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -299,7 +299,7 @@ describe("e2e: SSE stream timeout", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "slow-agent",
+          "X-Session-Id": agentSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -425,7 +425,7 @@ describe("upstream SSE validation: enforce mode", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "strict-stream-agent",
+          "X-Session-Id": agentSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -546,7 +546,7 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "bad-json-agent",
+          "X-Session-Id": agentSession.sessionId,
         },
         body: JSON.stringify({
           message: {

@@ -5,13 +5,14 @@ import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import TOML from "@iarna/toml";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Pick ports unlikely to collide with other tests in this suite.
 const PUBLIC_PORT = 49810;
 const LOCAL_PORT = 49811;
 
 async function setupConfig() {
-  const dir = mkdtempSync(path.join(tmpdir(), "claw-x-agent-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "claw-x-session-"));
   await runInit({ configDir: dir });
   writeFileSync(
     path.join(dir, "server.toml"),
@@ -44,10 +45,11 @@ async function setupConfig() {
   return dir;
 }
 
-describe("X-Agent validation on local POST", () => {
+describe("X-Session-Id validation on local POST", () => {
   let server: Awaited<ReturnType<typeof startServer>>;
   let configDir: string;
   let localUrl: string;
+  let aliceSession: TestSession;
 
   beforeAll(async () => {
     configDir = await setupConfig();
@@ -55,13 +57,18 @@ describe("X-Agent validation on local POST", () => {
     const addr = server.localServer.address();
     if (typeof addr !== "object" || !addr) throw new Error("no address");
     localUrl = `http://127.0.0.1:${addr.port}`;
+
+    // Register alice so we have a valid sessionId to test with
+    aliceSession = await registerTestSession(LOCAL_PORT, "alice", "http://127.0.0.1:19999");
   });
 
   afterAll(async () => {
+    aliceSession?.controller.abort();
+    await aliceSession?.done;
     server.close();
   });
 
-  it("rejects POST to /:tenant/message:send with no X-Agent header", async () => {
+  it("rejects POST to /:tenant/message:send with no X-Session-Id header", async () => {
     const res = await fetch(`${localUrl}/bob/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -70,16 +77,20 @@ describe("X-Agent validation on local POST", () => {
       }),
     });
     expect(res.status).toBe(403);
+    const body = await res.json() as any;
+    expect(body.error.code).toBe("invalid_request");
   });
 
-  it("rejects POST with unknown X-Agent value", async () => {
+  it("rejects POST with unknown X-Session-Id value", async () => {
     const res = await fetch(`${localUrl}/bob/message:send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Agent": "unknown" },
+      headers: { "Content-Type": "application/json", "X-Session-Id": "no-such-session" },
       body: JSON.stringify({
         message: { messageId: "m1", parts: [{ kind: "text", text: "hi" }] },
       }),
     });
     expect(res.status).toBe(403);
+    const body = await res.json() as any;
+    expect(body.error.code).toBe("invalid_request");
   });
 });

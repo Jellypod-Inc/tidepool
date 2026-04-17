@@ -66,6 +66,18 @@ describe("createSessionRegistry", () => {
     expect(list.map((s) => s.name).sort()).toEqual(["alice", "bob"]);
   });
 
+  it("getBySessionId returns session by sessionId", () => {
+    const reg = createSessionRegistry();
+    const r = reg.register("alice", { endpoint: "http://127.0.0.1:1", card: {} });
+    if (!r.ok) throw new Error("unexpected conflict");
+    expect(reg.getBySessionId(r.session.sessionId)?.name).toBe("alice");
+  });
+
+  it("getBySessionId returns undefined for unknown sessionId", () => {
+    const reg = createSessionRegistry();
+    expect(reg.getBySessionId("nope")).toBeUndefined();
+  });
+
   it("deregister is idempotent on unknown sessionId", () => {
     const reg = createSessionRegistry();
     expect(() => reg.deregister("does-not-exist")).not.toThrow();

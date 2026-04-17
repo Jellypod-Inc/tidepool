@@ -217,7 +217,7 @@ describe("e2e: two Tidepool servers", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "alice-dev",
+          "X-Session-Id": aliceSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -245,7 +245,7 @@ describe("e2e: two Tidepool servers", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "rust-expert",
+          "X-Session-Id": bobSession.sessionId,
         },
         body: JSON.stringify({
           message: {

@@ -7,6 +7,7 @@ import express from "express";
 import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Minimal A2A echo agent — used by both the real Bob and the impersonator Mallory.
 function createMockAgent(port: number, name: string): http.Server {
@@ -49,6 +50,7 @@ describe("outbound mTLS fingerprint pinning", () => {
   let malloryMockAgent: http.Server;
   let aliceServer: { close: () => void };
   let malloryServer: { close: () => void };
+  let aliceDevSession: TestSession;
 
   // Ports — chosen to avoid collision with e2e.test.ts
   const ALICE_PUBLIC = 49901;
@@ -179,9 +181,14 @@ describe("outbound mTLS fingerprint pinning", () => {
       configDir: malloryConfigDir,
       remoteAgents: [],
     });
+
+    // Register alice-dev's session so she has a valid sessionId for outbound requests.
+    aliceDevSession = await registerTestSession(ALICE_LOCAL, "alice-dev", `http://127.0.0.1:${ALICE_MOCK}`);
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    aliceDevSession?.controller.abort();
+    await aliceDevSession?.done;
     aliceMockAgent?.close();
     malloryMockAgent?.close();
     aliceServer?.close();
@@ -196,7 +203,7 @@ describe("outbound mTLS fingerprint pinning", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "alice-dev",
+          "X-Session-Id": aliceDevSession.sessionId,
         },
         body: JSON.stringify({
           message: {

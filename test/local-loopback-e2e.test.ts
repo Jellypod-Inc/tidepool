@@ -84,8 +84,6 @@ describe("local loopback — two agents on one tidepool", () => {
     });
     servers.push(bobServer);
 
-    // Alice doesn't need a listener — she's the sender in this test.
-
     const remotes = loadRemotesConfig(path.join(dir, "remotes.toml"));
     const handle = await startServer({
       configDir: dir,
@@ -96,6 +94,9 @@ describe("local loopback — two agents on one tidepool", () => {
     const LOCAL_PORT = (handle.localServer.address() as any).port;
 
     // Register sessions so daemon can route to each agent's endpoint.
+    // Alice is the sender — she needs a session to get a sessionId for X-Session-Id.
+    const aliceSession = await registerTestSession(LOCAL_PORT, "alice", "http://127.0.0.1:19997");
+    sessions.push(aliceSession);
     sessions.push(await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`));
 
     // Alice sends to Bob via the local proxy port
@@ -105,7 +106,7 @@ describe("local loopback — two agents on one tidepool", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "alice",
+          "X-Session-Id": aliceSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -121,7 +122,7 @@ describe("local loopback — two agents on one tidepool", () => {
     const body = (await res.json()) as { artifacts: { parts: { text: string }[] }[] };
     expect(body.artifacts[0].parts[0].text).toBe("hi from bob");
 
-    // The server injects metadata.from = <sender X-Agent> when forwarding to
+    // The server injects metadata.from = sender's agent name when forwarding to
     // the local tenant. This is the "peer" attribute: the receiver sees who
     // sent the message without the sender having to set it.
     expect(bobReceived).toMatchObject({
@@ -163,15 +164,19 @@ describe("local loopback — two agents on one tidepool", () => {
 
     const LOCAL_PORT = (handle.localServer.address() as any).port;
 
-    // Before carol is registered → 404. alice is registered, so X-Agent: alice
-    // passes the sender check; then the tenant lookup for carol yields 404.
+    // Register alice's session — she's the sender.
+    const aliceSession = await registerTestSession(LOCAL_PORT, "alice", "http://127.0.0.1:19996");
+    sessions.push(aliceSession);
+
+    // Before carol is registered → 404. Alice has an active session, so
+    // X-Session-Id passes the sender check; then the tenant lookup for carol yields 404.
     const pre = await fetch(
       `http://127.0.0.1:${LOCAL_PORT}/carol/message:send`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "alice",
+          "X-Session-Id": aliceSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -214,7 +219,7 @@ describe("local loopback — two agents on one tidepool", () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Agent": "alice",
+            "X-Session-Id": aliceSession.sessionId,
           },
           body: JSON.stringify({
             message: {
@@ -302,8 +307,10 @@ describe("local loopback — two agents on one tidepool", () => {
     const LOCAL_PORT = (handle.localServer.address() as any).port;
 
     // Register sessions for both alice and bob.
-    sessions.push(await registerTestSession(LOCAL_PORT, "alice", `http://127.0.0.1:${A_ENDPOINT_PORT}`));
-    sessions.push(await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`));
+    const aliceSession = await registerTestSession(LOCAL_PORT, "alice", `http://127.0.0.1:${A_ENDPOINT_PORT}`);
+    const bobSession = await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
+    sessions.push(aliceSession);
+    sessions.push(bobSession);
 
     // Leg 1: alice → bob. The tidepool daemon forwards to bob's endpoint
     // and injects metadata.from = "alice".
@@ -314,7 +321,7 @@ describe("local loopback — two agents on one tidepool", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "alice",
+          "X-Session-Id": aliceSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -349,7 +356,7 @@ describe("local loopback — two agents on one tidepool", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "bob",
+          "X-Session-Id": bobSession.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -420,8 +427,7 @@ describe("local loopback — two agents on one tidepool", () => {
     });
     servers.push(bobServer);
 
-    // First daemon incarnation — use a fixed localPort we can reconnect to
-    // after restart. We probe port 0 first to avoid collisions.
+    // First daemon incarnation
     const remotes = loadRemotesConfig(path.join(dir, "remotes.toml"));
     const handle1 = await startServer({
       configDir: dir,
@@ -430,7 +436,8 @@ describe("local loopback — two agents on one tidepool", () => {
 
     const LOCAL_PORT = (handle1.localServer.address() as any).port;
 
-    // Register session for first incarnation.
+    // Register sessions for first incarnation.
+    const aliceSession1 = await registerTestSession(LOCAL_PORT, "alice", "http://127.0.0.1:19995");
     const session1 = await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
 
     const pre = await fetch(
@@ -439,7 +446,7 @@ describe("local loopback — two agents on one tidepool", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "alice",
+          "X-Session-Id": aliceSession1.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -456,6 +463,8 @@ describe("local loopback — two agents on one tidepool", () => {
     bobReceived = null;
 
     // Close the first incarnation. Sessions are lost — adapters must reconnect.
+    aliceSession1.controller.abort();
+    await aliceSession1.done;
     session1.controller.abort();
     await session1.done;
     handle1.close();
@@ -471,8 +480,10 @@ describe("local loopback — two agents on one tidepool", () => {
 
     const LOCAL_PORT2 = (handle2.localServer.address() as any).port;
 
-    // Register session for second incarnation.
+    // Register sessions for second incarnation.
+    const aliceSession2 = await registerTestSession(LOCAL_PORT2, "alice", "http://127.0.0.1:19994");
     const session2 = await registerTestSession(LOCAL_PORT2, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
+    sessions.push(aliceSession2);
     sessions.push(session2);
 
     const post = await fetch(
@@ -481,7 +492,7 @@ describe("local loopback — two agents on one tidepool", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent": "alice",
+          "X-Session-Id": aliceSession2.sessionId,
         },
         body: JSON.stringify({
           message: {
@@ -498,7 +509,7 @@ describe("local loopback — two agents on one tidepool", () => {
     expect(bobReceived.message.messageId).toBe("m-post");
     expect(bobReceived.message.contextId).toBeUndefined();
     // metadata.from is still injected fresh each request (it is a function of
-    // the caller's X-Agent, not of any daemon-held thread state).
+    // the sender's session, not of any daemon-held thread state).
     expect(bobReceived.message.metadata.from).toBe("alice");
   });
 });
