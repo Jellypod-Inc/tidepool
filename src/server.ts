@@ -633,8 +633,160 @@ function createLocalApp(
     res.status(err.statusCode).json(err.body);
   });
 
-  // Stub out tasks/* endpoints with UnsupportedOperationError
+  // Stub out tasks/* endpoints with UnsupportedOperationError.
+  // Registered BEFORE /:peer/:agent/:action so /handle/tasks/:id:cancel is
+  // never swallowed by the scoped outbound route.
   mountTaskStubs(app);
+
+  // Scoped outbound proxy — routes /peer/agent/:action via peers.toml.
+  // Registered AFTER mountTaskStubs but BEFORE the generic /:tenant/:action
+  // handler so 3-segment paths like /bob/writer/message:send are matched here.
+  app.post("/:peer/:agent/:action", async (req, res) => {
+    const config = holder.server();
+    const { peer: peerName, agent: agentName, action } = req.params;
+
+    // --- Authenticate the sender via their active session ---
+    const sessionId = req.header("x-session-id");
+    if (!sessionId) {
+      const err = structuredError(
+        403,
+        "invalid_request",
+        "X-Session-Id header required",
+        "Open a session via POST /.well-known/tidepool/agents/<name>/session and pass the returned sessionId as X-Session-Id on subsequent requests.",
+      );
+      res.status(err.statusCode).json(err.body);
+      return;
+    }
+    const senderSession = sessionRegistry.getBySessionId(sessionId);
+    if (!senderSession) {
+      const err = structuredError(
+        403,
+        "invalid_request",
+        "X-Session-Id does not match any active session",
+        "The session may have been closed. Re-open via POST /.well-known/tidepool/agents/<name>/session.",
+      );
+      res.status(err.statusCode).json(err.body);
+      return;
+    }
+    const senderAgent = senderSession.name;
+
+    // --- Lookup peer in peers.toml ---
+    const peers = holder.peers();
+    const peerEntry = peers.peers[peerName];
+    if (!peerEntry) {
+      const peerErr = peerNotFoundResponse(peerName);
+      res.status(peerErr.statusCode).set(peerErr.headers).json(peerErr.body);
+      return;
+    }
+
+    // --- Verify the agent is in the peer's advertised agent list ---
+    if (!peerEntry.agents.includes(agentName)) {
+      const err = structuredError(
+        404,
+        "agent_not_found",
+        `Peer "${peerName}" has no agent "${agentName}"`,
+        `Known agents for this peer: ${peerEntry.agents.join(", ") || "(none)"}`,
+      );
+      res.status(err.statusCode).json(err.body);
+      return;
+    }
+
+    // --- Validate outbound A2A message ---
+    const inbound = validateWire(
+      MessageSchema,
+      req.body?.message,
+      { mode: config.validation.mode, context: "outbound.scoped.message" },
+    );
+    if (!inbound.ok) {
+      sendA2AError(res, malformedRequestResponse(inbound.error, req.body?.message?.messageId));
+      return;
+    }
+
+    const contextId: string | undefined = req.body?.message?.contextId;
+    messageLog.record({ contextId, agent: senderAgent });
+    messageTap.emit({
+      direction: "outbound",
+      from: senderAgent,
+      to: `${peerName}/${agentName}`,
+      action,
+      message: req.body?.message,
+    });
+
+    // Synthesise a RemoteAgent triplet from the peers.toml entry so we can
+    // reuse the same mTLS outbound path as the remotes.toml-based handler.
+    const synthRemote: RemoteAgent = {
+      localHandle: peerName,
+      remoteEndpoint: peerEntry.endpoint,
+      remoteTenant: agentName,
+      certFingerprint: peerEntry.fingerprint ?? "",
+    };
+
+    const targetUrl = buildOutboundUrl(
+      synthRemote.remoteEndpoint,
+      synthRemote.remoteTenant,
+      `/${action}`,
+    );
+
+    const certPath = peerCertPath(configDir);
+    const keyPath = peerKeyPath(configDir);
+    const streamTimeoutMs = config.server.streamTimeoutSeconds * 1000;
+    const isStream = action === "message:stream";
+
+    try {
+      const dispatcher = buildPinnedDispatcher(
+        certPath,
+        keyPath,
+        synthRemote.certFingerprint,
+      );
+
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Sender-Agent": senderAgent,
+        },
+        body: JSON.stringify(stripMetadataFrom(req.body)),
+        // @ts-expect-error — Node fetch supports dispatcher for custom TLS
+        dispatcher,
+      });
+
+      if (isStream) {
+        const taskId = req.body?.message?.messageId ?? uuidv4();
+        await proxyUpstreamOrFail({
+          upstreamResponse: response,
+          downstream: res,
+          timeoutMs: streamTimeoutMs,
+          taskId,
+          validationMode: config.validation.mode,
+          nonStreamingMessage: "Remote agent returned non-streaming response",
+        });
+        return;
+      }
+
+      const data = await response.json();
+      res.status(response.status).json(data);
+    } catch {
+      if (isStream && !res.headersSent) {
+        const taskId = req.body?.message?.messageId ?? uuidv4();
+        const sse = initSSEResponse(res);
+        sse.write(buildFailedStatusEvent(taskId, `ctx-${taskId}`, "Remote agent unreachable"));
+        sse.end();
+        return;
+      }
+      res.status(504).json({
+        id: uuidv4(),
+        status: { state: "failed" },
+        artifacts: [
+          {
+            artifactId: "error",
+            parts: [
+              { kind: "text", text: "Remote agent unreachable" },
+            ],
+          },
+        ],
+      });
+    }
+  });
 
   // Outbound proxy — local agent sends A2A to a remote agent via local handle
   app.post("/:tenant/:action", async (req, res) => {
