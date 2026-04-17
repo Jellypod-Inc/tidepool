@@ -30,6 +30,8 @@ export async function start(opts: StartOpts) {
 
   // Mutable peer list populated by SSE snapshots
   const peersBox: { current: Peer[] } = { current: [] };
+  // Session token populated after SSE registration; threaded into outbound deps.
+  const sessionBox: { id: string } = { id: "" };
 
   const channel = createChannel({
     self: agent.agentName,
@@ -42,7 +44,7 @@ export async function start(opts: StartOpts) {
         text,
         self: agent.agentName,
         participants,
-        deps: { localPort: proxy.localPort, host },
+        deps: { localPort: proxy.localPort, host, sessionId: sessionBox.id || undefined },
       }),
   });
 
@@ -82,6 +84,7 @@ export async function start(opts: StartOpts) {
       peersBox.current = peers;
     },
   });
+  sessionBox.id = session.sessionId;
 
   return {
     agent,

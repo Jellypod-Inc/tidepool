@@ -4,6 +4,8 @@ export type OutboundDeps = {
   localPort: number;
   host?: string;
   fetchImpl?: typeof fetch;
+  /** Session token returned by the daemon on registration; sent as X-Session-Id. */
+  sessionId?: string;
 };
 
 export type SendErrorKind =
@@ -48,7 +50,7 @@ export async function sendOutbound(args: {
   participants?: string[];
   deps: OutboundDeps;
 }): Promise<{ messageId: string }> {
-  const { peer, contextId, text, self, participants, deps } = args;
+  const { peer, contextId, text, self: _self, participants, deps } = args;
   const messageId = randomUUID();
   const host = deps.host ?? "127.0.0.1";
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -68,14 +70,20 @@ export async function sendOutbound(args: {
     message.metadata = { participants };
   }
 
+  const daemonOrigin = `http://${host}:${deps.localPort}`;
+
   let res: Response;
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Origin: daemonOrigin,
+    };
+    if (deps.sessionId) {
+      headers["X-Session-Id"] = deps.sessionId;
+    }
     res = await fetchImpl(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Agent": self,
-      },
+      headers,
       body: JSON.stringify({ message }),
     });
   } catch (err) {
@@ -93,26 +101,38 @@ export async function sendOutbound(args: {
     );
   }
 
-  if (res.status === 403 || res.status === 404) {
-    throw new SendError(
-      "peer-not-registered",
-      `no agent named "${peer}" is registered`,
-      "Call list_peers to see who's reachable. If the peer should exist, ask the user to confirm their session is running.",
-    );
-  }
-  if (res.status === 504) {
-    throw new SendError(
-      "peer-unreachable",
-      `"${peer}" is registered but didn't respond`,
-      `Check that "${peer}"'s session is still running.`,
-    );
-  }
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
+    const detail = await res.json().catch(() => null as unknown);
+    const code = (detail as { error?: { code?: string } })?.error?.code;
+    const serverMessage = (detail as { error?: { message?: string } })?.error?.message;
+    const hint = (detail as { error?: { hint?: string } })?.error?.hint ?? "";
+
+    if (code === "peer_not_found" || code === "agent_offline") {
+      throw new SendError(
+        "peer-not-registered",
+        serverMessage ?? `no agent named "${peer}"`,
+        hint || "Call list_peers to see who's reachable. If the peer should exist, ask the user to confirm their session is running.",
+      );
+    }
+    if (code === "peer_unreachable" || code === "peer_timeout") {
+      throw new SendError(
+        "peer-unreachable",
+        serverMessage ?? `"${peer}" unreachable`,
+        hint || `Check that "${peer}"'s session is still running.`,
+      );
+    }
+    if (code === "origin_denied") {
+      throw new SendError(
+        "other",
+        serverMessage ?? "origin rejected by daemon",
+        hint || "This is a bug — the adapter should be sending a valid Origin header.",
+      );
+    }
+
     throw new SendError(
       "other",
-      `HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
-      "Ask the user to check `tidepool status` and the daemon log.",
+      serverMessage ?? `HTTP ${res.status}`,
+      hint || "Ask the user to check `tidepool status` and the daemon log.",
     );
   }
 

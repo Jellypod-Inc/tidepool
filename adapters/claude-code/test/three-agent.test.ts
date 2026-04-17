@@ -9,25 +9,33 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { start } from "../src/start.js";
 
 function startMockRelay(adapters: Record<string, { httpPort: number }>) {
+  // Session registry: sessionId → agent name
+  const sessionToName: Record<string, string> = {};
+
   const app = express();
   app.use(express.json());
   // Stub session endpoint so start() can register without a real daemon.
   app.post("/.well-known/tidepool/agents/:name/session", (req, res) => {
+    const name = req.params.name;
+    const sessionId = `session-${name}-${Date.now()}`;
+    sessionToName[sessionId] = name;
     res.writeHead(200, { "Content-Type": "text/event-stream" });
-    res.write(`event: session.registered\ndata: {"sessionId":"mock-session"}\n\n`);
-    res.write(`event: peers.snapshot\ndata: ${JSON.stringify(Object.keys(adapters).filter((k) => k !== req.params.name).map((h) => ({ handle: h, did: null })))}\n\n`);
+    res.write(`event: session.registered\ndata: ${JSON.stringify({ sessionId })}\n\n`);
+    res.write(`event: peers.snapshot\ndata: ${JSON.stringify(Object.keys(adapters).filter((k) => k !== name).map((h) => ({ handle: h, did: null })))}\n\n`);
     // Leave open to keep the SSE session alive
   });
   app.post("/:tenant/message\\:send", async (req, res) => {
-    const sender = req.header("x-agent");
-    if (!sender || !adapters[sender]) {
-      res.status(403).json({ error: "X-Agent invalid" });
+    // Identify sender from session token
+    const sessionId = req.header("x-session-id") ?? "";
+    const sender = sessionToName[sessionId];
+    if (!sender) {
+      res.status(403).json({ error: { code: "origin_denied", message: "Session not recognized" } });
       return;
     }
     const tenant = req.params.tenant;
     const target = adapters[tenant];
     if (!target) {
-      res.status(404).json({ error: "tenant not found" });
+      res.status(404).json({ error: { code: "peer_not_found", message: `No peer named "${tenant}"` } });
       return;
     }
     const body = {

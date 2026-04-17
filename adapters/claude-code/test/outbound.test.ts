@@ -13,7 +13,7 @@ function okAck() {
 }
 
 describe("sendOutbound", () => {
-  it("posts to /:peer/message:send with X-Agent header and supplied contextId", async () => {
+  it("posts to /:peer/message:send with Origin header and supplied contextId", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(okAck());
     const result = await sendOutbound({
       peer: "bob",
@@ -28,8 +28,9 @@ describe("sendOutbound", () => {
     expect(url).toBe("http://127.0.0.1:9901/bob/message:send");
     expect((init as RequestInit).headers).toMatchObject({
       "Content-Type": "application/json",
-      "X-Agent": "alice",
+      Origin: "http://127.0.0.1:9901",
     });
+    expect(((init as RequestInit).headers as Record<string, string>)["X-Agent"]).toBeUndefined();
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.message).toMatchObject({
       messageId: result.messageId,
@@ -67,11 +68,12 @@ describe("sendOutbound", () => {
     ).rejects.toMatchObject({ kind: "daemon-down" });
   });
 
-  it("rejects with peer-not-registered on 403/404 from server", async () => {
+  it("rejects with peer-not-registered on structured peer_not_found error", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: "Agent not found" }), {
-        status: 404,
-      }),
+      new Response(
+        JSON.stringify({ error: { code: "peer_not_found", message: `No peer named "bob"` } }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      ),
     );
     await expect(
       sendOutbound({
@@ -84,11 +86,12 @@ describe("sendOutbound", () => {
     ).rejects.toMatchObject({ kind: "peer-not-registered" });
   });
 
-  it("rejects with peer-unreachable on 504 from server", async () => {
+  it("rejects with peer-unreachable on structured peer_unreachable error", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: "Local agent unreachable" }), {
-        status: 504,
-      }),
+      new Response(
+        JSON.stringify({ error: { code: "peer_unreachable", message: `"bob" unreachable` } }),
+        { status: 502, headers: { "Content-Type": "application/json" } },
+      ),
     );
     await expect(
       sendOutbound({
@@ -161,5 +164,124 @@ describe("sendOutbound", () => {
       deps: { localPort: 9901, fetchImpl },
     });
     expect(captured.message).not.toHaveProperty("metadata");
+  });
+});
+
+describe("sendOutbound — A2A-native headers", () => {
+  it("POSTs without X-Agent, with Origin, to /{peer}/message:send", async () => {
+    const captured: { url: string; headers: Record<string, string>; body: any } = {
+      url: "", headers: {}, body: null,
+    };
+    const fakeFetch = (async (url: string, init: RequestInit) => {
+      captured.url = url;
+      captured.headers = {} as Record<string, string>;
+      const hdrs = (init.headers as any) ?? {};
+      for (const [k, v] of Object.entries(hdrs)) captured.headers[k] = String(v);
+      captured.body = JSON.parse(init.body as string);
+      return new Response(
+        JSON.stringify({ id: "t-1", status: { state: "completed" } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const { sendOutbound } = await import("../src/outbound.js");
+    await sendOutbound({
+      peer: "bob",
+      contextId: "ctx-1",
+      text: "hi",
+      self: "alice",
+      deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
+    });
+    expect(captured.url).toBe("http://127.0.0.1:4443/bob/message:send");
+    expect(captured.headers["X-Agent"]).toBeUndefined();
+    expect(captured.headers["x-agent"]).toBeUndefined();
+    // Origin header present and matches daemon URL
+    expect(captured.headers.Origin ?? captured.headers.origin).toBe(
+      "http://127.0.0.1:4443",
+    );
+    expect(captured.body.message.parts[0].text).toBe("hi");
+  });
+
+  it("maps structured peer_not_found error to SendError(peer-not-registered)", async () => {
+    const fakeFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "peer_not_found",
+            message: `No peer named "charlie"`,
+            hint: "call list_peers",
+          },
+        }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const { sendOutbound, SendError } = await import("../src/outbound.js");
+    await expect(
+      sendOutbound({
+        peer: "charlie",
+        contextId: "ctx-1",
+        text: "hi",
+        self: "alice",
+        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
+      }),
+    ).rejects.toMatchObject({
+      kind: "peer-not-registered",
+      hint: "call list_peers",
+    });
+  });
+
+  it("maps structured peer_unreachable error to SendError(peer-unreachable)", async () => {
+    const fakeFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "peer_unreachable",
+            message: `"bob" unreachable`,
+            hint: "peer may be offline",
+          },
+        }),
+        { status: 502, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const { sendOutbound, SendError } = await import("../src/outbound.js");
+    await expect(
+      sendOutbound({
+        peer: "bob",
+        contextId: "ctx-1",
+        text: "hi",
+        self: "alice",
+        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
+      }),
+    ).rejects.toMatchObject({
+      kind: "peer-unreachable",
+    });
+  });
+
+  it("maps structured agent_offline error to SendError(peer-not-registered)", async () => {
+    // agent_offline from remote daemon ≈ "peer not currently accepting" from
+    // caller's POV. Classify as peer-not-registered for retry/hint purposes.
+    const fakeFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "agent_offline",
+            message: `"bob" offline`,
+          },
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const { sendOutbound } = await import("../src/outbound.js");
+    await expect(
+      sendOutbound({
+        peer: "bob",
+        contextId: "ctx-1",
+        text: "hi",
+        self: "alice",
+        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
+      }),
+    ).rejects.toMatchObject({
+      kind: "peer-not-registered",
+    });
   });
 });
