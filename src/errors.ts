@@ -115,3 +115,109 @@ export function malformedRequestResponse(
     taskId,
   );
 }
+
+// ----- Structured error responses (new taxonomy per 2026-04-17 design) -----
+
+export interface StructuredErrorResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: { error: { code: string; message: string; hint?: string } };
+}
+
+export interface A2AJsonRpcErrorResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: {
+    jsonrpc: "2.0";
+    error: { code: number; message: string; data?: unknown };
+    id: string;
+  };
+}
+
+export function structuredError(
+  statusCode: number,
+  code: string,
+  message: string,
+  hint?: string,
+): StructuredErrorResponse {
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json" },
+    body: { error: { code, message, ...(hint ? { hint } : {}) } },
+  };
+}
+
+export function originDeniedResponse(origin: string): StructuredErrorResponse {
+  return structuredError(
+    403,
+    "origin_denied",
+    `Origin not allowed: ${origin}`,
+    "Only localhost origins may access the tidepool local interface.",
+  );
+}
+
+export function peerNotFoundResponse(handle: string): StructuredErrorResponse {
+  return structuredError(
+    404,
+    "peer_not_found",
+    `No peer named "${handle}" is in friends.`,
+    "Call GET /.well-known/tidepool/peers to list reachable peers.",
+  );
+}
+
+export function sessionConflictResponse(name: string): StructuredErrorResponse {
+  return structuredError(
+    409,
+    "session_conflict",
+    `Agent "${name}" already has an active session.`,
+    "Another adapter process is registered as this agent. Use `tidepool status` to inspect.",
+  );
+}
+
+export function peerUnreachableResponse(handle: string): StructuredErrorResponse {
+  return structuredError(
+    502,
+    "peer_unreachable",
+    `Peer "${handle}" did not accept the connection.`,
+    "The peer's daemon may be offline or unreachable over the network.",
+  );
+}
+
+export function agentOfflineResponse(handle: string): StructuredErrorResponse {
+  return structuredError(
+    503,
+    "agent_offline",
+    `Agent "${handle}" is not currently registered.`,
+    "The agent's adapter may have crashed or not yet started.",
+  );
+}
+
+export function peerTimeoutResponse(
+  handle: string,
+  timeoutSeconds: number,
+): StructuredErrorResponse {
+  return structuredError(
+    504,
+    "peer_timeout",
+    `Peer "${handle}" did not respond within ${timeoutSeconds} seconds.`,
+    "The peer may be slow or unreachable. Retry if transient.",
+  );
+}
+
+export function unsupportedOperationResponse(
+  method: string,
+  messageId: string,
+): A2AJsonRpcErrorResponse {
+  return {
+    statusCode: 405,
+    headers: { "Content-Type": "application/json" },
+    body: {
+      jsonrpc: "2.0",
+      error: {
+        code: -32006,
+        message: `Operation not supported: ${method}. This tidepool instance is prose-only and does not implement task methods.`,
+      },
+      id: messageId,
+    },
+  };
+}
