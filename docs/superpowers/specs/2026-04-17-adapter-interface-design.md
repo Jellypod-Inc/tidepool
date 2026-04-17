@@ -118,16 +118,13 @@ A2A 1.0 flags `tasks/get`, `tasks/list`, `tasks/cancel` as MUST. tidepool's pros
    - No other adapter currently holds alice's session
 4. Daemon responds `200 OK` with `Content-Type: text/event-stream` and keeps the connection open.
 5. Daemon merges the adapter-supplied `card` fragment with its own transport fields (`supportedInterfaces`, `securitySchemes`, `name`, `provider`, `signatures`) to produce alice's public agent card.
-6. Daemon emits initial events on the stream:
+6. Daemon emits the initial event on the stream:
    ```
    event: session.registered
    data: {"sessionId":"<uuid>"}
-
-   event: peers.snapshot
-   data: [{"handle":"bob","did":null},{"handle":"charlie","did":null}]
    ```
-7. Daemon re-emits `peers.snapshot` any time the friend set changes (add/remove/rename).
-8. Standard SSE keepalives (`: ping\n\n` comment lines) every 15s.
+7. Standard SSE keepalives (`: ping\n\n` comment lines) every 15s. No other events flow on the stream.
+8. Adapters learn peers on demand via `GET /.well-known/tidepool/peers` (not via pushed events).
 
 ### Termination
 
@@ -156,11 +153,19 @@ First-come-first-served. Take-over semantics are explicitly rejected for v1 — 
 | Event | Purpose | Payload |
 |-------|---------|---------|
 | `session.registered` | Initial ack after successful registration | `{ sessionId }` |
-| `peers.snapshot` | Current friend list; sent on register and on any change | Array of `{ handle, did }` |
 
-That's it. No `peer.online`, no `peer.offline`, no card update events. Adapters refresh from snapshots; the daemon never has to reconcile incremental change deltas.
+After `session.registered`, the stream carries only SSE keepalive pings
+(`: ping\n\n` every 15s). Peer-list updates are NOT pushed — adapters fetch
+`GET /.well-known/tidepool/peers` on demand. Rationale:
 
-Future events (deferred): peer DID rotation notices, in-band peer reachability signals once tidepool has real data on them.
+- `list_peers` is called rarely (per LLM turn at most); localhost fetch cost
+  is negligible.
+- Cache invalidation via push is bug-prone vs. fetch-on-demand.
+- Staleness fails cleanly via `peer_not_found` on send; no silent misroute.
+
+The session's single valuable property is liveness + session exclusivity; that
+doesn't need events. Future events (deferred): peer DID rotation notices,
+in-band peer reachability signals once tidepool has real data on them.
 
 ## Data flow
 
@@ -319,7 +324,7 @@ Scope: ~150 lines changed, no architectural rework.
 | `adapters/claude-code/src/outbound.ts` | Drop `X-Agent` header; update URL builder to match new local interface shape (if the path format changes materially); error-code mapping updates for new `code` taxonomy |
 | `adapters/claude-code/src/start.ts` | Add SSE session open + registration payload construction; on session close, shut down the adapter cleanly |
 | `adapters/claude-code/src/channel.ts` | No change — MCP tool layer is prose-facing; A2A details live below it |
-| `adapters/claude-code/src/config.ts` | `listPeerHandles` changes from config-file read to consuming `peers.snapshot` events from the SSE session (cached in-process) |
+| `adapters/claude-code/src/peers-client.ts` | New helper: `listPeers` fetches `GET /.well-known/tidepool/peers` on demand (no pushed snapshots, no in-process cache) |
 
 The `channel.ts` INSTRUCTIONS string and MCP tool definitions are unaffected — the agent-facing contract (send by handle, reply by context_id, list_peers) is preserved.
 
@@ -327,7 +332,7 @@ The `channel.ts` INSTRUCTIONS string and MCP tool definitions are unaffected —
 
 ### DID (task 04)
 
-Zero impact on the adapter interface. DID changes peer trust (mTLS key resolution) and peer discovery (DHT announces), both below the adapter layer. The only surface change is that `peers.snapshot` and `GET /.well-known/tidepool/peers` will carry non-null `did` values; adapters that ignore the field continue to work.
+Zero impact on the adapter interface. DID changes peer trust (mTLS key resolution) and peer discovery (DHT announces), both below the adapter layer. The only surface change is that `GET /.well-known/tidepool/peers` will carry non-null `did` values; adapters that ignore the field continue to work.
 
 ### Bearer tokens (future)
 
@@ -356,7 +361,7 @@ Registration payload extends from `{endpoint, card}` to `{agents: [{name, endpoi
 - [ ] Agent card merged correctly: adapter-supplied fields override defaults; daemon-owned fields always come from daemon.
 - [ ] Adapter disconnect frees the agent slot immediately; subsequent `GET /{handle}/.well-known/agent-card.json` returns `503 agent_offline`.
 - [ ] Claude Code adapter passes its existing e2e tests against the new interface.
-- [ ] `peers.snapshot` event fires on initial connect and any friend-set change (add via `tidepool friend add`, remove via `tidepool friend remove`).
+- [ ] `GET /.well-known/tidepool/peers` returns the current friend list; adapters fetch on demand (no pushed snapshot events on the SSE session).
 - [ ] All error responses use the structured `{error: {code, message, hint}}` shape; `code` values are in the taxonomy above.
 
 ## Effort estimate
