@@ -1,0 +1,42 @@
+adapters/claude-code/src/start.ts
+  3b3e52d822895f52 92
+adapters/claude-code/test/config.test.ts
+  3b3e52d822895f52 77-82
+adapters/claude-code/src/bin/cli.ts
+  3b3e52d822895f52 37,40
+adapters/claude-code/src/config.ts
+  3b3e52d822895f52 7-8,60-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "031f09363204639182c09d66bbd80243b789d2e0",
+  "prompts": {
+    "3b3e52d822895f52": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c2662761-d6fd-4442-be4c-60d55227aa77",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 16,
+      "accepted_lines": 25,
+      "overriden_lines": 0
+    },
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1550,
+      "overriden_lines": 0
+    }
+  }
+}
