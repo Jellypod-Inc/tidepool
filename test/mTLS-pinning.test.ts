@@ -103,7 +103,6 @@ describe("outbound mTLS fingerprint pinning", () => {
         },
         agents: {
           "alice-dev": {
-            localEndpoint: `http://127.0.0.1:${ALICE_MOCK}`,
             rateLimit: "50/hour",
             description: "Alice's dev agent",
             timeoutSeconds: 5,
@@ -133,7 +132,6 @@ describe("outbound mTLS fingerprint pinning", () => {
         },
         agents: {
           "rust-expert": {
-            localEndpoint: `http://127.0.0.1:${MALLORY_MOCK}`,
             rateLimit: "50/hour",
             description: "NOT ACTUALLY BOB",
             timeoutSeconds: 5,

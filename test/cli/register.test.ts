@@ -17,13 +17,11 @@ describe("runRegister", () => {
     const result = await runRegister({
       configDir: dir,
       name: "alice-dev",
-      localEndpoint: "http://127.0.0.1:28800",
     });
 
     expect(result.peerFingerprint).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const cfg = loadServerConfig(path.join(dir, "server.toml"));
-    expect(cfg.agents["alice-dev"].localEndpoint).toBe("http://127.0.0.1:28800");
     expect(cfg.agents["alice-dev"].rateLimit).toBe("50/hour");
   });
 
@@ -33,7 +31,6 @@ describe("runRegister", () => {
     await runRegister({
       configDir: dir,
       name: "alice-dev",
-      localEndpoint: "http://127.0.0.1:28800",
     });
     expect(fs.existsSync(path.join(dir, "agents/alice-dev/identity.crt"))).toBe(false);
     expect(fs.existsSync(path.join(dir, "agents/alice-dev/identity.key"))).toBe(false);
@@ -47,7 +44,6 @@ describe("runRegister", () => {
       runRegister({
         configDir: dir,
         name: "alice-dev",
-        localEndpoint: "http://127.0.0.1:28800",
       }),
     ).rejects.toThrow(/init/i);
   });
@@ -55,9 +51,9 @@ describe("runRegister", () => {
   it("refuses to overwrite an existing agent unless --force is set", async () => {
     const dir = tmp();
     await runInit({ configDir: dir });
-    await runRegister({ configDir: dir, name: "alice-dev", localEndpoint: "http://127.0.0.1:28800" });
+    await runRegister({ configDir: dir, name: "alice-dev" });
     await expect(
-      runRegister({ configDir: dir, name: "alice-dev", localEndpoint: "http://127.0.0.1:28801" }),
+      runRegister({ configDir: dir, name: "alice-dev" }),
     ).rejects.toThrow(/already registered/i);
   });
 
@@ -67,15 +63,15 @@ describe("runRegister", () => {
     await runRegister({
       configDir: dir,
       name: "alice-dev",
-      localEndpoint: "http://127.0.0.1:28800",
+      rateLimit: "10/hour",
     });
     await runRegister({
       configDir: dir,
       name: "alice-dev",
-      localEndpoint: "http://127.0.0.1:28801",
+      rateLimit: "20/hour",
       force: true,
     });
     const cfg = loadServerConfig(path.join(dir, "server.toml"));
-    expect(cfg.agents["alice-dev"].localEndpoint).toBe("http://127.0.0.1:28801");
+    expect(cfg.agents["alice-dev"].rateLimit).toBe("20/hour");
   });
 });

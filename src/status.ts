@@ -26,7 +26,6 @@ export function buildStatusOutput(
     lines.push(`Agents (${agentNames.length})`);
     for (const [name, agent] of Object.entries(config.agents)) {
       lines.push(`  ${name}`);
-      lines.push(`    Endpoint: ${agent.localEndpoint}`);
       lines.push(`    Rate limit: ${agent.rateLimit}`);
       lines.push(`    Description: ${agent.description}`);
     }

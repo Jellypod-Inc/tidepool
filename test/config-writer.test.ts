@@ -16,7 +16,7 @@ describe("writeServerConfig", () => {
     const cfg = {
       server: { port: 9900, host: "0.0.0.0", localPort: 9901, rateLimit: "100/hour", streamTimeoutSeconds: 300 },
       agents: {
-        "alice-dev": { localEndpoint: "http://127.0.0.1:28800", rateLimit: "50/hour", description: "dev", timeoutSeconds: 30 },
+        "alice-dev": { rateLimit: "50/hour", description: "dev", timeoutSeconds: 30 },
       },
       connectionRequests: { mode: "deny" as const },
       discovery: { providers: ["static"], cacheTtlSeconds: 300 },
@@ -25,7 +25,7 @@ describe("writeServerConfig", () => {
     writeServerConfig(p, cfg);
     const reloaded = loadServerConfig(p);
     expect(reloaded.server.port).toBe(9900);
-    expect(reloaded.agents["alice-dev"].localEndpoint).toBe("http://127.0.0.1:28800");
+    expect(reloaded.agents["alice-dev"].rateLimit).toBe("50/hour");
     expect(reloaded.validation.mode).toBe("warn");
   });
 });

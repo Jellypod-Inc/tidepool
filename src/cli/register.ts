@@ -8,7 +8,6 @@ import type { ServerConfig } from "../types.js";
 interface RunRegisterOpts {
   configDir: string;
   name: string;
-  localEndpoint: string;
   rateLimit?: string;
   description?: string;
   timeoutSeconds?: number;
@@ -34,7 +33,6 @@ export async function runRegister(
   }
 
   cfg.agents[opts.name] = {
-    localEndpoint: opts.localEndpoint,
     rateLimit: opts.rateLimit ?? "50/hour",
     description: opts.description ?? "",
     timeoutSeconds: opts.timeoutSeconds ?? 30,

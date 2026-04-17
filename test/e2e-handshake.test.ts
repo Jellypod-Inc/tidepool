@@ -10,6 +10,7 @@ import { generateIdentity, getFingerprint } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 import { loadFriendsConfig } from "../src/config.js";
 import type { RemoteAgent } from "../src/types.js";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 describe("e2e: connection handshake", () => {
   let tmpDir: string;
@@ -17,6 +18,7 @@ describe("e2e: connection handshake", () => {
   let bobServer: { close: () => void };
   let bobMockAgent: http.Server;
   let aliceCardServer: http.Server;
+  let bobSession: TestSession;
 
   let aliceCert: Buffer;
   let aliceKey: Buffer;
@@ -74,7 +76,6 @@ describe("e2e: connection handshake", () => {
         },
         agents: {
           "rust-expert": {
-            localEndpoint: "http://127.0.0.1:48801",
             rateLimit: "50/hour",
             description: "Bob's Rust expert",
           },
@@ -123,10 +124,15 @@ describe("e2e: connection handshake", () => {
       remoteAgents: [aliceRemote],
     });
 
+    // Register bob's session so inbound messages can be delivered to his mock agent.
+    bobSession = await registerTestSession(39901, "rust-expert", "http://127.0.0.1:48801");
+
     await new Promise((r) => setTimeout(r, 200));
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    bobSession?.controller.abort();
+    await bobSession?.done;
     bobMockAgent?.close();
     bobServer?.close();
     aliceCardServer?.close();

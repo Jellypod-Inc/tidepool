@@ -12,6 +12,7 @@ import { loadFriendsConfig } from "../src/config.js";
 import { createDirectoryApp } from "../src/directory-server.js";
 import { DirectoryProvider } from "../src/discovery/directory-provider.js";
 import type { RemoteAgent } from "../src/types.js";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 /**
  * End-to-end: discovery → connect.
@@ -39,6 +40,7 @@ describe("e2e: discovery → connect → A2A", () => {
   let aliceKey: Buffer;
   let aliceFingerprint: string;
   let bobFingerprint: string;
+  let bobSession: TestSession;
 
   // Ports — chosen to avoid collision with other e2e test files.
   const DIRECTORY_PORT = 58900;
@@ -107,7 +109,6 @@ describe("e2e: discovery → connect → A2A", () => {
         },
         agents: {
           "rust-expert": {
-            localEndpoint: `http://127.0.0.1:${BOB_MOCK}`,
             rateLimit: "50/hour",
             description: "Bob's Rust expert",
             timeoutSeconds: 5,
@@ -158,6 +159,9 @@ describe("e2e: discovery → connect → A2A", () => {
       remoteAgents: [aliceRemote],
     });
 
+    // Register bob's session so inbound messages can be routed to his mock agent.
+    bobSession = await registerTestSession(BOB_LOCAL, "rust-expert", `http://127.0.0.1:${BOB_MOCK}`);
+
     // Bob advertises himself to the directory on boot. In production this
     // would be triggered by the server wiring; here we drive it explicitly
     // to keep the test focused on the discovery→connect flow.
@@ -173,7 +177,9 @@ describe("e2e: discovery → connect → A2A", () => {
     await new Promise((r) => setTimeout(r, 100));
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    bobSession?.controller.abort();
+    await bobSession?.done;
     bobMockAgent?.close();
     bobServer?.close();
     aliceCardServer?.close();

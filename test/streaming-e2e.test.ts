@@ -8,6 +8,7 @@ import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 import { formatSseEvent } from "../src/a2a.js";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 function createStreamingMockAgent(port: number, name: string): http.Server {
   const app = express();
@@ -115,6 +116,7 @@ describe("e2e: SSE streaming through local interface", () => {
   let configDir: string;
   let mockAgent: http.Server;
   let server: { close: () => void };
+  let agentSession: TestSession;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-e2e-"));
@@ -138,7 +140,6 @@ describe("e2e: SSE streaming through local interface", () => {
         },
         agents: {
           "streaming-agent": {
-            localEndpoint: "http://127.0.0.1:59800",
             rateLimit: "50/hour",
             description: "A streaming agent",
             timeoutSeconds: 30,
@@ -157,9 +158,12 @@ describe("e2e: SSE streaming through local interface", () => {
     mockAgent = createStreamingMockAgent(59800, "streaming-agent");
 
     server = await startServer({ configDir });
+    agentSession = await registerTestSession(59901, "streaming-agent", "http://127.0.0.1:59800");
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    agentSession?.controller.abort();
+    await agentSession?.done;
     mockAgent?.close();
     server?.close();
     fs.rmSync(tmpDir, { recursive: true });
@@ -217,6 +221,7 @@ describe("e2e: SSE stream timeout", () => {
   let configDir: string;
   let hangingAgent: http.Server;
   let server: { close: () => void };
+  let agentSession: TestSession;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-timeout-"));
@@ -240,7 +245,6 @@ describe("e2e: SSE stream timeout", () => {
         },
         agents: {
           "slow-agent": {
-            localEndpoint: "http://127.0.0.1:59820",
             rateLimit: "50/hour",
             description: "A slow agent that hangs",
             timeoutSeconds: 30,
@@ -259,9 +263,12 @@ describe("e2e: SSE stream timeout", () => {
     hangingAgent = createHangingMockAgent(59820);
 
     server = await startServer({ configDir });
+    agentSession = await registerTestSession(59911, "slow-agent", "http://127.0.0.1:59820");
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    agentSession?.controller.abort();
+    await agentSession?.done;
     hangingAgent?.close();
     server?.close();
     fs.rmSync(tmpDir, { recursive: true });
@@ -334,6 +341,7 @@ describe("upstream SSE validation: enforce mode", () => {
   let configDir: string;
   let mockAgent: http.Server;
   let server: { close: () => void };
+  let agentSession: TestSession;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-enforce-"));
@@ -357,7 +365,6 @@ describe("upstream SSE validation: enforce mode", () => {
         },
         agents: {
           "strict-stream-agent": {
-            localEndpoint: "http://127.0.0.1:58952",
             rateLimit: "50/hour",
             description: "Streaming agent whose upstream sends malformed SSE",
             timeoutSeconds: 30,
@@ -377,9 +384,12 @@ describe("upstream SSE validation: enforce mode", () => {
     mockAgent = createMalformedSseMockAgent(58952);
 
     server = await startServer({ configDir });
+    agentSession = await registerTestSession(58951, "strict-stream-agent", "http://127.0.0.1:58952");
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    agentSession?.controller.abort();
+    await agentSession?.done;
     mockAgent?.close();
     server?.close();
     fs.rmSync(tmpDir, { recursive: true });
@@ -447,6 +457,7 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
   let configDir: string;
   let mockAgent: http.Server;
   let server: { close: () => void };
+  let agentSession: TestSession;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-bad-json-"));
@@ -470,7 +481,6 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
         },
         agents: {
           "bad-json-agent": {
-            localEndpoint: "http://127.0.0.1:58962",
             rateLimit: "50/hour",
             description: "Streaming agent whose upstream sends invalid JSON",
             timeoutSeconds: 30,
@@ -490,9 +500,12 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
     mockAgent = createInvalidJsonSseMockAgent(58962);
 
     server = await startServer({ configDir });
+    agentSession = await registerTestSession(58961, "bad-json-agent", "http://127.0.0.1:58962");
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    agentSession?.controller.abort();
+    await agentSession?.done;
     mockAgent?.close();
     server?.close();
     fs.rmSync(tmpDir, { recursive: true });

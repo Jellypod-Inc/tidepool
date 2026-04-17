@@ -31,10 +31,12 @@ export function renderLayout(opts: LayoutOpts): string {
   <script src="/dashboard/htmx.min.js"></script>
 </head>
 <body>
-  <nav>
-    <div class="brand">tidepool</div>
-    ${nav}
-  </nav>
+  <header>
+    <span class="brand">tidepool</span>
+    <nav>
+      ${nav}
+    </nav>
+  </header>
   <main id="content">
     ${opts.content}
   </main>
@@ -49,6 +51,14 @@ export function renderLayout(opts: LayoutOpts): string {
         toast.textContent = "Copied: " + full.slice(0, 20) + "\\u2026";
         toast.classList.add("show");
         setTimeout(function() { toast.classList.remove("show"); }, 2000);
+      });
+    });
+    document.body.addEventListener("htmx:pushedIntoHistory", function() {
+      var path = window.location.pathname;
+      document.querySelectorAll("nav a").forEach(function(a) {
+        var href = a.getAttribute("href");
+        var isActive = path === href || (href === "/dashboard" && path === "/dashboard/");
+        a.classList.toggle("active", isActive);
       });
     });
   </script>

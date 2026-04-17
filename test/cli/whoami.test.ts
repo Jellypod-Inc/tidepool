@@ -14,8 +14,8 @@ describe("runWhoami", () => {
   it("returns peer fingerprint and sorted agent list", async () => {
     const dir = tmp();
     await runInit({ configDir: dir });
-    await runRegister({ configDir: dir, name: "alice-dev", localEndpoint: "http://127.0.0.1:28800" });
-    await runRegister({ configDir: dir, name: "rust-expert", localEndpoint: "http://127.0.0.1:38800" });
+    await runRegister({ configDir: dir, name: "alice-dev" });
+    await runRegister({ configDir: dir, name: "rust-expert" });
 
     const result = await runWhoami({ configDir: dir });
     expect(result.peerFingerprint).toMatch(/^sha256:[0-9a-f]{64}$/);

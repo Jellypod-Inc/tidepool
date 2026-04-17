@@ -7,6 +7,7 @@ import path from "node:path";
 import TOML from "@iarna/toml";
 import express from "express";
 import http from "http";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Pick ports unlikely to collide with other tests in this suite.
 const PUBLIC_PORT = 49820;
@@ -29,13 +30,11 @@ async function setupConfig() {
       },
       agents: {
         alice: {
-          localEndpoint: `http://127.0.0.1:${ALICE_ENDPOINT_PORT}`,
           rateLimit: "100/minute",
           description: "",
           timeoutSeconds: 30,
         },
         bob: {
-          localEndpoint: `http://127.0.0.1:${BOB_ENDPOINT_PORT}`,
           rateLimit: "100/minute",
           description: "",
           timeoutSeconds: 30,
@@ -55,6 +54,7 @@ describe("metadata.from injection on local→local forward", () => {
   let bobServer: http.Server;
   let configDir: string;
   let localUrl: string;
+  let bobSession: TestSession;
   const received: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
@@ -86,9 +86,18 @@ describe("metadata.from injection on local→local forward", () => {
     const addr = server.localServer.address();
     if (typeof addr !== "object" || !addr) throw new Error("no address");
     localUrl = `http://127.0.0.1:${addr.port}`;
+
+    // Register bob's session so the daemon can route inbound messages to his endpoint.
+    bobSession = await registerTestSession(
+      LOCAL_PORT,
+      "bob",
+      `http://127.0.0.1:${BOB_ENDPOINT_PORT}`,
+    );
   });
 
   afterAll(async () => {
+    bobSession?.controller.abort();
+    await bobSession?.done;
     server.close();
     await new Promise<void>((resolve) => bobServer.close(() => resolve()));
   });

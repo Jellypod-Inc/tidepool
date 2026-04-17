@@ -30,12 +30,11 @@ export function renderHomePage(ctx: HomeContext): string {
   const agents = Object.entries(config.agents);
 
   const agentRows = agents.length === 0
-    ? `<tr><td colspan="4" class="placeholder">No agents registered</td></tr>`
+    ? `<tr><td colspan="3" class="placeholder">No agents registered</td></tr>`
     : agents.map(([name, agent]) => `
         <tr>
           <td>${name}</td>
           <td>${agent.description || "—"}</td>
-          <td>${agent.localEndpoint}</td>
           <td>${agent.rateLimit}</td>
         </tr>`).join("");
 
@@ -59,7 +58,7 @@ export function renderHomePage(ctx: HomeContext): string {
     <h2>Agents</h2>
     <table>
       <thead>
-        <tr><th>Name</th><th>Description</th><th>Endpoint</th><th>Rate limit</th></tr>
+        <tr><th>Name</th><th>Description</th><th>Rate limit</th></tr>
       </thead>
       <tbody>
         ${agentRows}

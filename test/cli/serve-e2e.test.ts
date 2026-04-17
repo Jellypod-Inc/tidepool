@@ -26,7 +26,6 @@ describe("runServe (programmatic)", () => {
     await runRegister({
       configDir: dir,
       name: "alice-dev",
-      localEndpoint: "http://127.0.0.1:48800",
     });
 
     const serverToml = fs

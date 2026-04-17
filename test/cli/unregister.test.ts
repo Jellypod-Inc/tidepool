@@ -18,12 +18,10 @@ describe("runUnregister", () => {
     await runRegister({
       configDir: dir,
       name: "alice",
-      localEndpoint: "http://127.0.0.1:28800",
     });
     await runRegister({
       configDir: dir,
       name: "bob",
-      localEndpoint: "http://127.0.0.1:28801",
     });
 
     await runUnregister({ configDir: dir, name: "alice" });
@@ -39,7 +37,6 @@ describe("runUnregister", () => {
     await runRegister({
       configDir: dir,
       name: "alice",
-      localEndpoint: "http://127.0.0.1:28800",
     });
     await expect(
       runUnregister({ configDir: dir, name: "ghost" }),

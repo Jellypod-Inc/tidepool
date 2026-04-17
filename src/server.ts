@@ -622,51 +622,58 @@ function createLocalApp(
     const isStream = action === "message:stream";
 
     if (!remote) {
-      // Not a remote agent — could be forwarding to local agent (passthrough)
-      const agent = config.agents[tenant];
-      if (agent) {
-        const targetUrl = `${agent.localEndpoint}/${action}`;
+      // Not a remote agent — forward to local agent via session registry endpoint.
+      const session = sessionRegistry.get(tenant);
+      if (!session) {
+        // Agent is registered in config but no adapter has opened a session yet.
+        res.status(503).json({
+          status: { state: "failed" },
+          artifacts: [
+            {
+              artifactId: "error",
+              parts: [{ kind: "text", text: `Agent "${tenant}" is offline (no active session)` }],
+            },
+          ],
+        });
+        return;
+      }
+      const targetUrl = `${session.endpoint}/${action}`;
 
-        if (isStream) {
-          const taskId = req.body?.message?.messageId ?? uuidv4();
-          try {
-            const upstreamResponse = await fetch(targetUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(injectMetadataFrom(req.body, senderAgent)),
-            });
-
-            await proxyUpstreamOrFail({
-              upstreamResponse,
-              downstream: res,
-              timeoutMs: streamTimeoutMs,
-              taskId,
-              validationMode: config.validation.mode,
-            });
-          } catch {
-            if (!res.headersSent) {
-              res.status(504).json({ error: "Local agent unreachable" });
-            }
-          }
-          return;
-        }
-
+      if (isStream) {
+        const taskId = req.body?.message?.messageId ?? uuidv4();
         try {
-          const response = await fetch(targetUrl, {
+          const upstreamResponse = await fetch(targetUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(injectMetadataFrom(req.body, senderAgent)),
           });
-          const data = await response.json();
-          res.status(response.status).json(data);
+
+          await proxyUpstreamOrFail({
+            upstreamResponse,
+            downstream: res,
+            timeoutMs: streamTimeoutMs,
+            taskId,
+            validationMode: config.validation.mode,
+          });
         } catch {
-          res.status(504).json({ error: "Local agent unreachable" });
+          if (!res.headersSent) {
+            res.status(504).json({ error: "Local agent unreachable" });
+          }
         }
         return;
       }
 
-      // Unreachable: fast-path at the top of this handler guarantees that if
-      // !remote, the tenant is a known local agent (checked above).
+      try {
+        const response = await fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(injectMetadataFrom(req.body, senderAgent)),
+        });
+        const data = await response.json();
+        res.status(response.status).json(data);
+      } catch {
+        res.status(504).json({ error: "Local agent unreachable" });
+      }
       return;
     }
 

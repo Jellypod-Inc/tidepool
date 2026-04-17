@@ -150,7 +150,6 @@ describe("v1.0 conformance: Agent Card emitted by the server validates against A
         },
         agents: {
           probe: {
-            localEndpoint: "http://127.0.0.1:57702",
             rateLimit: "50/hour",
             description: "probe",
             timeoutSeconds: 5,

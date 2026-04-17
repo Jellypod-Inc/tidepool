@@ -25,7 +25,6 @@ const serverConfig: ServerConfig = {
   server: { port: 9900, host: "0.0.0.0", localPort: 9901, rateLimit: "100/hour" },
   agents: {
     "rust-expert": {
-      localEndpoint: "http://localhost:18800",
       rateLimit: "50/hour",
       description: "Rust expert",
       timeoutSeconds: 30,

@@ -12,13 +12,11 @@ const serverConfig: ServerConfig = {
   },
   agents: {
     "rust-expert": {
-      localEndpoint: "http://localhost:18800",
       rateLimit: "50/hour",
       description: "Expert in Rust and systems programming",
       timeoutSeconds: 30,
     },
     "code-reviewer": {
-      localEndpoint: "http://localhost:18801",
       rateLimit: "30/hour",
       description: "Code review and best practices",
       timeoutSeconds: 60,
@@ -58,7 +56,6 @@ describe("buildStatusOutput", () => {
 
     expect(output).toContain("rust-expert");
     expect(output).toContain("50/hour");
-    expect(output).toContain("http://localhost:18800");
     expect(output).toContain("code-reviewer");
     expect(output).toContain("30/hour");
   });

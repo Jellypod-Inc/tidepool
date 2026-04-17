@@ -6,7 +6,7 @@ import { renderLayout } from "./layout.js";
 import { renderHomePage, type HomeContext } from "./pages/home.js";
 import { renderFriendsPage, renderFriendsTable, handleAddFriend, handleRemoveFriend } from "./pages/friends.js";
 import { renderThreadsPage, renderThreadsTable } from "./pages/threads.js";
-import { renderConfigPage, renderConfigContent } from "./pages/config.js";
+import { renderConfigPage, renderConfigContent, handleOpenFile, handleOpenDir } from "./pages/config.js";
 import { renderAuditPage } from "./pages/audit.js";
 import type { MessageLog } from "./message-log.js";
 
@@ -83,6 +83,14 @@ export function mountDashboard(
 
   app.post("/dashboard/config/reload", (_req, res) => {
     res.send(renderConfigContent(configDir));
+  });
+
+  app.post("/dashboard/config/open/:filename", (req, res) => {
+    handleOpenFile(req, res, configDir);
+  });
+
+  app.post("/dashboard/config/open-dir", (_req, res) => {
+    handleOpenDir(_req, res, configDir);
   });
 
   app.get("/dashboard/audit", (req, res) => {

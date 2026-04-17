@@ -12,7 +12,6 @@ const RateLimitString = z.string().min(1);
 // --- ServerConfig ---
 
 const AgentConfigSchema = z.object({
-  localEndpoint: z.string().min(1),
   rateLimit: RateLimitString.default("50/hour"),
   description: z.string().default(""),
   timeoutSeconds: z.number().positive().default(30),

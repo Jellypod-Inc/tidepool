@@ -34,10 +34,10 @@ export interface DiscoveryConfig {
 }
 
 export interface AgentConfig {
-  localEndpoint: string;
   rateLimit: string;
   description: string;
   timeoutSeconds: number;
+  // localEndpoint removed — endpoint is declared at runtime via SSE session
 }
 
 export interface FriendEntry {

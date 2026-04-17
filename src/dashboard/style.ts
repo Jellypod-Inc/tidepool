@@ -22,32 +22,35 @@ body {
   line-height: 1.6;
   color: var(--text);
   background: var(--bg);
-  display: flex;
   min-height: 100vh;
 }
 
-nav {
-  width: 200px;
+header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 32px;
   background: var(--bg-raised);
-  border-right: 1px solid var(--border);
-  padding: 20px 0;
-  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
 
-nav .brand {
-  padding: 0 16px 16px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
+header .brand {
   font-size: 16px;
   color: var(--accent);
   font-weight: bold;
+  flex-shrink: 0;
+}
+
+nav {
+  display: flex;
+  gap: 4px;
 }
 
 nav a {
-  display: block;
-  padding: 8px 16px;
+  padding: 6px 12px;
   color: var(--text-muted);
   text-decoration: none;
+  border-radius: 4px;
   transition: color 0.15s, background 0.15s;
 }
 
@@ -56,9 +59,9 @@ nav a.active { color: var(--accent); background: var(--bg); }
 nav a.muted { opacity: 0.4; }
 
 main {
-  flex: 1;
   padding: 24px 32px;
   max-width: 960px;
+  margin: 0 auto;
   overflow-x: auto;
 }
 

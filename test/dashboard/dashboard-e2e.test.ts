@@ -41,7 +41,7 @@ describe("dashboard e2e", () => {
 
     const serverToml = {
       server: { port: publicPort, host: "127.0.0.1", localPort, rateLimit: "100/hour", streamTimeoutSeconds: 300 },
-      agents: { "test-agent": { localEndpoint: `http://127.0.0.1:${agentPort}`, rateLimit: "50/hour", description: "A test agent", timeoutSeconds: 30 } },
+      agents: { "test-agent": { rateLimit: "50/hour", description: "A test agent", timeoutSeconds: 30 } },
       connectionRequests: { mode: "deny" },
       discovery: { providers: ["static"], cacheTtlSeconds: 300 },
       validation: { mode: "warn" },

@@ -39,7 +39,7 @@ program.addHelpText(
     `  $ tidepool claude-code:start my-agent --debug\n` +
     `  $ tidepool stop\n` +
     `  $ tidepool init\n` +
-    `  $ tidepool register alice-dev --local-endpoint http://127.0.0.1:28800\n` +
+    `  $ tidepool register alice-dev\n` +
     `  $ tidepool whoami\n` +
     `  $ tidepool friend add bob sha256:...\n` +
     `  $ tidepool remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
@@ -57,11 +57,7 @@ program
 
 program
   .command("register <name>")
-  .description("Generate an identity and register a local agent")
-  .option(
-    "-e, --local-endpoint <url>",
-    "Where the local agent listens (e.g. http://127.0.0.1:28800)",
-  )
+  .description("Register a local agent (endpoint declared at runtime via SSE session)")
   .option("--rate-limit <spec>", "Per-agent rate limit (default: 50/hour)")
   .option("--description <text>", "Human-readable description")
   .option(
@@ -71,14 +67,10 @@ program
   )
   .option("-f, --force", "Overwrite existing identity + config")
   .action(async (name: string, cmdOpts) => {
-    if (!cmdOpts.localEndpoint) {
-      throw new Error("--local-endpoint is required");
-    }
     const configDir = resolveConfigDir(program.opts());
     const result = await runRegister({
       configDir,
       name,
-      localEndpoint: cmdOpts.localEndpoint,
       rateLimit: cmdOpts.rateLimit,
       description: cmdOpts.description,
       timeoutSeconds: cmdOpts.timeout,

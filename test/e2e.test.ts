@@ -8,6 +8,7 @@ import TOML from "@iarna/toml";
 import { Agent as UndiciAgent } from "undici";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Two mock A2A agents — simple echo servers
 function createMockAgent(port: number, name: string): http.Server {
@@ -45,6 +46,8 @@ describe("e2e: two Tidepool servers", () => {
   let bobMockAgent: http.Server;
   let aliceServer: { close: () => void };
   let bobServer: { close: () => void };
+  let aliceSession: TestSession;
+  let bobSession: TestSession;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-e2e-"));
@@ -74,7 +77,6 @@ describe("e2e: two Tidepool servers", () => {
         server: { port: 19900, host: "0.0.0.0", localPort: 19901, rateLimit: "100/hour" },
         agents: {
           "alice-dev": {
-            localEndpoint: "http://127.0.0.1:28800",
             rateLimit: "50/hour",
             description: "Alice's dev agent",
           },
@@ -101,7 +103,6 @@ describe("e2e: two Tidepool servers", () => {
         server: { port: 29900, host: "0.0.0.0", localPort: 29901, rateLimit: "100/hour" },
         agents: {
           "rust-expert": {
-            localEndpoint: "http://127.0.0.1:38800",
             rateLimit: "50/hour",
             description: "Bob's Rust expert",
           },
@@ -149,9 +150,16 @@ describe("e2e: two Tidepool servers", () => {
         },
       ],
     });
+
+    // Register sessions so inbound A2A can be routed to mock agents.
+    aliceSession = await registerTestSession(19901, "alice-dev", "http://127.0.0.1:28800");
+    bobSession = await registerTestSession(29901, "rust-expert", "http://127.0.0.1:38800");
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    aliceSession?.controller.abort();
+    bobSession?.controller.abort();
+    await Promise.all([aliceSession?.done, bobSession?.done]);
     aliceMockAgent?.close();
     bobMockAgent?.close();
     aliceServer?.close();
@@ -291,7 +299,6 @@ describe("inbound validation: enforce mode", () => {
         },
         agents: {
           "strict-agent": {
-            localEndpoint: "http://127.0.0.1:58852",
             rateLimit: "50/hour",
             description: "Strict agent that enforces wire validation",
           },

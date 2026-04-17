@@ -25,13 +25,11 @@ async function setupConfig() {
       },
       agents: {
         alice: {
-          localEndpoint: "http://127.0.0.1:18801",
           rateLimit: "100/minute",
           description: "",
           timeoutSeconds: 30,
         },
         bob: {
-          localEndpoint: "http://127.0.0.1:18802",
           rateLimit: "100/minute",
           description: "",
           timeoutSeconds: 30,

@@ -10,6 +10,7 @@ import { runInit } from "../src/cli/init.js";
 import { runRegister } from "../src/cli/register.js";
 import { startServer } from "../src/server.js";
 import { loadRemotesConfig } from "../src/cli/remotes-config.js";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 function tmp(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -26,12 +27,18 @@ async function listenOn(port: number, handler: express.RequestHandler) {
 
 describe("local loopback — two agents on one tidepool", () => {
   const servers: Array<{ close: () => void }> = [];
+  const sessions: TestSession[] = [];
   afterEach(async () => {
+    for (const s of sessions) {
+      s.controller.abort();
+      await s.done;
+    }
+    sessions.length = 0;
     for (const s of servers) s.close();
     servers.length = 0;
   });
 
-  it("agent A can send a message that is delivered to agent B's localEndpoint", async () => {
+  it("agent A can send a message that is delivered to agent B's session endpoint", async () => {
     const dir = tmp("cc-loopback-");
     await runInit({ configDir: dir });
 
@@ -60,16 +67,8 @@ describe("local loopback — two agents on one tidepool", () => {
       } as any),
     );
 
-    await runRegister({
-      configDir: dir,
-      name: "alice",
-      localEndpoint: `http://127.0.0.1:${A_ENDPOINT_PORT}`,
-    });
-    await runRegister({
-      configDir: dir,
-      name: "bob",
-      localEndpoint: `http://127.0.0.1:${B_ENDPOINT_PORT}`,
-    });
+    await runRegister({ configDir: dir, name: "alice" });
+    await runRegister({ configDir: dir, name: "bob" });
 
     // Stand up bob's local endpoint — this is what the a2a-claude-code-adapter
     // would normally run. We capture what it receives.
@@ -98,6 +97,9 @@ describe("local loopback — two agents on one tidepool", () => {
       remoteAgents: Object.values(remotes.remotes),
     });
     servers.push({ close: () => handle.close() });
+
+    // Register sessions so daemon can route to each agent's endpoint.
+    sessions.push(await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`));
 
     // Alice sends to Bob via the local proxy port
     const res = await fetch(
@@ -134,7 +136,7 @@ describe("local loopback — two agents on one tidepool", () => {
     });
   });
 
-  it("picks up an agent registered AFTER the daemon started", async () => {
+  it("picks up an agent registered AFTER the daemon started, once session is open", async () => {
     const dir = tmp("cc-reload-");
     await runInit({ configDir: dir });
 
@@ -159,11 +161,7 @@ describe("local loopback — two agents on one tidepool", () => {
         validation: { mode: "warn" },
       } as any),
     );
-    await runRegister({
-      configDir: dir,
-      name: "alice",
-      localEndpoint: `http://127.0.0.1:${A_ENDPOINT_PORT}`,
-    });
+    await runRegister({ configDir: dir, name: "alice" });
 
     const handle = await startServer({
       configDir: dir,
@@ -192,12 +190,8 @@ describe("local loopback — two agents on one tidepool", () => {
     );
     expect(pre.status).toBe(404);
 
-    // Register carol and spin up her endpoint while the daemon keeps running.
-    await runRegister({
-      configDir: dir,
-      name: "carol",
-      localEndpoint: `http://127.0.0.1:${CAROL_ENDPOINT_PORT}`,
-    });
+    // Register carol (config) and spin up her endpoint while the daemon keeps running.
+    await runRegister({ configDir: dir, name: "carol" });
     const carolServer = await listenOn(CAROL_ENDPOINT_PORT, (_req, res) => {
       res.status(200).json({
         id: "t",
@@ -211,6 +205,11 @@ describe("local loopback — two agents on one tidepool", () => {
     servers.push(carolServer);
 
     // Wait up to 2s for the holder's fs.watchFile poll (500ms) to catch up.
+    // Once carol is in config AND has an active session, the daemon can route to her.
+    const carolSession = await registerTestSession(LOCAL_PORT, "carol", `http://127.0.0.1:${CAROL_ENDPOINT_PORT}`);
+    sessions.push(carolSession);
+
+    // Poll until the daemon returns 200 (config reload + session both needed).
     const deadline = Date.now() + 2_000;
     let lastStatus = 404;
     let lastBody: any = null;
@@ -268,16 +267,8 @@ describe("local loopback — two agents on one tidepool", () => {
       } as any),
     );
 
-    await runRegister({
-      configDir: dir,
-      name: "alice",
-      localEndpoint: `http://127.0.0.1:${A_ENDPOINT_PORT}`,
-    });
-    await runRegister({
-      configDir: dir,
-      name: "bob",
-      localEndpoint: `http://127.0.0.1:${B_ENDPOINT_PORT}`,
-    });
+    await runRegister({ configDir: dir, name: "alice" });
+    await runRegister({ configDir: dir, name: "bob" });
 
     // Both alice and bob stand up local endpoints. Each captures the body it
     // receives so we can assert the "peer" (metadata.from) and shared
@@ -318,6 +309,10 @@ describe("local loopback — two agents on one tidepool", () => {
       remoteAgents: Object.values(remotes.remotes),
     });
     servers.push({ close: () => handle.close() });
+
+    // Register sessions for both alice and bob.
+    sessions.push(await registerTestSession(LOCAL_PORT, "alice", `http://127.0.0.1:${A_ENDPOINT_PORT}`));
+    sessions.push(await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`));
 
     // Leg 1: alice → bob. The tidepool daemon forwards to bob's endpoint
     // and injects metadata.from = "alice".
@@ -395,8 +390,8 @@ describe("local loopback — two agents on one tidepool", () => {
     // threads live in the adapter's in-memory ephemeral store, which is
     // covered separately (see adapter's thread-store.test.ts and
     // integration.test.ts). This test proves the daemon-level property:
-    // restarting the daemon loses no state because there is none to lose,
-    // and subsequent requests work purely from static config.
+    // restarting the daemon loses session registrations (adapters must
+    // reconnect), and subsequent requests work once a new session is open.
     const dir = tmp("cc-ephemeral-");
     await runInit({ configDir: dir });
 
@@ -422,16 +417,8 @@ describe("local loopback — two agents on one tidepool", () => {
       } as any),
     );
 
-    await runRegister({
-      configDir: dir,
-      name: "alice",
-      localEndpoint: `http://127.0.0.1:${A_ENDPOINT_PORT}`,
-    });
-    await runRegister({
-      configDir: dir,
-      name: "bob",
-      localEndpoint: `http://127.0.0.1:${B_ENDPOINT_PORT}`,
-    });
+    await runRegister({ configDir: dir, name: "alice" });
+    await runRegister({ configDir: dir, name: "bob" });
 
     let bobReceived: any = null;
     const bobServer = await listenOn(B_ENDPOINT_PORT, (req, res) => {
@@ -453,6 +440,9 @@ describe("local loopback — two agents on one tidepool", () => {
       configDir: dir,
       remoteAgents: Object.values(remotes.remotes),
     });
+
+    // Register session for first incarnation.
+    const session1 = await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
 
     const pre = await fetch(
       `http://127.0.0.1:${LOCAL_PORT}/bob/message:send`,
@@ -476,18 +466,23 @@ describe("local loopback — two agents on one tidepool", () => {
     expect(bobReceived.message.contextId).toBe("ctx-pre");
     bobReceived = null;
 
-    // Close the first incarnation. Any in-daemon thread state (there is none
-    // by design) would be lost here.
+    // Close the first incarnation. Sessions are lost — adapters must reconnect.
+    session1.controller.abort();
+    await session1.done;
     handle1.close();
     await new Promise((r) => setTimeout(r, 50));
 
-    // Restart. The new incarnation has no memory of ctx-pre, but static
-    // config (agents) is reloaded, so the forwarding still works.
+    // Restart. The new incarnation has no memory of ctx-pre and no active sessions.
+    // The adapter must open a new session.
     const handle2 = await startServer({
       configDir: dir,
       remoteAgents: Object.values(remotes.remotes),
     });
     servers.push({ close: () => handle2.close() });
+
+    // Register session for second incarnation.
+    const session2 = await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
+    sessions.push(session2);
 
     const post = await fetch(
       `http://127.0.0.1:${LOCAL_PORT}/bob/message:send`,

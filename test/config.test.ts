@@ -22,9 +22,6 @@ describe("loadServerConfig", () => {
     expect(config.server.host).toBe("0.0.0.0");
     expect(config.server.localPort).toBe(9901);
     expect(config.server.rateLimit).toBe("100/hour");
-    expect(config.agents["rust-expert"].localEndpoint).toBe(
-      "http://localhost:18800",
-    );
     expect(config.agents["rust-expert"].rateLimit).toBe("50/hour");
     expect(config.agents["rust-expert"].description).toBe(
       "Expert in Rust and systems programming",
@@ -78,7 +75,7 @@ describe("loadFriendsConfig", () => {
 });
 
 describe("config validation (zod)", () => {
-  it("throws with a clear path when an agent is missing localEndpoint", () => {
+  it("accepts an agent config without localEndpoint (endpoint is set at runtime via SSE session)", () => {
     const file = writeTempToml(
       "server.toml",
       `
@@ -87,16 +84,14 @@ port = 9900
 host = "0.0.0.0"
 localPort = 9901
 
-[agents.broken]
-# localEndpoint missing — should fail validation with the offending path
+[agents.my-agent]
 rateLimit = "50/hour"
-description = "broken"
+description = "an agent"
 `,
     );
 
-    expect(() => loadServerConfig(file)).toThrowError(
-      /agents\.broken\.localEndpoint/,
-    );
+    const cfg = loadServerConfig(file);
+    expect(cfg.agents["my-agent"].rateLimit).toBe("50/hour");
   });
 
   it("throws when a friend fingerprint does not match the sha256 format", () => {

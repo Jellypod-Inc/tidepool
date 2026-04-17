@@ -17,7 +17,6 @@ describe("runStatus", () => {
     await runRegister({
       configDir: dir,
       name: "alice-dev",
-      localEndpoint: "http://127.0.0.1:28800",
     });
     const out = await runStatus({ configDir: dir });
     expect(out).toContain("Tidepool Status");

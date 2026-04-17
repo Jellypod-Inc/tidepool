@@ -10,7 +10,6 @@ import { loadServerConfig, loadFriendsConfig } from "../config.js";
 import { loadRemotesConfig } from "./remotes-config.js";
 import { readPeerFingerprint } from "../identity-paths.js";
 import { resolveAgentName } from "./name-resolver.js";
-import { pickFreeLoopbackPort } from "./free-port.js";
 import { ensureMcpJsonEntry } from "./mcp-json.js";
 import { isServeRunning, spawnServeDaemon } from "./serve-daemon.js";
 import type { ServerConfig } from "../types.js";
@@ -54,11 +53,9 @@ export async function runClaudeCodeStart(opts: RunClaudeCodeStartOpts): Promise<
   // 3. register if needed (re-read config in case name resolver didn't account for fresh write)
   const cfg2 = loadServerConfig(path.join(opts.configDir, "server.toml"));
   if (!(agentName in cfg2.agents)) {
-    const port = await pickFreeLoopbackPort();
     await runRegister({
       configDir: opts.configDir,
       name: agentName,
-      localEndpoint: `http://127.0.0.1:${port}`,
     });
   }
 
@@ -146,9 +143,6 @@ function printLaunchSummary(args: {
     // identity not initialized yet — shouldn't happen after runInit, but don't crash
   }
 
-  const agent = serverConfig.agents[agentName];
-  const endpoint = agent?.localEndpoint ?? "(unknown)";
-
   let friendCount = 0;
   let remoteCount = 0;
   try {
@@ -170,7 +164,6 @@ function printLaunchSummary(args: {
     ``,
     `tidepool · launching Claude Code`,
     `  Agent:        ${agentName}`,
-    `  Endpoint:     ${endpoint}`,
     `  Peer port:    ${serverConfig.server.port} (public mTLS) · ${serverConfig.server.localPort} (local proxy)`,
     `  Fingerprint:  ${fingerprint}`,
     `  Home:         ${configDir}`,

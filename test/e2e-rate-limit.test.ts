@@ -9,6 +9,7 @@ import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 import type { RemoteAgent } from "../src/types.js";
+import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 function createMockAgent(port: number, name: string): http.Server {
   const app = express();
@@ -103,6 +104,8 @@ describe("e2e: rate limiting and timeout", () => {
   let server: { close: () => void };
   let peerCertPath: string;
   let peerKeyPath: string;
+  let fastAgentSession: TestSession;
+  let slowAgentSession: TestSession;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-e2e-rl-"));
@@ -137,13 +140,11 @@ describe("e2e: rate limiting and timeout", () => {
         },
         agents: {
           "fast-agent": {
-            localEndpoint: "http://127.0.0.1:58800",
             rateLimit: "3/minute",
             description: "Fast agent",
             timeoutSeconds: 30,
           },
           "slow-agent": {
-            localEndpoint: "http://127.0.0.1:58801",
             rateLimit: "10/minute",
             description: "Slow agent",
             timeoutSeconds: 2,
@@ -179,9 +180,16 @@ describe("e2e: rate limiting and timeout", () => {
       configDir: serverConfigDir,
       remoteAgents: [peerRemote],
     });
+
+    // Register sessions so inbound A2A can be routed to mock agents.
+    fastAgentSession = await registerTestSession(49901, "fast-agent", "http://127.0.0.1:58800");
+    slowAgentSession = await registerTestSession(49901, "slow-agent", "http://127.0.0.1:58801");
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    fastAgentSession?.controller.abort();
+    slowAgentSession?.controller.abort();
+    await Promise.all([fastAgentSession?.done, slowAgentSession?.done]);
     mockAgent?.close();
     slowAgent?.close();
     server?.close();

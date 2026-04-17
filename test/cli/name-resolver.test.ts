@@ -12,7 +12,7 @@ function tmp(): string {
 function makeServerConfig(agentNames: string[] = []): ServerConfig {
   const agents: ServerConfig["agents"] = {};
   for (const n of agentNames) {
-    agents[n] = { localEndpoint: "http://127.0.0.1:1", rateLimit: "50/hour", description: "", timeoutSeconds: 30 };
+    agents[n] = { rateLimit: "50/hour", description: "", timeoutSeconds: 30 };
   }
   return {
     server: { port: 9900, host: "0.0.0.0", localPort: 9901, rateLimit: "100/hour", streamTimeoutSeconds: 30 },
