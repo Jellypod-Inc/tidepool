@@ -7,6 +7,7 @@ import { buildPinnedDispatcher } from "./outbound-tls.js";
 import { createConfigHolder, type ConfigHolder } from "./config-holder.js";
 import {
   checkFriend,
+  findPeerByFingerprint,
   checkAgentScope,
   resolveTenant,
   extractFingerprint,
@@ -301,10 +302,20 @@ function createPublicApp(
         return;
       }
 
-      // --- Step 3: Check friends list ---
-      const friendLookup = checkFriend(friends, peerFingerprint);
+      // --- Step 3: Resolve inbound trust — peers.toml first, friends.toml as fallback ---
+      const peers = holder.peers();
+      const peerLookup = findPeerByFingerprint(peers, peerFingerprint);
+
+      // Synthesise a FriendEntry shape for the downstream pipeline.
+      // Peers don't carry agent-scope restrictions (their `agents` list is
+      // informational for outbound routing, not an inbound ACL), so we leave
+      // `agents` undefined — meaning "unscoped / all agents allowed".
+      const friendLookup = peerLookup
+        ? { handle: peerLookup.handle, friend: { fingerprint: peerLookup.fingerprint } }
+        : checkFriend(friends, peerFingerprint);
+
       if (!friendLookup) {
-        // Not a friend — check if this is a CONNECTION_REQUEST
+        // Not a peer or friend — check if this is a CONNECTION_REQUEST
         if (isConnectionRequest(req.body, req.headers)) {
           const metadata = extractConnectionMetadata(
             req.body as Record<string, unknown>,
