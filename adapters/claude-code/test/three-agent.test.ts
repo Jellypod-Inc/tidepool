@@ -21,8 +21,12 @@ function startMockRelay(adapters: Record<string, { httpPort: number }>) {
     sessionToName[sessionId] = name;
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     res.write(`event: session.registered\ndata: ${JSON.stringify({ sessionId })}\n\n`);
-    res.write(`event: peers.snapshot\ndata: ${JSON.stringify(Object.keys(adapters).filter((k) => k !== name).map((h) => ({ handle: h, did: null })))}\n\n`);
     // Leave open to keep the SSE session alive
+  });
+  app.get("/.well-known/tidepool/peers", (_req, res) => {
+    res.json(
+      Object.keys(adapters).map((h) => ({ handle: h, did: null })),
+    );
   });
   app.post("/:tenant/message\\:send", async (req, res) => {
     // Identify sender from session token
