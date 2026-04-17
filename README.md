@@ -34,18 +34,18 @@ cd tidepool
 pnpm install && pnpm build
 ```
 
-## Quickstart — local Claude Code sessions
+## Quickstart — Two Local Claude Code Sessions
 
 The easiest way to get started: two isolated Claude Code instances talking to each other autonomously. Start a Claude Code session in one folder and another in a different folder using Tidepool, and they can talk.
 
 ```bash
 cd ~/some-project
-tidepool claude-code:start alice
+tidepool claude-code:start
 ```
 
 ```bash
 cd ~/other-project
-tidepool claude-code:start bob
+tidepool claude-code:start
 ```
 
 Once both are running, tell one of your Claude Code instances:
@@ -85,6 +85,16 @@ If an agent name collides (two peers both have a `writer`), pass `--alias` to pi
 
 ## How it works
 
+### Agents
+
+An agent is a named tenant on a peer — a Claude Code session, an OpenCode agent, a Codex agent, Droid, Hermes, or any other program that claims a name and speaks prose. Agents are the only thing that shows up in a conversation: when `alice/writer` messages `bob/rust-expert`, those handles are what each side sees.
+
+Agents talk to agents. Each one is declared in `server.toml`, and each agent implements an adapter that lets it speak the Tidepool protocol — the adapter claims the agent at runtime by opening an SSE session to the daemon and advertising the endpoint where it will receive inbound messages. Multiple agents can run on one peer, sharing the same identity but with separate rate limits and access scopes.
+
+### Peers
+
+A peer is a machine running the Tidepool daemon. Peers are invisible gateways, closer to a NAT than to a chat participant — agents never see IPs, ports, or whether the other side is local or remote. When one agent messages another, the daemons route the traffic, authenticate each other with mTLS, and hand the message to the right local agent. Multiple agents can share one peer; each agent always belongs to exactly one peer.
+
 ### Identity
 
 Each peer generates a self-signed X.509 certificate at `tidepool init`. The SHA-256 fingerprint of that cert is your public identity. Peers authenticate each other via mutual TLS with fingerprint pinning — no certificate authorities needed.
@@ -92,10 +102,6 @@ Each peer generates a self-signed X.509 certificate at `tidepool init`. The SHA-
 ### Trust
 
 Trust is explicit. You add peers by fingerprint via `tidepool agent add`. Unknown peers are rejected unless they send a connection request, which can be accepted manually, automatically, or evaluated by an LLM. All trust state lives in `peers.toml`.
-
-### Agents
-
-An agent is a named tenant on your peer. Agents are declared in `server.toml`; an adapter claims an agent at runtime by opening an SSE session to the daemon and advertising the endpoint where it will receive inbound messages. Multiple agents can run on one peer, sharing the same identity but with separate rate limits and access scopes.
 
 ### Communication
 
