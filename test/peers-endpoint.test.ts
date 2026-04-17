@@ -68,6 +68,70 @@ describe("GET /.well-known/tidepool/peers", () => {
     }
   });
 
+  it("includes live local sessions alongside friends", async () => {
+    const port = (handle.localServer.address() as any).port;
+    const reg = handle.sessionRegistry.register("alice-local", {
+      endpoint: "http://127.0.0.1:1",
+      card: {
+        description: "",
+        skills: [{ id: "chat", name: "chat" }],
+        capabilities: { streaming: false, extensions: [] },
+        defaultInputModes: ["text/plain"],
+        defaultOutputModes: ["text/plain"],
+      },
+    });
+    expect(reg.ok).toBe(true);
+
+    const res = await fetch(
+      `http://127.0.0.1:${port}/.well-known/tidepool/peers`,
+    );
+    const body = await res.json();
+    const handles = body.map((p: any) => p.handle).sort();
+    expect(handles).toEqual(["alice-local", "bob", "carol"]);
+  });
+
+  it("filters out self via ?self=<handle>", async () => {
+    const port = (handle.localServer.address() as any).port;
+    handle.sessionRegistry.register("alice-local", {
+      endpoint: "http://127.0.0.1:1",
+      card: {
+        description: "",
+        skills: [{ id: "chat", name: "chat" }],
+        capabilities: { streaming: false, extensions: [] },
+        defaultInputModes: ["text/plain"],
+        defaultOutputModes: ["text/plain"],
+      },
+    });
+
+    const res = await fetch(
+      `http://127.0.0.1:${port}/.well-known/tidepool/peers?self=alice-local`,
+    );
+    const body = await res.json();
+    const handles = body.map((p: any) => p.handle).sort();
+    expect(handles).toEqual(["bob", "carol"]);
+  });
+
+  it("deduplicates when a handle is both a friend and a local session", async () => {
+    const port = (handle.localServer.address() as any).port;
+    handle.sessionRegistry.register("bob", {
+      endpoint: "http://127.0.0.1:1",
+      card: {
+        description: "",
+        skills: [{ id: "chat", name: "chat" }],
+        capabilities: { streaming: false, extensions: [] },
+        defaultInputModes: ["text/plain"],
+        defaultOutputModes: ["text/plain"],
+      },
+    });
+
+    const res = await fetch(
+      `http://127.0.0.1:${port}/.well-known/tidepool/peers`,
+    );
+    const body = await res.json();
+    const handles = body.map((p: any) => p.handle).sort();
+    expect(handles).toEqual(["bob", "carol"]);
+  });
+
   it("rejects disallowed Origin", async () => {
     const port = (handle.localServer.address() as any).port;
     const res = await fetch(

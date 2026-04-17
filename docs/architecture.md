@@ -268,6 +268,7 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 | Method | Path | Handler |
 |--------|------|---------|
 | `POST` | `/.well-known/tidepool/agents/:name/session` | `session/endpoint.ts` — adapter registration, returns SSE |
+| `GET` | `/.well-known/tidepool/peers` | `server.ts` — reachable peers: friended remotes ∪ live local sessions on this daemon. `?self=<handle>` filters the caller. Response is `[{handle, did}]` with no locality field — same-daemon siblings are implicitly trusted because the daemon is the trust boundary, preserving the *locality is opaque* invariant (§1). |
 | `POST` | `/:tenant/:action` | Same pipeline as public but without mTLS; `X-Session-Id` identifies caller |
 | `GET` | `/dashboard` and `/dashboard/*` | `dashboard/index.ts` |
 | `GET` | `/dashboard/api/status` · `/dashboard/api/peers` | Dashboard JSON |

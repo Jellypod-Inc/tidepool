@@ -182,6 +182,7 @@ export async function startServer(opts: StartServerOpts) {
   return {
     publicServer,
     localServer,
+    sessionRegistry,
     close: () => {
       publicServer.close();
       localServer.close();
@@ -522,9 +523,19 @@ function createLocalApp(
   });
 
   // Tidepool extensions (origin guard is now global, no per-route guard needed).
-  app.get("/.well-known/tidepool/peers", (_req, res) => {
-    const friends = holder.friends();
-    const peers = Object.keys(friends.friends)
+  // Peers = friended remotes ∪ live local sessions on this daemon. Locality is
+  // opaque to the caller: same-daemon siblings are implicitly trusted because
+  // the trust boundary is the daemon itself. `?self=<handle>` filters the caller out.
+  app.get("/.well-known/tidepool/peers", (req, res) => {
+    const selfRaw = req.query.self;
+    const self = typeof selfRaw === "string" ? selfRaw : undefined;
+
+    const handles = new Set<string>();
+    for (const handle of Object.keys(holder.friends().friends)) handles.add(handle);
+    for (const session of sessionRegistry.list()) handles.add(session.name);
+    if (self) handles.delete(self);
+
+    const peers = Array.from(handles)
       .sort()
       .map((handle) => ({ handle, did: null as string | null }));
     res.json(peers);

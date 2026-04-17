@@ -1,7 +1,12 @@
 export type Peer = { handle: string; did: string | null };
 
-export async function fetchPeers(daemonUrl: string): Promise<Peer[]> {
-  const url = `${daemonUrl}/.well-known/tidepool/peers`;
+export async function fetchPeers(
+  daemonUrl: string,
+  self?: string,
+): Promise<Peer[]> {
+  const url = self
+    ? `${daemonUrl}/.well-known/tidepool/peers?self=${encodeURIComponent(self)}`
+    : `${daemonUrl}/.well-known/tidepool/peers`;
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.text().catch(() => "");

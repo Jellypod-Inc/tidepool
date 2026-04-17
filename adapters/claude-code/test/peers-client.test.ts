@@ -29,6 +29,26 @@ describe("fetchPeers", () => {
     }
   });
 
+  it("passes self as a query parameter when provided", async () => {
+    let receivedUrl = "";
+    const server = http.createServer((req, res) => {
+      receivedUrl = req.url ?? "";
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("[]");
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      await fetchPeers(`http://127.0.0.1:${port}`, "alice/weird name");
+      expect(receivedUrl).toBe(
+        "/.well-known/tidepool/peers?self=alice%2Fweird%20name",
+      );
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
+
   it("throws a helpful error on non-2xx", async () => {
     const server = http.createServer((_req, res) => {
       res.writeHead(500).end("boom");

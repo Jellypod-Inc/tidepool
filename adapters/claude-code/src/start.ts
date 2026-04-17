@@ -38,7 +38,7 @@ export async function start(opts: StartOpts) {
     self: agent.agentName,
     store,
     listPeers: async () => {
-      const peers = await fetchPeers(daemonUrl);
+      const peers = await fetchPeers(daemonUrl, agent.agentName);
       return peers.map((p) => p.handle);
     },
     send: ({ peer, contextId, text, participants }) =>
