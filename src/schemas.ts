@@ -109,3 +109,22 @@ export const DiscoveredAgentSchema = z.object({
 export const DirectorySearchResponseSchema = z.object({
   agents: z.array(DiscoveredAgentSchema),
 });
+
+// --- PeersConfig ---
+
+const PeerAgentNameSchema = z.string().min(1);
+
+const PeerEntrySchema = z
+  .object({
+    did: z.string().regex(/^did:dht:[A-Za-z0-9]+$/).optional(),
+    fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/).optional(),
+    endpoint: z.string().url(),
+    agents: z.array(PeerAgentNameSchema).default([]),
+  })
+  .refine((p) => p.did || p.fingerprint, {
+    message: "peer must have did or fingerprint (or both)",
+  });
+
+export const PeersConfigSchema = z.object({
+  peers: z.record(z.string().min(1), PeerEntrySchema).default({}),
+});

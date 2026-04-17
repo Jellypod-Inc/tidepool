@@ -1,3 +1,6 @@
+import type { z } from "zod";
+import type { PeersConfigSchema } from "./schemas.js";
+
 export interface ServerConfig {
   server: {
     port: number;
@@ -140,3 +143,6 @@ export interface RegisteredSession {
   /** When the session was registered. */
   registeredAt: Date;
 }
+
+export type PeersConfig = z.infer<typeof PeersConfigSchema>;
+export type PeerEntry = PeersConfig["peers"][string];
