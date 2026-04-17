@@ -1,12 +1,11 @@
 export interface LayoutOpts {
   title: string;
-  activePage: "home" | "friends" | "threads" | "config" | "audit";
+  activePage: "home" | "threads" | "config" | "audit";
   content: string;
 }
 
 const NAV_ITEMS: { page: LayoutOpts["activePage"]; label: string; href: string; muted?: boolean }[] = [
   { page: "home", label: "Home", href: "/dashboard" },
-  { page: "friends", label: "Friends", href: "/dashboard/friends" },
   { page: "threads", label: "Threads", href: "/dashboard/threads" },
   { page: "config", label: "Config", href: "/dashboard/config" },
   { page: "audit", label: "Audit", href: "/dashboard/audit", muted: true },

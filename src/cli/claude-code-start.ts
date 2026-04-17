@@ -6,8 +6,8 @@ import type { ChildProcess, SpawnOptions } from "child_process";
 import { runInit } from "./init.js";
 import { runRegister } from "./register.js";
 import { runUnregister } from "./unregister.js";
-import { loadServerConfig, loadFriendsConfig } from "../config.js";
-import { loadRemotesConfig } from "./remotes-config.js";
+import { loadServerConfig } from "../config.js";
+import { loadPeersConfig } from "../peers/config.js";
 import { readPeerFingerprint } from "../identity-paths.js";
 import { resolveAgentName } from "./name-resolver.js";
 import { ensureMcpJsonEntry } from "./mcp-json.js";
@@ -143,18 +143,10 @@ function printLaunchSummary(args: {
     // identity not initialized yet — shouldn't happen after runInit, but don't crash
   }
 
-  let friendCount = 0;
-  let remoteCount = 0;
+  let peerCount = 0;
   try {
-    friendCount = Object.keys(
-      loadFriendsConfig(path.join(configDir, "friends.toml")).friends,
-    ).length;
-  } catch {
-    // ignore
-  }
-  try {
-    remoteCount = Object.keys(
-      loadRemotesConfig(path.join(configDir, "remotes.toml")).remotes,
+    peerCount = Object.keys(
+      loadPeersConfig(path.join(configDir, "peers.toml")).peers,
     ).length;
   } catch {
     // ignore
@@ -169,7 +161,7 @@ function printLaunchSummary(args: {
     `  Fingerprint:  ${fingerprint}`,
     `  Home:         ${configDir}`,
     `  Working dir:  ${cwd}`,
-    `  Friends:      ${friendCount}   Remotes: ${remoteCount}`,
+    `  Peers:        ${peerCount}`,
     ``,
   ];
   process.stdout.write(lines.join("\n") + "\n");

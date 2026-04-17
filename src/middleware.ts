@@ -1,7 +1,5 @@
 import forge from "node-forge";
 import type {
-  FriendsConfig,
-  FriendEntry,
   PeersConfig,
   ServerConfig,
   AgentConfig,
@@ -10,23 +8,6 @@ import { parseExtensionsHeader } from "./a2a.js";
 
 export const CONNECTION_EXTENSION_URL =
   "https://tidepool.dev/ext/connection/v1";
-
-interface FriendLookup {
-  handle: string;
-  friend: FriendEntry;
-}
-
-export function checkFriend(
-  friends: FriendsConfig,
-  fingerprint: string,
-): FriendLookup | null {
-  for (const [handle, entry] of Object.entries(friends.friends)) {
-    if (entry.fingerprint === fingerprint) {
-      return { handle, friend: entry };
-    }
-  }
-  return null;
-}
 
 interface PeerLookup {
   handle: string;
@@ -50,9 +31,9 @@ export function findPeerByFingerprint(
   return null;
 }
 
-export function checkAgentScope(friend: FriendEntry, tenant: string): boolean {
-  if (!friend.agents) return true; // unscoped = all agents
-  return friend.agents.includes(tenant);
+export function checkAgentScope(peer: { agents?: string[] }, tenant: string): boolean {
+  if (!peer.agents) return true; // unscoped = all agents
+  return peer.agents.includes(tenant);
 }
 
 export function resolveTenant(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loadServerConfig, loadFriendsConfig } from "../src/config.js";
+import { loadServerConfig } from "../src/config.js";
 import { ServerConfigSchema } from "../src/schemas.js";
 import { createConfigHolder } from "../src/config-holder.js";
 import { runInit } from "../src/cli/init.js";
@@ -60,23 +60,6 @@ describe("loadServerConfig — auto mode", () => {
   });
 });
 
-describe("loadFriendsConfig", () => {
-  it("loads and parses friends.toml", () => {
-    const config = loadFriendsConfig(path.join(fixturesDir, "friends.toml"));
-
-    expect(config.friends["alice-agent"].fingerprint).toBe(
-      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    );
-    expect(config.friends["alice-agent"].agents).toBeUndefined();
-    expect(config.friends["carols-ml"].agents).toEqual(["rust-expert"]);
-  });
-
-  it("returns empty friends on missing file", () => {
-    const config = loadFriendsConfig("/nonexistent/friends.toml");
-    expect(config.friends).toEqual({});
-  });
-});
-
 describe("config validation (zod)", () => {
   it("accepts an agent config without localEndpoint (endpoint is set at runtime via SSE session)", () => {
     const file = writeTempToml(
@@ -97,19 +80,6 @@ description = "an agent"
     expect(cfg.agents["my-agent"].rateLimit).toBe("50/hour");
   });
 
-  it("throws when a friend fingerprint does not match the sha256 format", () => {
-    const file = writeTempToml(
-      "friends.toml",
-      `
-[friends.badfriend]
-fingerprint = "not-a-real-fingerprint"
-`,
-    );
-
-    expect(() => loadFriendsConfig(file)).toThrowError(
-      /friends\.badfriend\.fingerprint/,
-    );
-  });
 });
 
 describe("validation config", () => {

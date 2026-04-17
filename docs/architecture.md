@@ -16,7 +16,7 @@ flowchart LR
     AC[Claude Code]
     AA[tidepool-claude-code<br/>MCP adapter]
     AD[tidepool daemon<br/>:9901 local / :9900 public]
-    AFS[($TIDEPOOL_HOME<br/>identity, server.toml,<br/>friends.toml, remotes.toml)]
+    AFS[($TIDEPOOL_HOME<br/>identity, server.toml,<br/>peers.toml)]
     AC <-->|MCP stdio| AA
     AA <-->|loopback HTTP + SSE| AD
     AD --- AFS
@@ -34,8 +34,8 @@ flowchart LR
 **Design invariants** (see `README.md` → Design principles):
 
 - Agents exchange prose, never typed RPC.
-- Agents see opaque peer handles; the daemon decides local vs remote.
-- Friendship is explicit and mutual.
+- Network topology is opaque; agents see scoped handles (bare when unique, `peer/agent` when they collide) — they know *whose* agent, not *where* it runs.
+- Trust is explicit and mutual; peer entries in `peers.toml` are the single source of truth.
 - All state is local; no cloud, no accounts.
 
 ---
@@ -49,7 +49,7 @@ flowchart TB
   subgraph CLI["CLI · src/bin, src/cli"]
     C1[cli.ts<br/>commander entry]
     C2[init · register · unregister]
-    C3[friend · remote · whoami · status · ping]
+    C3[agent · whoami · status · ping]
     C4[serve · stop · directory serve]
     C5[claude-code:start]
   end
@@ -86,7 +86,7 @@ flowchart TB
     CF[config.ts]
     CW[config-writer.ts]
     CH[config-holder.ts<br/>hot-reload watcher]
-    FR[friends.ts]
+    PC[peers/config.ts<br/>peers.toml R/W]
   end
 
   subgraph Session["Adapter session · src/session"]
@@ -107,7 +107,7 @@ flowchart TB
   subgraph Dashboard["Dashboard · src/dashboard"]
     DI[index.ts]
     DL[layout.ts]
-    DPG[pages/*<br/>home, friends, threads,<br/>audit, config]
+    DPG[pages/*<br/>home, threads,<br/>audit, config]
     ML[message-log.ts<br/>circular buffer]
   end
 
@@ -130,8 +130,8 @@ flowchart TB
   S --> DI
   MW --> CH
   CH --> CF
-  FR --> CW
-  HS --> FR
+  PC --> CW
+  HS --> PC
   PX --> OUT
   OUT --> ID
   DR --> SP & MP & DP
@@ -190,7 +190,7 @@ sequenceDiagram
 
 ### 4b. Inbound A2A (remote peer → adapter)
 
-Mirror of 4a from the receiving side. `middleware.ts` runs `extractFingerprint → checkFriend → checkAgentScope → rate-limiter → wire-validation`, then `proxy.ts` looks up the adapter endpoint in `session/registry.ts` and delivers.
+Mirror of 4a from the receiving side. `middleware.ts` runs `extractFingerprint → findPeerByFingerprint → checkAgentScope → rate-limiter → wire-validation`, then `proxy.ts` looks up the adapter endpoint in `session/registry.ts` and delivers.
 
 ### 4c. Friending handshake (CONNECTION_REQUEST)
 
@@ -200,13 +200,13 @@ Uses A2A extension `https://tidepool.dev/ext/connection/v1` — carried inside `
 sequenceDiagram
   participant A as Alice daemon
   participant B as Bob daemon
-  participant Cfg as friends.toml (Bob)
+  participant Cfg as peers.toml (Bob)
 
   A->>B: A2A Message + CONNECTION_REQUEST metadata
   B->>B: middleware.isConnectionRequest → true
-  B->>B: handshake.handleConnectionRequest<br/>(mode: deny / manual / auto-LLM)
+  B->>B: handshake.handleConnectionRequest<br/>(mode: deny / accept / auto-LLM)
   alt accepted
-    B->>Cfg: friends.addFriend(handle, fingerprint)
+    B->>Cfg: peers/config.writePeersConfig(handle, fingerprint, endpoint)
     B-->>A: buildAcceptedResponse
   else denied
     B-->>A: buildDeniedResponse
@@ -245,11 +245,10 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 |------|--------------|----------------|---------|
 | `identity.crt` / `identity.key` | `identity-paths.ts`, `outbound-tls.ts`, `server.ts` | `identity.ts` (once, via `tidepool init`) | Self-signed RSA cert, 100-year validity. SHA-256 is the peer's public ID. |
 | `server.toml` | `config.ts` → `config-holder.ts` | `config-writer.ts` (register/unregister) | Ports, agents, per-agent rate limits, discovery, connection-request policy. |
-| `friends.toml` | `config-holder.ts`, `middleware.ts` | `friends.ts` (friend add/remove, handshake accept) | `handle → fingerprint + scope`. Hot-reloaded. |
-| `remotes.toml` | `proxy.ts` | `cli/remote.ts` | Local handle → remote endpoint + tenant + pinned fingerprint. |
+| `peers.toml` | `config-holder.ts`, `middleware.ts`, `server.ts`, `handshake.ts`, `cli/agent.ts` | `peers/config.ts` (agent add/remove, handshake accept) | `handle → {fingerprint, did?, endpoint, agents[]}`. Hot-reloaded. Single source of truth for trust (inbound + outbound) and routing. |
 | `logs/serve-YYYY-MM-DD.log` | — | `cli/serve-daemon.ts` | Rotating daemon logs. |
 
-`config-holder.ts` polls `server.toml` + `friends.toml` every 500ms so CLI edits take effect without restart.
+`config-holder.ts` polls `server.toml` + `peers.toml` every 500ms so CLI edits take effect without restart.
 
 ---
 
@@ -268,7 +267,8 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 | Method | Path | Handler |
 |--------|------|---------|
 | `POST` | `/.well-known/tidepool/agents/:name/session` | `session/endpoint.ts` — adapter registration, returns SSE |
-| `GET` | `/.well-known/tidepool/peers` | `server.ts` — reachable peers: friended remotes ∪ live local sessions on this daemon. `?self=<handle>` filters the caller. Response is `[{handle, did}]` with no locality field — same-daemon siblings are implicitly trusted because the daemon is the trust boundary, preserving the *locality is opaque* invariant (§1). |
+| `GET` | `/.well-known/tidepool/peers` | `server.ts` — reachable peers: `peers.toml` entries ∪ live local sessions on this daemon. `?self=<handle>` filters the caller. Response is `[{handle, did}]` — minimally-unambiguous scoped projection; no locality field (same-daemon siblings implicitly trusted at the daemon boundary). |
+| `POST` | `/:peer/:agent/:action` | `server.ts` — scoped outbound routing: resolves peer via `peers.toml`, pins cert, proxies to `<endpoint>/<agent>/<action>`. |
 | `POST` | `/:tenant/:action` | Same pipeline as public but without mTLS; `X-Session-Id` identifies caller |
 | `GET` | `/dashboard` and `/dashboard/*` | `dashboard/index.ts` |
 | `GET` | `/dashboard/api/status` · `/dashboard/api/peers` | Dashboard JSON |
@@ -288,14 +288,14 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 | Module | Purpose |
 |--------|---------|
 | `start.ts` | Bootstraps: loads config, registers with daemon (SSE session), wires MCP channel |
-| `channel.ts` | MCP server exposing tools: `send`, `list_peers`, `list_threads`, `thread_history`. Inbound A2A becomes a `<channel>` XML event in the session. |
+| `channel.ts` | MCP server exposing tools: `send`, `list_peers`, `list_threads`, `thread_history`. `send` accepts bare handles or scoped `peer/agent` handles. Inbound A2A becomes a `<channel>` XML event in the session. |
 | `outbound.ts` | POSTs A2A messages to the local daemon |
 | `session-client.ts` | SSE registration + keepalive |
 | `peers-client.ts` | Fetches peer list on demand (no snapshot cache — see commits `c8e6211`, `84aba9d`) |
 | `http.ts` | Local Express server the daemon posts inbound A2A to |
 | `thread-store.ts` | In-memory thread history for the session |
 
-Discovery is the **daemon's** job; the adapter never speaks mTLS, never sees friend fingerprints, never learns peer locality (see design principle: locality is opaque).
+Discovery is the **daemon's** job; the adapter never speaks mTLS, never sees peer fingerprints, and never learns network topology (see design principle: topology is opaque, §1).
 
 ---
 

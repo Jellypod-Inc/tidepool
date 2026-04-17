@@ -1,8 +1,8 @@
 import fs from "fs";
 import TOML from "@iarna/toml";
 import { z } from "zod";
-import { ServerConfigSchema, FriendsConfigSchema } from "./schemas.js";
-import type { ServerConfig, FriendsConfig } from "./types.js";
+import { ServerConfigSchema } from "./schemas.js";
+import type { ServerConfig } from "./types.js";
 
 function formatZodError(err: z.ZodError, filePath: string): Error {
   // Build a human-readable path → problem summary. The first issue is
@@ -36,18 +36,3 @@ export function loadServerConfig(filePath: string): ServerConfig {
   return result.data as unknown as ServerConfig;
 }
 
-export function loadFriendsConfig(filePath: string): FriendsConfig {
-  if (!fs.existsSync(filePath)) {
-    return { friends: {} };
-  }
-
-  const content = fs.readFileSync(filePath, "utf-8");
-  const parsed = stripSymbolKeys(TOML.parse(content));
-
-  const result = FriendsConfigSchema.safeParse(parsed);
-  if (!result.success) {
-    throw formatZodError(result.error, filePath);
-  }
-
-  return result.data as unknown as FriendsConfig;
-}

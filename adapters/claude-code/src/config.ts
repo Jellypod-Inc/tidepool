@@ -18,8 +18,6 @@ type ServerToml = {
   server?: ServerTomlServerBlock;
   agents?: Record<string, ServerTomlAgentEntry>;
 };
-type RemotesTomlEntry = Record<string, unknown>;
-type RemotesToml = { remotes?: Record<string, RemotesTomlEntry> };
 
 function readServerToml(configDir: string): ServerToml {
   const tomlPath = path.join(configDir, "server.toml");
@@ -94,23 +92,3 @@ export function loadProxyConfig(configDir: string): ProxyConfig {
   return { localPort };
 }
 
-/**
- * Lists every handle this agent can talk to. Locality (local agent vs. remote
- * peer) is intentionally not surfaced — the agent treats all peers uniformly.
- * Excludes `self`.
- */
-export function listPeerHandles(configDir: string, self: string): string[] {
-  const server = readServerToml(configDir);
-  const agents = Object.keys(server.agents ?? {});
-
-  const remotesPath = path.join(configDir, "remotes.toml");
-  let remotes: string[] = [];
-  if (fs.existsSync(remotesPath)) {
-    const parsed = TOML.parse(fs.readFileSync(remotesPath, "utf8")) as RemotesToml;
-    remotes = Object.keys(parsed.remotes ?? {});
-  }
-
-  const all = new Set<string>([...agents, ...remotes]);
-  all.delete(self);
-  return [...all].sort();
-}

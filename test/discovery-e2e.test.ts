@@ -8,7 +8,7 @@ import TOML from "@iarna/toml";
 import { Agent as UndiciAgent } from "undici";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
-import { loadPeersConfig } from "../src/peers/config.js";
+import { loadPeersConfig, writePeersConfig } from "../src/peers/config.js";
 import { createDirectoryApp } from "../src/directory-server.js";
 import { DirectoryProvider } from "../src/discovery/directory-provider.js";
 import type { RemoteAgent } from "../src/types.js";
@@ -25,7 +25,7 @@ import { registerTestSession, type TestSession } from "./test-helpers.js";
  *    CONNECTION_REQUEST to the discovered endpoint over mTLS.
  *
  * Verifies the full cycle: directory lookup returns an online agent → Alice
- * connects and is accepted → Alice is persisted to friends.toml → Alice can
+ * connects and is accepted → Alice is persisted to peers.toml → Alice can
  * then send a normal A2A message and get a response.
  */
 describe("e2e: discovery → connect → A2A", () => {
@@ -123,10 +123,7 @@ describe("e2e: discovery → connect → A2A", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(bobConfigDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    writePeersConfig(path.join(bobConfigDir, "peers.toml"), { peers: {} });
 
     // Bob's mock agent
     const bobApp = express();

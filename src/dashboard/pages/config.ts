@@ -18,7 +18,7 @@ function readFileOrEmpty(filePath: string): string {
   }
 }
 
-const CONFIG_FILES = ["server.toml", "friends.toml", "remotes.toml"];
+const CONFIG_FILES = ["server.toml", "peers.toml"];
 
 export function renderConfigContent(configDir: string): string {
   return CONFIG_FILES.map((name) => {

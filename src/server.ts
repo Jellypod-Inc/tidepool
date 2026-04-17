@@ -6,7 +6,6 @@ import { v4 as uuidv4 } from "uuid";
 import { buildPinnedDispatcher } from "./outbound-tls.js";
 import { createConfigHolder, type ConfigHolder } from "./config-holder.js";
 import {
-  checkFriend,
   findPeerByFingerprint,
   checkAgentScope,
   resolveTenant,
@@ -226,7 +225,7 @@ function createPublicApp(
   app.use(express.json());
 
   // Serializes concurrent connection-request approvals so two requests can't
-  // both derive the same handle or race friends.toml writes. deriveHandle reads
+  // both derive the same handle or race peers.toml writes. deriveHandle reads
   // in-memory state which is only safe when mutations are serialized.
   let handshakeChain: Promise<unknown> = Promise.resolve();
   const runSerial = <T>(fn: () => Promise<T>): Promise<T> => {
@@ -266,7 +265,6 @@ function createPublicApp(
     "/:tenant/:action",
     async (req, res) => {
       const config = holder.server();
-      const friends = holder.friends();
       const { tenant, action } = req.params;
       // Caller's messageId — threaded into every error response so clients
       // can correlate failures to the request that triggered them. May be
@@ -302,19 +300,11 @@ function createPublicApp(
         return;
       }
 
-      // --- Step 3: Resolve inbound trust — peers.toml first, friends.toml as fallback ---
+      // --- Step 3: Resolve inbound trust via peers.toml ---
       const peers = holder.peers();
       const peerLookup = findPeerByFingerprint(peers, peerFingerprint);
 
-      // Synthesise a FriendEntry shape for the downstream pipeline.
-      // Peers don't carry agent-scope restrictions (their `agents` list is
-      // informational for outbound routing, not an inbound ACL), so we leave
-      // `agents` undefined — meaning "unscoped / all agents allowed".
-      const friendLookup = peerLookup
-        ? { handle: peerLookup.handle, friend: { fingerprint: peerLookup.fingerprint } }
-        : checkFriend(friends, peerFingerprint);
-
-      if (!friendLookup) {
+      if (!peerLookup) {
         // Not a peer or friend — check if this is a CONNECTION_REQUEST
         if (isConnectionRequest(req.body, req.headers)) {
           const metadata = extractConnectionMetadata(
@@ -387,7 +377,9 @@ function createPublicApp(
       }
 
       // --- Step 6: Check agent scope ---
-      if (!checkAgentScope(friendLookup.friend, tenant)) {
+      // peerEntry.agents is informational (used for outbound routing), not an inbound ACL;
+      // treat an empty list as "all agents allowed" to match the peers.toml intent.
+      if (!checkAgentScope({ agents: undefined }, tenant)) {
         sendA2AError(res, agentScopeDeniedResponse(tenant, messageId));
         return;
       }
@@ -397,7 +389,7 @@ function createPublicApp(
       const inboundSenderAgent = req.header("x-sender-agent") ?? "unknown";
       messageTap.emit({
         direction: "inbound",
-        from: `${friendLookup.handle}/${inboundSenderAgent}`,
+        from: `${peerLookup.handle}/${inboundSenderAgent}`,
         to: tenant,
         action,
         message: req.body?.message,
@@ -551,13 +543,6 @@ function createLocalApp(
     const peersCfg = holder.peers();
     const projected = projectHandles(peersCfg, localAgents);
 
-    // Preserve legacy behavior: include friends that aren't in peers.toml yet
-    const legacyFriends = Object.keys(holder.friends().friends);
-    const peerHandles = new Set(Object.keys(peersCfg.peers));
-    for (const friend of legacyFriends) {
-      if (friend !== self && !peerHandles.has(friend)) projected.push(friend);
-    }
-
     const unique = Array.from(new Set(projected)).sort();
     res.json(unique.map((handle) => ({ handle, did: null as string | null })));
   });
@@ -708,7 +693,7 @@ function createLocalApp(
     });
 
     // Synthesise a RemoteAgent triplet from the peers.toml entry so we can
-    // reuse the same mTLS outbound path as the remotes.toml-based handler.
+    // reuse the same mTLS outbound path.
     const synthRemote: RemoteAgent = {
       localHandle: peerName,
       remoteEndpoint: peerEntry.endpoint,

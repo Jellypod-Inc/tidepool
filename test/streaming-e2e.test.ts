@@ -8,6 +8,7 @@ import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 import { formatSseEvent } from "../src/a2a.js";
+import { writePeersConfig } from "../src/peers/config.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 function listenEphemeral(server: http.Server): Promise<number> {
@@ -166,10 +167,7 @@ describe("e2e: SSE streaming through local interface", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(configDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    writePeersConfig(path.join(configDir, "peers.toml"), { peers: {} });
 
     server = await startServer({ configDir });
     localPort = (server.localServer.address() as any).port;
@@ -274,10 +272,7 @@ describe("e2e: SSE stream timeout", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(configDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    writePeersConfig(path.join(configDir, "peers.toml"), { peers: {} });
 
     server = await startServer({ configDir });
     localPort = (server.localServer.address() as any).port;
@@ -400,10 +395,7 @@ describe("upstream SSE validation: enforce mode", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(configDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    writePeersConfig(path.join(configDir, "peers.toml"), { peers: {} });
 
     server = await startServer({ configDir });
     localPort = (server.localServer.address() as any).port;
@@ -521,10 +513,7 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(configDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    writePeersConfig(path.join(configDir, "peers.toml"), { peers: {} });
 
     server = await startServer({ configDir });
     localPort = (server.localServer.address() as any).port;

@@ -90,7 +90,6 @@ localPort = ${relayPort}
 localEndpoint = "http://127.0.0.1:${httpPort}"
 `.trim(),
   );
-  writeFileSync(path.join(dir, "remotes.toml"), "[remotes]\n");
   return dir;
 }
 

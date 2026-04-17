@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  checkFriend,
   checkAgentScope,
   resolveTenant,
   extractFingerprint,
@@ -8,19 +7,7 @@ import {
   findPeerByFingerprint,
   CONNECTION_EXTENSION_URL,
 } from "../src/middleware.js";
-import type { FriendsConfig, PeersConfig, ServerConfig } from "../src/types.js";
-
-const friends: FriendsConfig = {
-  friends: {
-    "alice-agent": {
-      fingerprint: "sha256:aaaa",
-    },
-    "carols-ml": {
-      fingerprint: "sha256:bbbb",
-      agents: ["rust-expert"],
-    },
-  },
-};
+import type { PeersConfig, ServerConfig } from "../src/types.js";
 
 const serverConfig: ServerConfig = {
   server: { port: 9900, host: "0.0.0.0", localPort: 9901, rateLimit: "100/hour" },
@@ -35,31 +22,19 @@ const serverConfig: ServerConfig = {
   discovery: { providers: ["static"], cacheTtlSeconds: 300 },
 };
 
-describe("checkFriend", () => {
-  it("returns friend handle for known fingerprint", () => {
-    const result = checkFriend(friends, "sha256:aaaa");
-    expect(result).toEqual({ handle: "alice-agent", friend: friends.friends["alice-agent"] });
-  });
-
-  it("returns null for unknown fingerprint", () => {
-    const result = checkFriend(friends, "sha256:unknown");
-    expect(result).toBeNull();
-  });
-});
-
 describe("checkAgentScope", () => {
-  it("allows unscoped friend to access any agent", () => {
-    const result = checkAgentScope(friends.friends["alice-agent"], "rust-expert");
+  it("allows unscoped peer to access any agent", () => {
+    const result = checkAgentScope({ agents: undefined }, "rust-expert");
     expect(result).toBe(true);
   });
 
-  it("allows scoped friend to access granted agent", () => {
-    const result = checkAgentScope(friends.friends["carols-ml"], "rust-expert");
+  it("allows peer with matching agent list entry", () => {
+    const result = checkAgentScope({ agents: ["rust-expert"] }, "rust-expert");
     expect(result).toBe(true);
   });
 
-  it("denies scoped friend from accessing non-granted agent", () => {
-    const result = checkAgentScope(friends.friends["carols-ml"], "code-reviewer");
+  it("denies when agent list does not include the tenant", () => {
+    const result = checkAgentScope({ agents: ["rust-expert"] }, "code-reviewer");
     expect(result).toBe(false);
   });
 });
@@ -206,11 +181,9 @@ describe("middleware — peers-based inbound trust", () => {
     });
   });
 
-  it("rejects an inbound cert that is in neither peers nor friends", () => {
+  it("rejects an inbound cert not in peers", () => {
     const peerResult = findPeerByFingerprint(emptyPeers, "sha256:0000000000000000000000000000000000000000000000000000000000000000");
-    const friendResult = checkFriend({ friends: {} }, "sha256:0000000000000000000000000000000000000000000000000000000000000000");
     expect(peerResult).toBeNull();
-    expect(friendResult).toBeNull();
   });
 
   it("finds peer by fingerprint case-insensitively", () => {
@@ -228,21 +201,10 @@ describe("middleware — peers-based inbound trust", () => {
     expect(result).toBeNull();
   });
 
-  it("prefers peers entry when both peers and friends contain the fingerprint", () => {
-    // Both have the same fingerprint — both lookups succeed independently (no crash)
+  it("finds a peer by fingerprint and returns the correct handle", () => {
     const sharedFp = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-    const friendsWithOverlap: FriendsConfig = {
-      friends: {
-        "bob-friend-alias": { fingerprint: sharedFp },
-      },
-    };
     const peerResult = findPeerByFingerprint(peers, sharedFp);
-    const friendResult = checkFriend(friendsWithOverlap, sharedFp);
-    // peers check wins (done first in the trust pipeline)
     expect(peerResult).not.toBeNull();
     expect(peerResult?.handle).toBe("bob-agent");
-    // friends path would also have found it — no crash, no undefined behavior
-    expect(friendResult).not.toBeNull();
-    expect(friendResult?.handle).toBe("bob-friend-alias");
   });
 });

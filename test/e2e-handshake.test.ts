@@ -85,10 +85,9 @@ describe("e2e: connection handshake", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(bobConfigDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    // Bob starts with no known peers — the handshake will write peers.toml
+    const { writePeersConfig } = await import("../src/peers/config.js");
+    writePeersConfig(path.join(bobConfigDir, "peers.toml"), { peers: {} });
 
     // Bob's mock agent
     const bobApp = express();

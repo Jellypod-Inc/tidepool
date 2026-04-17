@@ -2,12 +2,11 @@
  * e2e-peers-inbound.test.ts
  *
  * Verifies that the inbound mTLS trust check accepts requests from a peer
- * whose cert fingerprint is listed in peers.toml — even when that peer is NOT
- * listed in friends.toml.
+ * whose cert fingerprint is listed in peers.toml.
  *
  * Scenario:
- *   Alice has Bob in peers.toml (no friends.toml entry).
- *   Bob has Alice in friends.toml.
+ *   Alice has Bob in peers.toml.
+ *   Bob has Alice in peers.toml.
  *   Bob sends a message to Alice's agent via the public mTLS interface.
  *   Expected: Alice accepts the request and routes it to her mock agent.
  */
@@ -53,7 +52,7 @@ function createMockAgent(
   });
 }
 
-describe("e2e: inbound trust via peers.toml (no friends.toml entry)", () => {
+describe("e2e: inbound trust via peers.toml", () => {
   let tmpDir: string;
   let aliceConfigDir: string;
   let bobConfigDir: string;
@@ -105,10 +104,7 @@ describe("e2e: inbound trust via peers.toml (no friends.toml entry)", () => {
           discovery: { providers: ["static"], cacheTtlSeconds: 300 },
         } as any),
       );
-      fs.writeFileSync(
-        path.join(dir, "friends.toml"),
-        TOML.stringify({ friends: {} } as any),
-      );
+      writePeersConfig(path.join(dir, "peers.toml"), { peers: {} });
     };
 
     writePlaceholderConfig(aliceConfigDir, "alice-dev");
@@ -124,9 +120,7 @@ describe("e2e: inbound trust via peers.toml (no friends.toml entry)", () => {
     bobProbe.close();
     await new Promise((r) => setTimeout(r, 50));
 
-    // --- Alice: peers.toml has Bob; friends.toml is EMPTY ---
-    // This is the key difference from the standard e2e test where Bob would be
-    // in friends.toml. Here we verify that peers.toml alone grants inbound trust.
+    // --- Alice: peers.toml has Bob ---
     fs.writeFileSync(
       path.join(aliceConfigDir, "server.toml"),
       TOML.stringify({
@@ -135,12 +129,6 @@ describe("e2e: inbound trust via peers.toml (no friends.toml entry)", () => {
         connectionRequests: { mode: "deny" },
         discovery: { providers: ["static"], cacheTtlSeconds: 300 },
       } as any),
-    );
-
-    // friends.toml intentionally EMPTY — Bob is NOT a friend
-    fs.writeFileSync(
-      path.join(aliceConfigDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
     );
 
     // peers.toml: Bob's fingerprint lives here
@@ -154,7 +142,7 @@ describe("e2e: inbound trust via peers.toml (no friends.toml entry)", () => {
       },
     });
 
-    // --- Bob: friends.toml has Alice; peers.toml empty ---
+    // --- Bob: peers.toml has Alice ---
     fs.writeFileSync(
       path.join(bobConfigDir, "server.toml"),
       TOML.stringify({
@@ -165,14 +153,15 @@ describe("e2e: inbound trust via peers.toml (no friends.toml entry)", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(bobConfigDir, "friends.toml"),
-      TOML.stringify({
-        friends: {
-          "alices-dev": { fingerprint: aliceIdentity.fingerprint },
+    writePeersConfig(path.join(bobConfigDir, "peers.toml"), {
+      peers: {
+        "alices-dev": {
+          fingerprint: aliceIdentity.fingerprint,
+          endpoint: `https://127.0.0.1:${alicePublicPort}`,
+          agents: ["alice-dev"],
         },
-      } as any),
-    );
+      },
+    });
 
     // --- Start Tidepool servers ---
     // Alice configures Bob as a remoteAgent so the outbound direction (Alice→Bob)
@@ -228,7 +217,7 @@ describe("e2e: inbound trust via peers.toml (no friends.toml entry)", () => {
   });
 
   it(
-    "accepts inbound request from a peer listed only in peers.toml (not friends.toml)",
+    "accepts inbound request from a peer listed in peers.toml",
     async () => {
       // Bob sends to Alice's agent through both Tidepool daemons.
       // Bob's cert is in Alice's peers.toml only — this verifies the peers-first

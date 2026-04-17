@@ -4,7 +4,6 @@ import { DASHBOARD_CSS } from "./style.js";
 import { HTMX_JS } from "./vendor.js";
 import { renderLayout } from "./layout.js";
 import { renderHomePage, type HomeContext } from "./pages/home.js";
-import { renderFriendsPage, renderFriendsTable, handleAddFriend, handleRemoveFriend } from "./pages/friends.js";
 import { renderThreadsPage, renderThreadsTable } from "./pages/threads.js";
 import { renderConfigPage, renderConfigContent, handleOpenFile, handleOpenDir } from "./pages/config.js";
 import { renderAuditPage } from "./pages/audit.js";
@@ -51,25 +50,6 @@ export function mountDashboard(
   app.get("/dashboard", (req, res) => {
     const ctx: HomeContext = { holder, configDir, startedAt };
     page("home", "Home", renderHomePage(ctx), req, res);
-  });
-
-  app.get("/dashboard/friends", (req, res) => {
-    page("friends", "Friends", renderFriendsPage(holder), req, res);
-  });
-
-  app.get("/dashboard/friends/table", (_req, res) => {
-    res.send(renderFriendsTable(holder.friends()));
-  });
-
-  // Body parsing for dashboard form submissions (url-encoded)
-  const formParser = express.urlencoded({ extended: false });
-
-  app.post("/dashboard/friends", formParser, (req, res) => {
-    handleAddFriend(req, res, holder, configDir);
-  });
-
-  app.delete("/dashboard/friends/:handle", (req, res) => {
-    handleRemoveFriend(req, res, holder, configDir);
   });
 
   app.get("/dashboard/threads", (req, res) => {

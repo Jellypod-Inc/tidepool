@@ -8,6 +8,7 @@ import TOML from "@iarna/toml";
 import { Agent as UndiciAgent } from "undici";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
+import { writePeersConfig } from "../src/peers/config.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Two mock A2A agents — simple echo servers
@@ -97,10 +98,7 @@ describe("e2e: two Tidepool servers", () => {
           discovery: { providers: ["static"], cacheTtlSeconds: 300 },
         } as any),
       );
-      fs.writeFileSync(
-        path.join(dir, "friends.toml"),
-        TOML.stringify({ friends: {} } as any),
-      );
+      writePeersConfig(path.join(dir, "peers.toml"), { peers: {} });
     };
 
     writePlaceholderConfig(aliceConfigDir, "alice-dev");
@@ -132,15 +130,16 @@ describe("e2e: two Tidepool servers", () => {
       } as any),
     );
 
-    // Bob is a friend of Alice (so Bob can ask Alice's agent)
-    fs.writeFileSync(
-      path.join(aliceConfigDir, "friends.toml"),
-      TOML.stringify({
-        friends: {
-          "bobs-rust-expert": { fingerprint: bobIdentity.fingerprint },
+    // Bob is in Alice's peers.toml so Bob's inbound requests are trusted
+    writePeersConfig(path.join(aliceConfigDir, "peers.toml"), {
+      peers: {
+        "bobs-rust-expert": {
+          fingerprint: bobIdentity.fingerprint,
+          endpoint: `https://127.0.0.1:${bobPublicPort}`,
+          agents: ["rust-expert"],
         },
-      } as any),
-    );
+      },
+    });
 
     fs.writeFileSync(
       path.join(bobConfigDir, "server.toml"),
@@ -157,15 +156,16 @@ describe("e2e: two Tidepool servers", () => {
       } as any),
     );
 
-    // Alice is a friend of Bob (so Alice can ask Bob's agent)
-    fs.writeFileSync(
-      path.join(bobConfigDir, "friends.toml"),
-      TOML.stringify({
-        friends: {
-          "alices-dev": { fingerprint: aliceIdentity.fingerprint },
+    // Alice is in Bob's peers.toml so Alice's inbound requests are trusted
+    writePeersConfig(path.join(bobConfigDir, "peers.toml"), {
+      peers: {
+        "alices-dev": {
+          fingerprint: aliceIdentity.fingerprint,
+          endpoint: `https://127.0.0.1:${alicePublicPort}`,
+          agents: ["alice-dev"],
         },
-      } as any),
-    );
+      },
+    });
 
     // --- Start Tidepool servers with cross-references ---
     aliceServer = await startServer({
@@ -353,10 +353,7 @@ describe("inbound validation: enforce mode", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(configDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    writePeersConfig(path.join(configDir, "peers.toml"), { peers: {} });
 
     server = await startServer({ configDir });
     publicPort = (server.publicServer.address() as any).port;

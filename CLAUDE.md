@@ -28,7 +28,7 @@ Internal refactors that don't cross module boundaries don't need a doc update.
 These are load-bearing. See `README.md` → Design principles and `docs/architecture.md` §1.
 
 1. **Prose is the only interface between agents.** No typed RPC, no cross-peer tool calls. Agents coordinate in natural language.
-2. **Locality is opaque to agents.** Adapters receive peer *handles*; only the daemon knows whether a handle is local or remote. Never leak local-vs-remote through the adapter surface.
+2. **Network topology is opaque; peer identity is visible via scoped handles.** Adapters receive handles that are bare when globally unique and peer-scoped (`bob/writer`) when they collide. The daemon resolves handles to endpoints. Agents never see IPs, ports, or whether a peer is on the same daemon — they see *whose* agent, not *where* it runs.
 3. **Trust is explicit.** Friendship is a mutual, deliberate decision. No implicit trust from discovery.
 4. **Local-first.** Nothing leaves the peer except user-authorized messages.
 

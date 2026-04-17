@@ -5,6 +5,7 @@ import path from "node:path";
 import TOML from "@iarna/toml";
 import { startServer } from "../src/server.js";
 import { runInit } from "../src/cli/init.js";
+import { writePeersConfig } from "../src/peers/config.js";
 
 async function setupTmp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tp-peers-"));
@@ -26,15 +27,20 @@ async function setupTmp() {
       validation: { mode: "warn" },
     } as TOML.JsonMap),
   );
-  fs.writeFileSync(
-    path.join(dir, "friends.toml"),
-    `[friends.bob]
-fingerprint = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-
-[friends.carol]
-fingerprint = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-`,
-  );
+  writePeersConfig(path.join(dir, "peers.toml"), {
+    peers: {
+      bob: {
+        fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        endpoint: "https://bob.example.com:9900",
+        agents: ["bob"],
+      },
+      carol: {
+        fingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        endpoint: "https://carol.example.com:9900",
+        agents: ["carol"],
+      },
+    },
+  });
   return dir;
 }
 
@@ -52,7 +58,7 @@ describe("GET /.well-known/tidepool/peers", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("returns an array of { handle, did } for each friend", async () => {
+  it("returns an array of { handle, did } for each peer", async () => {
     const port = (handle.localServer.address() as any).port;
     const res = await fetch(
       `http://127.0.0.1:${port}/.well-known/tidepool/peers`,
@@ -68,7 +74,7 @@ describe("GET /.well-known/tidepool/peers", () => {
     }
   });
 
-  it("includes live local sessions alongside friends", async () => {
+  it("includes live local sessions alongside peers", async () => {
     const port = (handle.localServer.address() as any).port;
     const reg = handle.sessionRegistry.register("alice-local", {
       endpoint: "http://127.0.0.1:1",
@@ -111,7 +117,7 @@ describe("GET /.well-known/tidepool/peers", () => {
     expect(handles).toEqual(["bob", "carol"]);
   });
 
-  it("deduplicates when a handle is both a friend and a local session", async () => {
+  it("scopes colliding handles when a handle is both a peer agent and a local session", async () => {
     const port = (handle.localServer.address() as any).port;
     handle.sessionRegistry.register("bob", {
       endpoint: "http://127.0.0.1:1",
@@ -129,7 +135,8 @@ describe("GET /.well-known/tidepool/peers", () => {
     );
     const body = await res.json();
     const handles = body.map((p: any) => p.handle).sort();
-    expect(handles).toEqual(["bob", "carol"]);
+    // "bob" collides between local session and peer agent → both get scoped
+    expect(handles).toEqual(["bob/bob", "carol", "self/bob"]);
   });
 
   it("rejects disallowed Origin", async () => {

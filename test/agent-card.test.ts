@@ -16,6 +16,7 @@ import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
 import { AgentCardSchema } from "../src/a2a.js";
 import { runInit } from "../src/cli/init.js";
+import { writePeersConfig } from "../src/peers/config.js";
 
 describe("buildLocalAgentCard", () => {
   it("builds a v1.0 Agent Card for a locally registered agent", () => {
@@ -161,10 +162,7 @@ describe("v1.0 conformance: Agent Card emitted by the server validates against A
         discovery: { providers: ["static"], cacheTtlSeconds: 300 },
       } as any),
     );
-    fs.writeFileSync(
-      path.join(configDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    writePeersConfig(path.join(configDir, "peers.toml"), { peers: {} });
 
     server = await startServer({ configDir, remoteAgents: [] });
   });

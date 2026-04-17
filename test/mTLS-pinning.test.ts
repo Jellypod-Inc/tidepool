@@ -7,6 +7,7 @@ import express from "express";
 import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
+import { writePeersConfig } from "../src/peers/config.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Minimal A2A echo agent — used by both the real Bob and the impersonator Mallory.
@@ -115,11 +116,8 @@ describe("outbound mTLS fingerprint pinning", () => {
       } as any),
     );
 
-    // Alice's friends — irrelevant for this test, but required.
-    fs.writeFileSync(
-      path.join(aliceConfigDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
+    // Alice's peers — irrelevant for this test (she's initiating outbound, not receiving).
+    writePeersConfig(path.join(aliceConfigDir, "peers.toml"), { peers: {} });
 
     // --- Mallory's config (pretends to be Bob) ---
     fs.writeFileSync(
@@ -144,19 +142,20 @@ describe("outbound mTLS fingerprint pinning", () => {
       } as any),
     );
 
-    // Mallory accepts Alice as a friend — so if Alice DOES complete the TLS
+    // Mallory accepts Alice in peers.toml — so if Alice DOES complete the TLS
     // handshake, Mallory will happily serve her request. This is what makes
     // the MITM scenario realistic: Mallory is a well-configured impersonator,
     // not a broken server. The ONLY thing that should stop Alice is her own
     // outbound fingerprint check.
-    fs.writeFileSync(
-      path.join(malloryConfigDir, "friends.toml"),
-      TOML.stringify({
-        friends: {
-          alice: { fingerprint: aliceIdentity.fingerprint },
+    writePeersConfig(path.join(malloryConfigDir, "peers.toml"), {
+      peers: {
+        alice: {
+          fingerprint: aliceIdentity.fingerprint,
+          endpoint: `https://127.0.0.1:9999`, // unused for inbound trust
+          agents: ["alice-dev"],
         },
-      } as any),
-    );
+      },
+    });
 
     // --- Mock agents ---
     aliceMockAgent = createMockAgent(ALICE_MOCK, "alice-dev");

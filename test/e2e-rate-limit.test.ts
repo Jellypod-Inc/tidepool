@@ -8,6 +8,7 @@ import express from "express";
 import TOML from "@iarna/toml";
 import { generateIdentity } from "../src/identity.js";
 import { startServer } from "../src/server.js";
+import { writePeersConfig } from "../src/peers/config.js";
 import type { RemoteAgent } from "../src/types.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
@@ -169,14 +170,15 @@ describe("e2e: rate limiting and timeout", () => {
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(serverConfigDir, "friends.toml"),
-      TOML.stringify({
-        friends: {
-          "peer-agent": { fingerprint: peerIdentity.fingerprint },
+    writePeersConfig(path.join(serverConfigDir, "peers.toml"), {
+      peers: {
+        "peer-agent": {
+          fingerprint: peerIdentity.fingerprint,
+          endpoint: "https://peer.example.com:9900",
+          agents: ["peer-agent"],
         },
-      } as any),
-    );
+      },
+    });
 
     // Register peer-agent as a remote so inbound mTLS requests can be
     // translated back to a local handle by fingerprint + X-Sender-Agent.
@@ -264,7 +266,7 @@ describe("e2e: rate limiting and timeout", () => {
     expect(resp.body.artifacts[0].parts[0].text).toContain("2");
   }, 10_000);
 
-  it("returns TASK_STATE_REJECTED for non-friends", async () => {
+  it("returns TASK_STATE_REJECTED for unknown peers", async () => {
     const strangerDir = path.join(tmpDir, "stranger");
 
     await generateIdentity({

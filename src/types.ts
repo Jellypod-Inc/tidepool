@@ -43,24 +43,11 @@ export interface AgentConfig {
   // localEndpoint removed — endpoint is declared at runtime via SSE session
 }
 
-export interface FriendEntry {
-  fingerprint: string;
-  agents?: string[];
-}
-
-export interface FriendsConfig {
-  friends: Record<string, FriendEntry>;
-}
-
 export interface RemoteAgent {
   localHandle: string;
   remoteEndpoint: string;
   remoteTenant: string;
   certFingerprint: string;
-}
-
-export interface RemotesConfig {
-  remotes: Record<string, RemoteAgent>;
 }
 
 export interface AgentIdentity {

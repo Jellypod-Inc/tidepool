@@ -61,23 +61,19 @@ tidepool start
 
 At this point both daemons are running but `alice` and `bob` are both **offline** — an adapter still has to claim them (see [Start talking](#start-talking) below).
 
-### Friend each other
+### Add one of Bob's agents
+
+Once Bob has registered `rust-expert` on his peer and his daemon is running,
+Alice adds it to her local namespace:
 
 ```bash
-# Alice gets her fingerprint
-tidepool whoami
-# → sha256:a1b2c3...
-
-# Bob gets his fingerprint
-tidepool whoami
-# → sha256:d4e5f6...
-
-# Alice adds Bob (needs Bob's fingerprint + endpoint)
-tidepool friend add bob sha256:d4e5f6... --endpoint https://bob.example:9900
-
-# Bob adds Alice
-tidepool friend add alice sha256:a1b2c3... --endpoint https://alice.example:9900
+tidepool agent add https://bob.example:9900 rust-expert \
+  --fingerprint sha256:d4e5f6...
 ```
+
+Alice now has `rust-expert` in her local agents list. The peer entry is
+written to `peers.toml`. Trust becomes bidirectional on the first successful
+handshake; Bob doesn't need to run a command to reciprocate.
 
 ### Start talking
 
@@ -106,7 +102,7 @@ Each peer generates a self-signed X.509 certificate at `tidepool init`. The SHA-
 
 ### Trust
 
-Trust is explicit. You add friends by fingerprint. Unknown peers are rejected unless they send a connection request, which can be accepted manually, automatically, or evaluated by an LLM.
+Trust is explicit. You add peers by fingerprint via `tidepool agent add`. Unknown peers are rejected unless they send a connection request, which can be accepted manually, automatically, or evaluated by an LLM. All trust state lives in `peers.toml`.
 
 ### Agents
 
@@ -155,16 +151,15 @@ Tidepool stores its config in `$TIDEPOOL_HOME` (defaults to `~/.config/tidepool`
 |------|---------|
 | `identity.crt` / `identity.key` | Peer identity (generated once at init) |
 | `server.toml` | Agent definitions, ports, rate limits, discovery |
-| `friends.toml` | Trusted peer fingerprints and access scopes |
-| `remotes.toml` | Shortcuts to remote peers' agents |
+| `peers.toml` | Trusted peers: fingerprint, endpoint, and their agent names |
 
 All config is TOML and hot-reloaded — changes take effect without restarting the daemon.
 
 ## Design principles
 
 - **Prose is the only interface between agents.** No typed RPC, no cross-peer tool calls. Agents coordinate in natural language.
-- **Locality is opaque.** Agents hold peer handles; the daemon decides whether a handle is local or remote. Agents never see network topology.
-- **Trust is explicit.** Discovery finds candidates; friendship is a deliberate mutual decision. No auto-join, no open mesh by default.
+- **Network topology is opaque; peer identity is visible via scoped handles.** Agents see `peer/agent` handles when needed; the daemon resolves them to endpoints. Agents never see IPs or ports.
+- **Trust is explicit.** Discovery finds candidates; adding a peer is a deliberate decision. No auto-join, no open mesh by default.
 - **Local-first.** Everything runs on your machine. No cloud, no accounts, no data leaves your peer except the messages you send.
 
 ## Architecture

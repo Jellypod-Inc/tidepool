@@ -7,6 +7,7 @@ import express from "express";
 import TOML from "@iarna/toml";
 import { generateIdentity } from "../../src/identity.js";
 import { startServer } from "../../src/server.js";
+import { writePeersConfig } from "../../src/peers/config.js";
 
 describe("dashboard e2e", () => {
   let tmpDir: string;
@@ -37,7 +38,6 @@ describe("dashboard e2e", () => {
     mockAgent = await new Promise<http.Server>((resolve) => {
       const s = agentApp.listen(0, "127.0.0.1", () => resolve(s));
     });
-    const agentPort = (mockAgent.address() as any).port;
 
     const serverToml = {
       server: { port: publicPort, host: "127.0.0.1", localPort, rateLimit: "100/hour", streamTimeoutSeconds: 300 },
@@ -48,12 +48,15 @@ describe("dashboard e2e", () => {
     };
     fs.writeFileSync(path.join(configDir, "server.toml"), TOML.stringify(serverToml as any));
 
-    const friendsToml = {
-      friends: {
-        alice: { fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    writePeersConfig(path.join(configDir, "peers.toml"), {
+      peers: {
+        alice: {
+          fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          endpoint: "https://alice.example.com:9900",
+          agents: ["alice-dev"],
+        },
       },
-    };
-    fs.writeFileSync(path.join(configDir, "friends.toml"), TOML.stringify(friendsToml as any));
+    });
 
     server = await startServer({ configDir });
   });
@@ -88,11 +91,10 @@ describe("dashboard e2e", () => {
     expect(res.headers.get("content-type")).toContain("javascript");
   });
 
-  it("GET /dashboard/friends returns friends page with alice", async () => {
+  it("GET /dashboard/friends returns 404 (route removed)", async () => {
     const res = await fetch(`http://127.0.0.1:${localPort}/dashboard/friends`);
-    const html = await res.text();
-    expect(html).toContain("alice");
-    expect(html).toContain("sha256:aaaaaa");
+    // friends route no longer exists — Express returns 404
+    expect(res.status).toBe(404);
   });
 
   it("GET /dashboard/threads returns threads page", async () => {
@@ -105,6 +107,7 @@ describe("dashboard e2e", () => {
     const res = await fetch(`http://127.0.0.1:${localPort}/dashboard/config`);
     const html = await res.text();
     expect(html).toContain("server.toml");
+    expect(html).toContain("peers.toml");
     expect(html).toContain("test-agent");
   });
 
@@ -115,39 +118,11 @@ describe("dashboard e2e", () => {
   });
 
   it("htmx fragment request returns content without layout", async () => {
-    const res = await fetch(`http://127.0.0.1:${localPort}/dashboard/friends`, {
+    const res = await fetch(`http://127.0.0.1:${localPort}/dashboard/threads`, {
       headers: { "HX-Request": "true" },
     });
     const html = await res.text();
-    expect(html).toContain("alice");
+    expect(html).toContain("Threads");
     expect(html).not.toContain("<!DOCTYPE html>");
-  });
-
-  it("POST /dashboard/friends adds a friend", async () => {
-    const res = await fetch(`http://127.0.0.1:${localPort}/dashboard/friends`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "handle=bob&fingerprint=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    });
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("bob");
-
-    // Verify written to disk
-    const content = fs.readFileSync(path.join(configDir, "friends.toml"), "utf-8");
-    expect(content).toContain("bob");
-  });
-
-  it("DELETE /dashboard/friends/:handle removes a friend", async () => {
-    const res = await fetch(`http://127.0.0.1:${localPort}/dashboard/friends/bob`, {
-      method: "DELETE",
-    });
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).not.toContain("bob");
-
-    // Verify removed from disk
-    const content = fs.readFileSync(path.join(configDir, "friends.toml"), "utf-8");
-    expect(content).not.toContain("bob");
   });
 });

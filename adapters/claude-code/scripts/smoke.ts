@@ -7,6 +7,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { generateIdentity } from "../../tidepool/src/identity.js";
 import { startServer } from "../../tidepool/src/server.js";
+import { writePeersConfig } from "../../tidepool/src/peers/config.js";
 import { start } from "../src/start.js";
 
 const ChannelNotificationSchema = z.object({
@@ -52,10 +53,15 @@ async function main() {
       validation: { mode: "warn" },
     } as any),
   );
-  fs.writeFileSync(
-    path.join(aliceDir, "friends.toml"),
-    TOML.stringify({ friends: { "bobs-rust": { fingerprint: bob.fingerprint } } } as any),
-  );
+  writePeersConfig(path.join(aliceDir, "peers.toml"), {
+    peers: {
+      "bobs-rust": {
+        fingerprint: bob.fingerprint,
+        endpoint: "https://127.0.0.1:29900",
+        agents: ["rust-expert"],
+      },
+    },
+  });
   fs.writeFileSync(
     path.join(bobDir, "server.toml"),
     TOML.stringify({
@@ -66,10 +72,15 @@ async function main() {
       validation: { mode: "warn" },
     } as any),
   );
-  fs.writeFileSync(
-    path.join(bobDir, "friends.toml"),
-    TOML.stringify({ friends: { alice: { fingerprint: alice.fingerprint } } } as any),
-  );
+  writePeersConfig(path.join(bobDir, "peers.toml"), {
+    peers: {
+      alice: {
+        fingerprint: alice.fingerprint,
+        endpoint: "https://127.0.0.1:19900",
+        agents: ["alice-dev"],
+      },
+    },
+  });
 
   header("Boot Bob's adapter + MCP client that auto-replies");
   const [bobClientT, bobServerT] = InMemoryTransport.createLinkedPair();

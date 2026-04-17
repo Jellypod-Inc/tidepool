@@ -1,20 +1,19 @@
 import fs from "fs";
-import { loadServerConfig, loadFriendsConfig } from "./config.js";
+import { loadServerConfig } from "./config.js";
 import { loadPeersConfig } from "./peers/config.js";
-import type { ServerConfig, FriendsConfig, PeersConfig } from "./types.js";
+import type { ServerConfig, PeersConfig } from "./types.js";
 
 export interface ConfigHolder {
   server: () => ServerConfig;
-  friends: () => FriendsConfig;
-  setFriends: (cfg: FriendsConfig) => void;
   peers: () => PeersConfig;
   stop: () => void;
 }
 
 /**
- * Loads server.toml + friends.toml and watches both files for changes. Routes
- * consult the holder on every request via `server()` / `friends()`, so a newly
- * registered agent is visible to the already-running daemon without a restart.
+ * Loads server.toml + peers.toml and watches both files for changes. Routes
+ * consult the holder on every request via `server()` / `peers()`, so a newly
+ * registered peer or agent is visible to the already-running daemon without a
+ * restart.
  *
  * Uses fs.watchFile (polling) rather than fs.watch because tidepool lives
  * on developer laptops where the file is edited by our own CLI commands, not
@@ -24,11 +23,9 @@ export interface ConfigHolder {
  */
 export function createConfigHolder(configDir: string): ConfigHolder {
   const serverPath = `${configDir}/server.toml`;
-  const friendsPath = `${configDir}/friends.toml`;
   const peersPath = `${configDir}/peers.toml`;
 
   let serverCfg = loadServerConfig(serverPath);
-  let friendsCfg = loadFriendsConfig(friendsPath);
   let peersCfg = loadPeersConfig(peersPath);
 
   const onServerChange = () => {
@@ -37,15 +34,6 @@ export function createConfigHolder(configDir: string): ConfigHolder {
     } catch (err) {
       process.stderr.write(
         `[tidepool] reload of server.toml failed: ${String(err)} — keeping prior config\n`,
-      );
-    }
-  };
-  const onFriendsChange = () => {
-    try {
-      friendsCfg = loadFriendsConfig(friendsPath);
-    } catch (err) {
-      process.stderr.write(
-        `[tidepool] reload of friends.toml failed: ${String(err)} — keeping prior config\n`,
       );
     }
   };
@@ -60,17 +48,13 @@ export function createConfigHolder(configDir: string): ConfigHolder {
   };
 
   fs.watchFile(serverPath, { interval: 500 }, onServerChange);
-  fs.watchFile(friendsPath, { interval: 500 }, onFriendsChange);
   fs.watchFile(peersPath, { interval: 500 }, onPeersChange);
 
   return {
     server: () => serverCfg,
-    friends: () => friendsCfg,
-    setFriends: (cfg: FriendsConfig) => { friendsCfg = cfg; },
     peers: () => peersCfg,
     stop: () => {
       fs.unwatchFile(serverPath, onServerChange);
-      fs.unwatchFile(friendsPath, onFriendsChange);
       fs.unwatchFile(peersPath, onPeersChange);
     },
   };

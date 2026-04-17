@@ -6,7 +6,7 @@
  *
  * Scenario:
  *   Alice has Bob in peers.toml (no remotes.toml entry for Bob).
- *   Bob has Alice in friends.toml + a remoteAgents entry so the inbound
+ *   Bob has Alice in peers.toml + a remoteAgents entry so the inbound
  *   X-Sender-Agent lookup works.
  *   Alice's adapter POSTs to /bobs-peer/writer/message:send on Alice's
  *   local interface.
@@ -108,10 +108,7 @@ describe("e2e: outbound routing via peers.toml (scoped /peer/agent/:action route
           discovery: { providers: ["static"], cacheTtlSeconds: 300 },
         } as any),
       );
-      fs.writeFileSync(
-        path.join(dir, "friends.toml"),
-        TOML.stringify({ friends: {} } as any),
-      );
+      writePeersConfig(path.join(dir, "peers.toml"), { peers: {} });
     };
 
     writePlaceholderConfig(aliceConfigDir, "alice-sender");
@@ -139,11 +136,6 @@ describe("e2e: outbound routing via peers.toml (scoped /peer/agent/:action route
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(aliceConfigDir, "friends.toml"),
-      TOML.stringify({ friends: {} } as any),
-    );
-
     // peers.toml: Bob's fingerprint + endpoint + advertised agents
     writePeersConfig(path.join(aliceConfigDir, "peers.toml"), {
       peers: {
@@ -155,7 +147,7 @@ describe("e2e: outbound routing via peers.toml (scoped /peer/agent/:action route
       },
     });
 
-    // --- Bob: friends.toml has Alice; peers.toml empty ---
+    // --- Bob: peers.toml has Alice ---
     // Bob also needs a remoteAgents entry for Alice so the inbound
     // X-Sender-Agent → local handle lookup works.
     fs.writeFileSync(
@@ -168,14 +160,15 @@ describe("e2e: outbound routing via peers.toml (scoped /peer/agent/:action route
       } as any),
     );
 
-    fs.writeFileSync(
-      path.join(bobConfigDir, "friends.toml"),
-      TOML.stringify({
-        friends: {
-          "alices-peer": { fingerprint: aliceIdentity.fingerprint },
+    writePeersConfig(path.join(bobConfigDir, "peers.toml"), {
+      peers: {
+        "alices-peer": {
+          fingerprint: aliceIdentity.fingerprint,
+          endpoint: `https://127.0.0.1:${alicePublicPort}`,
+          agents: ["alice-sender"],
         },
-      } as any),
-    );
+      },
+    });
 
     // --- Start Tidepool servers ---
     // Alice passes NO remoteAgents for Bob — the new /:peer/:agent/:action

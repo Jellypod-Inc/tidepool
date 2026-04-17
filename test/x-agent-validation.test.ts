@@ -5,6 +5,7 @@ import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import TOML from "@iarna/toml";
+import { writePeersConfig } from "../src/peers/config.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Pick ports unlikely to collide with other tests in this suite.
@@ -41,7 +42,7 @@ async function setupConfig() {
       validation: { mode: "warn" },
     } as any),
   );
-  writeFileSync(path.join(dir, "friends.toml"), "[friends]\n");
+  writePeersConfig(path.join(dir, "peers.toml"), { peers: {} });
   return dir;
 }
 

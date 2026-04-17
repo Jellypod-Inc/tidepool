@@ -9,7 +9,6 @@ import TOML from "@iarna/toml";
 import { runInit } from "../src/cli/init.js";
 import { runRegister } from "../src/cli/register.js";
 import { startServer } from "../src/server.js";
-import { loadRemotesConfig } from "../src/cli/remotes-config.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 function tmp(prefix: string): string {
@@ -84,10 +83,9 @@ describe("local loopback — two agents on one tidepool", () => {
     });
     servers.push(bobServer);
 
-    const remotes = loadRemotesConfig(path.join(dir, "remotes.toml"));
     const handle = await startServer({
       configDir: dir,
-      remoteAgents: Object.values(remotes.remotes),
+      remoteAgents: [],
     });
     servers.push({ close: () => handle.close() });
 
@@ -297,10 +295,9 @@ describe("local loopback — two agents on one tidepool", () => {
     });
     servers.push(bobServer);
 
-    const remotes = loadRemotesConfig(path.join(dir, "remotes.toml"));
     const handle = await startServer({
       configDir: dir,
-      remoteAgents: Object.values(remotes.remotes),
+      remoteAgents: [],
     });
     servers.push({ close: () => handle.close() });
 
@@ -428,10 +425,9 @@ describe("local loopback — two agents on one tidepool", () => {
     servers.push(bobServer);
 
     // First daemon incarnation
-    const remotes = loadRemotesConfig(path.join(dir, "remotes.toml"));
     const handle1 = await startServer({
       configDir: dir,
-      remoteAgents: Object.values(remotes.remotes),
+      remoteAgents: [],
     });
 
     const LOCAL_PORT = (handle1.localServer.address() as any).port;
@@ -474,7 +470,7 @@ describe("local loopback — two agents on one tidepool", () => {
     // Since port 0 was used, we get a new ephemeral port — that's fine for this test.
     const handle2 = await startServer({
       configDir: dir,
-      remoteAgents: Object.values(remotes.remotes),
+      remoteAgents: [],
     });
     servers.push({ close: () => handle2.close() });
 
