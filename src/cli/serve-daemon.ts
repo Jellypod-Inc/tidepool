@@ -5,7 +5,6 @@ import { spawn as nodeSpawn } from "child_process";
 import type { ChildProcess, SpawnOptions } from "child_process";
 import { loadServerConfig } from "../config.js";
 
-export const PID_FILENAME = "serve.pid";
 export const LOGS_DIRNAME = "logs";
 
 type SpawnFn = (
@@ -21,39 +20,21 @@ export interface IsServeRunningOpts {
 }
 
 export type IsServeRunningResult =
-  | { running: false; reason: "no-pid-file" }
-  | { running: false; reason: "stale-pid-file" }
-  | { running: false; reason: "port-not-responding"; pid: number }
-  | { running: true; pid: number };
+  | { running: false; reason: "port-not-responding" | "no-config" }
+  | { running: true };
 
 export async function isServeRunning(
   opts: IsServeRunningOpts,
 ): Promise<IsServeRunningResult> {
-  const pidPath = path.join(opts.configDir, PID_FILENAME);
-  if (!fs.existsSync(pidPath)) {
-    return { running: false, reason: "no-pid-file" };
+  const localPort = resolveLocalPort(opts);
+  if (localPort === null) {
+    return { running: false, reason: "no-config" };
   }
-
-  const raw = fs.readFileSync(pidPath, "utf-8").trim();
-  const pid = Number(raw);
-  if (!Number.isFinite(pid) || pid <= 0) {
-    fs.unlinkSync(pidPath);
-    return { running: false, reason: "stale-pid-file" };
-  }
-
-  if (!isProcessAlive(pid)) {
-    fs.unlinkSync(pidPath);
-    return { running: false, reason: "stale-pid-file" };
-  }
-
-  const localPort = opts.localPortOverride ?? readLocalPort(opts.configDir);
   const url = `http://127.0.0.1:${localPort}/.well-known/agent-card.json`;
   const probe = opts.probe ?? defaultProbe;
   const reachable = await probe(url);
-  if (!reachable) {
-    return { running: false, reason: "port-not-responding", pid };
-  }
-  return { running: true, pid };
+  if (!reachable) return { running: false, reason: "port-not-responding" };
+  return { running: true };
 }
 
 export interface SpawnServeDaemonOpts {
@@ -86,12 +67,12 @@ export async function spawnServeDaemon(opts: SpawnServeDaemonOpts): Promise<{ pi
     throw new Error("spawn returned no PID");
   }
 
-  const pidPath = path.join(opts.configDir, PID_FILENAME);
-  fs.writeFileSync(pidPath, String(child.pid));
-
   child.unref();
 
-  const localPort = opts.localPortOverride ?? readLocalPort(opts.configDir);
+  const localPort = resolveLocalPort(opts);
+  if (localPort === null) {
+    throw new Error("Cannot spawn daemon: missing server.toml (run 'tidepool init' first).");
+  }
   const url = `http://127.0.0.1:${localPort}/.well-known/agent-card.json`;
   const probe = opts.probe ?? defaultProbe;
   const timeoutMs = opts.readinessTimeoutMs ?? 3000;
@@ -103,7 +84,6 @@ export async function spawnServeDaemon(opts: SpawnServeDaemonOpts): Promise<{ pi
     } catch {
       // ignore
     }
-    if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath);
     throw new Error(
       `Tidepool did not become ready within ${timeoutMs}ms. Check logs at ${logPath}, or rerun with --debug to see output.`,
     );
@@ -112,17 +92,13 @@ export async function spawnServeDaemon(opts: SpawnServeDaemonOpts): Promise<{ pi
   return { pid: child.pid, logPath };
 }
 
-function readLocalPort(configDir: string): number {
-  const cfg = loadServerConfig(path.join(configDir, "server.toml"));
-  return cfg.server.localPort;
-}
-
-function isProcessAlive(pid: number): boolean {
+function resolveLocalPort(opts: { configDir: string; localPortOverride?: number }): number | null {
+  if (opts.localPortOverride !== undefined) return opts.localPortOverride;
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === "EPERM";
+    const cfg = loadServerConfig(path.join(opts.configDir, "server.toml"));
+    return cfg.server.localPort;
+  } catch {
+    return null;
   }
 }
 

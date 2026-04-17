@@ -247,7 +247,6 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 | `server.toml` | `config.ts` → `config-holder.ts` | `config-writer.ts` (register/unregister) | Ports, agents, per-agent rate limits, discovery, connection-request policy. |
 | `friends.toml` | `config-holder.ts`, `middleware.ts` | `friends.ts` (friend add/remove, handshake accept) | `handle → fingerprint + scope`. Hot-reloaded. |
 | `remotes.toml` | `proxy.ts` | `cli/remote.ts` | Local handle → remote endpoint + tenant + pinned fingerprint. |
-| `serve.pid` | `cli/stop.ts` | `cli/serve-daemon.ts` | PID of background daemon. |
 | `logs/serve-YYYY-MM-DD.log` | — | `cli/serve-daemon.ts` | Rotating daemon logs. |
 
 `config-holder.ts` polls `server.toml` + `friends.toml` every 500ms so CLI edits take effect without restart.
@@ -272,6 +271,8 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 | `POST` | `/:tenant/:action` | Same pipeline as public but without mTLS; `X-Session-Id` identifies caller |
 | `GET` | `/dashboard` and `/dashboard/*` | `dashboard/index.ts` |
 | `GET` | `/dashboard/api/status` · `/dashboard/api/peers` | Dashboard JSON |
+| `GET` | `/internal/tail` | `dashboard/index.ts` — SSE stream of inbound/outbound message taps (consumed by `tidepool tail`) |
+| `POST` | `/internal/shutdown` | `server.ts` — graceful shutdown; consumed by `tidepool stop` (no pidfile; lifecycle is port-based) |
 
 ### A2A extensions
 

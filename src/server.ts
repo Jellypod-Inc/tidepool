@@ -47,6 +47,7 @@ import {
 } from "./identity-injection.js";
 import type { RemoteAgent } from "./types.js";
 import { mountDashboard, MessageLog } from "./dashboard/index.js";
+import { MessageTap } from "./dashboard/message-tap.js";
 import { isOriginAllowed, isHostAllowed } from "./origin-check.js";
 import { originDeniedResponse } from "./errors.js";
 import { createSessionRegistry, type SessionRegistry } from "./session/registry.js";
@@ -119,6 +120,7 @@ export async function startServer(opts: StartServerOpts) {
   };
 
   const messageLog = new MessageLog(200);
+  const messageTap = new MessageTap(50);
   const startedAt = new Date();
   const sessionRegistry = createSessionRegistry();
 
@@ -144,9 +146,25 @@ export async function startServer(opts: StartServerOpts) {
     getOrCreateAgentBucket,
     remoteAgents,
     messageLog,
+    messageTap,
     sessionRegistry,
   );
-  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, startedAt, localPort, sessionRegistry);
+  // Graceful shutdown — closes listeners and stops config watcher. Exposed
+  // via POST /internal/shutdown so `tidepool stop` can terminate the daemon
+  // without relying on pidfile lookups or OS signals.
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await new Promise<void>((resolve) => publicServer.close(() => resolve()));
+    await new Promise<void>((resolve) => localServer.close(() => resolve()));
+    holder.stop();
+    // Give the HTTP response a tick to flush, then exit so the parent process
+    // observes port release promptly.
+    setTimeout(() => process.exit(0), 50).unref();
+  };
+
+  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, messageTap, startedAt, localPort, sessionRegistry, shutdown);
 
   publicServer.on("request", publicApp);
   localServer.on("request", localApp);
@@ -198,6 +216,7 @@ function createPublicApp(
   getOrCreateAgentBucket: (name: string) => TokenBucket | null,
   remoteAgents: RemoteAgent[],
   messageLog: MessageLog,
+  messageTap: MessageTap,
   sessionRegistry: SessionRegistry,
 ): express.Application {
   const app = express();
@@ -367,6 +386,14 @@ function createPublicApp(
 
       const contextId: string | undefined = req.body?.message?.contextId;
       messageLog.record({ contextId, agent: tenant });
+      const inboundSenderAgent = req.header("x-sender-agent") ?? "unknown";
+      messageTap.emit({
+        direction: "inbound",
+        from: `${friendLookup.handle}/${inboundSenderAgent}`,
+        to: tenant,
+        action,
+        message: req.body?.message,
+      });
 
       // --- Step 6.5: Translate remote sender agent → local handle ---
       // The wire carries the remote tenant name in X-Sender-Agent; the local
@@ -469,17 +496,25 @@ function createLocalApp(
   remoteAgents: RemoteAgent[],
   configDir: string,
   messageLog: MessageLog,
+  messageTap: MessageTap,
   startedAt: Date,
   port: number,
   sessionRegistry: SessionRegistry,
+  shutdown: () => Promise<void>,
 ): express.Application {
   const app = express();
   app.use(express.json());
   app.use(makeOriginGuard(port));   // Apply origin guard to ALL local routes
 
+  // Lifecycle endpoint — loopback + origin-guarded; used by `tidepool stop`.
+  app.post("/internal/shutdown", (_req, res) => {
+    res.status(202).json({ status: "shutting-down" });
+    void shutdown();
+  });
+
   // Dashboard routes must be registered before /:tenant/:action to avoid
   // the parameterized route matching /dashboard/* paths.
-  mountDashboard(app, holder, configDir, messageLog, startedAt);
+  mountDashboard(app, holder, configDir, messageLog, messageTap, startedAt);
 
   mountSessionEndpoint(app, {
     registry: sessionRegistry,
@@ -610,6 +645,13 @@ function createLocalApp(
 
     const contextId: string | undefined = req.body?.message?.contextId;
     messageLog.record({ contextId, agent: senderAgent });
+    messageTap.emit({
+      direction: "outbound",
+      from: senderAgent,
+      to: tenant,
+      action,
+      message: req.body?.message,
+    });
 
     const inbound = validateWire(
       MessageSchema,

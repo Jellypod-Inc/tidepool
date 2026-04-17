@@ -20,6 +20,7 @@ import { runServe } from "../cli/serve.js";
 import { runDirectoryServe } from "../cli/directory.js";
 import { runClaudeCodeStart } from "../cli/claude-code-start.js";
 import { runStop } from "../cli/stop.js";
+import { runTail } from "../cli/tail.js";
 import { resolveConfigDir } from "../cli/paths.js";
 import { ok } from "../cli/output.js";
 
@@ -257,6 +258,14 @@ program
   });
 
 program
+  .command("tail")
+  .description("Stream inbound/outbound A2A messages crossing the daemon")
+  .action(async () => {
+    const configDir = resolveConfigDir(program.opts());
+    await runTail({ configDir });
+  });
+
+program
   .command("stop")
   .description("Stop the background tidepool daemon")
   .action(async () => {
@@ -264,10 +273,14 @@ program
     const result = await runStop({ configDir });
     if (result.action === "not-running") {
       ok("Tidepool is not running.");
-    } else if (result.forced) {
-      ok(`Force-killed (SIGKILL) PID ${result.pid}.`);
+    } else if (result.action === "stopped") {
+      ok("Stopped.");
     } else {
-      ok(`Stopped (was PID ${result.pid}).`);
+      process.stderr.write(
+        `Daemon is bound to port ${result.port} but did not respond to /internal/shutdown.\n` +
+          `Inspect with: lsof -iTCP:${result.port} -sTCP:LISTEN -P\n`,
+      );
+      process.exit(1);
     }
   });
 

@@ -5,6 +5,8 @@ import { isServeRunning } from "./serve-daemon.js";
 
 interface RunStatusOpts {
   configDir: string;
+  /** Test seam — override the port isServeRunning probes. */
+  localPortOverride?: number;
 }
 
 export async function runStatus(opts: RunStatusOpts): Promise<string> {
@@ -12,9 +14,12 @@ export async function runStatus(opts: RunStatusOpts): Promise<string> {
   const friends = loadFriendsConfig(path.join(opts.configDir, "friends.toml"));
   const base = buildStatusOutput(server, friends);
 
-  const daemon = await isServeRunning({ configDir: opts.configDir });
+  const daemon = await isServeRunning({
+    configDir: opts.configDir,
+    localPortOverride: opts.localPortOverride,
+  });
   const daemonBlock = daemon.running
-    ? `Daemon: running (PID ${daemon.pid})`
+    ? `Daemon: running`
     : [
         `Daemon: not running`,
         `  → run 'tidepool claude-code:start' in a project dir to start it,`,

@@ -9,14 +9,17 @@ import { renderThreadsPage, renderThreadsTable } from "./pages/threads.js";
 import { renderConfigPage, renderConfigContent, handleOpenFile, handleOpenDir } from "./pages/config.js";
 import { renderAuditPage } from "./pages/audit.js";
 import type { MessageLog } from "./message-log.js";
+import type { MessageTap, TapEvent } from "./message-tap.js";
 
 export { MessageLog } from "./message-log.js";
+export { MessageTap } from "./message-tap.js";
 
 export function mountDashboard(
   app: express.Application,
   holder: ConfigHolder,
   configDir: string,
   messageLog: MessageLog,
+  messageTap: MessageTap,
   startedAt: Date,
 ): void {
   // Static assets
@@ -95,5 +98,28 @@ export function mountDashboard(
 
   app.get("/dashboard/audit", (req, res) => {
     page("audit", "Audit", renderAuditPage(), req, res);
+  });
+
+  // Live message tail — SSE stream of inbound/outbound A2A messages crossing
+  // this daemon. Consumed by `tidepool tail`. Origin guard already applies.
+  app.get("/internal/tail", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const write = (event: TapEvent) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    for (const past of messageTap.recent()) write(past);
+    const unsubscribe = messageTap.subscribe(write);
+
+    const keepalive = setInterval(() => res.write(": ping\n\n"), 15_000);
+
+    req.on("close", () => {
+      clearInterval(keepalive);
+      unsubscribe();
+    });
   });
 }

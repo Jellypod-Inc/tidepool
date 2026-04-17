@@ -8,7 +8,7 @@ import { runInit } from "../../src/cli/init.js";
 import {
   isServeRunning,
   spawnServeDaemon,
-  PID_FILENAME,
+  LOGS_DIRNAME,
 } from "../../src/cli/serve-daemon.js";
 
 function tmp(): string {
@@ -32,28 +32,25 @@ afterEach(async () => {
 });
 
 describe("isServeRunning", () => {
-  it("returns false when PID file is absent", async () => {
+  it("returns not-running when no config present", async () => {
     const dir = tmp();
-    await runInit({ configDir: dir });
     const result = await isServeRunning({ configDir: dir });
     expect(result.running).toBe(false);
-    expect(result.reason).toBe("no-pid-file");
   });
 
-  it("cleans up stale PID file and returns false", async () => {
+  it("returns not-running when port does not respond", async () => {
     const dir = tmp();
     await runInit({ configDir: dir });
-    fs.writeFileSync(path.join(dir, PID_FILENAME), "999999");
-    const result = await isServeRunning({ configDir: dir });
+    const result = await isServeRunning({
+      configDir: dir,
+      localPortOverride: 1, // reserved, won't answer
+    });
     expect(result.running).toBe(false);
-    expect(result.reason).toBe("stale-pid-file");
-    expect(fs.existsSync(path.join(dir, PID_FILENAME))).toBe(false);
   });
 
-  it("returns true when PID alive and port responds", async () => {
+  it("returns running when the port answers", async () => {
     const dir = tmp();
     await runInit({ configDir: dir });
-    fs.writeFileSync(path.join(dir, PID_FILENAME), String(process.pid));
 
     const { server: stub, port: localPort } = await startStubServer();
     servers.push(stub);
@@ -63,12 +60,11 @@ describe("isServeRunning", () => {
       localPortOverride: localPort,
     });
     expect(result.running).toBe(true);
-    expect(result.pid).toBe(process.pid);
   });
 });
 
 describe("spawnServeDaemon", () => {
-  it("invokes the injected spawner with detached + stdio", async () => {
+  it("invokes the injected spawner with detached + stdio and writes logs dir", async () => {
     const dir = tmp();
     await runInit({ configDir: dir });
 
@@ -98,9 +94,7 @@ describe("spawnServeDaemon", () => {
 
     expect(capturedArgs).toEqual(["serve"]);
     expect(capturedOptions?.detached).toBe(true);
-    const pidContent = fs.readFileSync(path.join(dir, PID_FILENAME), "utf-8");
-    expect(pidContent.trim()).toBe("424242");
-    expect(fs.existsSync(path.join(dir, "logs"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, LOGS_DIRNAME))).toBe(true);
   });
 
   it("errors out if port never becomes ready", async () => {
@@ -128,6 +122,5 @@ describe("spawnServeDaemon", () => {
     ).rejects.toThrow(/not become ready/i);
 
     expect(killed).toBe(true);
-    expect(fs.existsSync(path.join(dir, PID_FILENAME))).toBe(false);
   });
 });

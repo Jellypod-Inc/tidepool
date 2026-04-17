@@ -27,7 +27,7 @@ describe("runStatus", () => {
   it("shows a recovery hint when the daemon is not running", async () => {
     const dir = tmp();
     await runInit({ configDir: dir });
-    const out = await runStatus({ configDir: dir });
+    const out = await runStatus({ configDir: dir, localPortOverride: 1 });
     expect(out).toMatch(/Daemon: not running/);
     expect(out).toMatch(/claude-code:start/);
     expect(out).toMatch(/tidepool serve/);

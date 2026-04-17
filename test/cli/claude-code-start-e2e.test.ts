@@ -60,8 +60,6 @@ describe("runClaudeCodeStart — fresh repo (default)", () => {
     const mcp = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
     expect(mcp.mcpServers["tidepool"].args).toEqual(["--agent", "donkey"]);
 
-    expect(fs.existsSync(path.join(configDir, "serve.pid"))).toBe(true);
-
     expect(execCalls).toHaveLength(1);
     expect(execCalls[0].cmd).toBe("claude");
     expect(execCalls[0].args).toEqual([
@@ -147,7 +145,7 @@ describe("runClaudeCodeStart — swap agent", () => {
 });
 
 describe("runClaudeCodeStart — --debug", () => {
-  it("does not exec claude and does not create PID file", async () => {
+  it("does not exec claude", async () => {
     const configDir = tmp("cc-debug-home-");
     const cwd = tmp("cc-debug-cwd-");
 
@@ -169,7 +167,6 @@ describe("runClaudeCodeStart — --debug", () => {
       },
     });
 
-    expect(fs.existsSync(path.join(configDir, "serve.pid"))).toBe(false);
     expect(fs.existsSync(path.join(cwd, ".mcp.json"))).toBe(true);
     expect(serveInvocations).toEqual(["ran"]);
   });

@@ -103,32 +103,16 @@ import os from "os";
 import pathMod from "path";
 import { runInit } from "../src/cli/init.js";
 import { runStatus as runStatusWithDaemon } from "../src/cli/status.js";
-import { PID_FILENAME } from "../src/cli/serve-daemon.js";
 
 function tmpDaemon(): string {
   return fs.mkdtempSync(pathMod.join(os.tmpdir(), "cc-status-daemon-"));
 }
 
 describe("runStatus — daemon section", () => {
-  it("shows 'not running' when no PID file", async () => {
+  it("shows 'not running' when the local port is not answering", async () => {
     const dir = tmpDaemon();
     await runInit({ configDir: dir });
-    const out = await runStatusWithDaemon({ configDir: dir });
+    const out = await runStatusWithDaemon({ configDir: dir, localPortOverride: 1 });
     expect(out).toMatch(/Daemon:\s+not running/i);
-  });
-
-  it("shows 'running' with PID when live", async () => {
-    const dir = tmpDaemon();
-    await runInit({ configDir: dir });
-    fs.writeFileSync(pathMod.join(dir, PID_FILENAME), String(process.pid));
-    const out = await runStatusWithDaemon({ configDir: dir });
-    // Note: without a port responder the runner might report port-not-responding.
-    // Accept either "running" OR "not running" (stale falls off to not running),
-    // but the tests below assert the specific shape for the two deterministic cases.
-    // We assert "running (PID <ourpid>)" format only; if the probe fails the PID
-    // branch reports not-running which is also valid — but we can force the
-    // running branch with a probe override by temporarily having isServeRunning
-    // hit a real server. Simplest: just assert daemon line exists and mentions PID.
-    expect(out).toMatch(new RegExp(`Daemon:`));
   });
 });
