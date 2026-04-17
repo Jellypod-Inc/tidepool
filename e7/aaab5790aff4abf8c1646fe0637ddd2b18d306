@@ -1,0 +1,101 @@
+src/cli/claude-code-start.ts
+  8477b86aebbfb2c7 9-10,146,148-149,164
+src/middleware.ts
+  8477b86aebbfb2c7 34-36
+test/e2e.test.ts
+  8477b86aebbfb2c7 11,101,133-139,141-142,159-165,167-168,356
+docs/architecture.md
+  8477b86aebbfb2c7 19,37-38,52,89,110,133-134,193,203,207,209,248,251,270-271,291,298
+test/local-loopback-e2e.test.ts
+  8477b86aebbfb2c7 88,300,430,473
+test/streaming-e2e.test.ts
+  8477b86aebbfb2c7 11,170,275,398,516
+test/discovery-e2e.test.ts
+  8477b86aebbfb2c7 11,28,126
+test/mTLS-pinning.test.ts
+  8477b86aebbfb2c7 10,119-120,145,150-155,157-158
+test/config.test.ts
+  8477b86aebbfb2c7 2
+adapters/claude-code/scripts/smoke.ts
+  8477b86aebbfb2c7 10,56-64,75-83
+src/dashboard/pages/config.ts
+  8477b86aebbfb2c7 21
+test/e2e-rate-limit.test.ts
+  8477b86aebbfb2c7 11,173-178,180-181,269
+CLAUDE.md
+  8477b86aebbfb2c7 31
+test/e2e-peers-outbound.test.ts
+  8477b86aebbfb2c7 9,111,150,163-168,170-171
+test/agent-card.test.ts
+  8477b86aebbfb2c7 19,165
+test/e2e-handshake.test.ts
+  8477b86aebbfb2c7 88-90
+test/middleware.test.ts
+  8477b86aebbfb2c7 10,26-27,31-32,36-37,184,204
+test/dashboard/dashboard-e2e.test.ts
+  8477b86aebbfb2c7 10,51-57,59,94,96-97,110,121,125
+src/dashboard/layout.ts
+  8477b86aebbfb2c7 3
+test/metadata-from-injection.test.ts
+  8477b86aebbfb2c7 10,49
+test/e2e-peers-inbound.test.ts
+  8477b86aebbfb2c7 5,8-9,55,107,123,145,156-161,163-164,220
+src/config.ts
+  8477b86aebbfb2c7 4-5
+src/server.ts
+  8477b86aebbfb2c7 228,303,307,380-382,392,696
+src/config-holder.ts
+  8477b86aebbfb2c7 2,4,13-16
+test/peers-endpoint.test.ts
+  8477b86aebbfb2c7 8,30-43,61,77,120,138-139
+test/x-agent-validation.test.ts
+  8477b86aebbfb2c7 8,45
+README.md
+  8477b86aebbfb2c7 64,66-67,69-71,74-77,105,154,161-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "e7aaab5790aff4abf8c1646fe0637ddd2b18d306",
+  "prompts": {
+    "3b3e52d822895f52": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c2662761-d6fd-4442-be4c-60d55227aa77",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    },
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1291,
+      "overriden_lines": 0
+    },
+    "8477b86aebbfb2c7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7c282a8-638d-4b39-a40a-c7ec3c5b06ac",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 232,
+      "total_deletions": 1002,
+      "accepted_lines": 399,
+      "overriden_lines": 0
+    }
+  }
+}
