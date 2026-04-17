@@ -43,7 +43,7 @@ export function mountSessionEndpoint(
       }
 
       // --- Body validation ---
-      const { name } = req.params;
+      const name = req.params.name as string;
       const endpoint = req.body?.endpoint;
       const card = req.body?.card;
       if (typeof endpoint !== "string" || !endpoint.startsWith("http://")) {
