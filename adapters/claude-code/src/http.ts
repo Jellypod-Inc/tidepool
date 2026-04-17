@@ -2,13 +2,19 @@ import express, { Request, Response } from "express";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 
+export type A2APart =
+  | { kind: "text"; text: string; metadata?: Record<string, unknown> }
+  | { kind: "file"; file: unknown; metadata?: Record<string, unknown> }
+  | { kind: "data"; data: Record<string, unknown>; metadata?: Record<string, unknown> };
+
 export type InboundInfo = {
   taskId: string;
   contextId: string;
   messageId: string;
   peer: string;
   participants: string[];
-  text: string;
+  parts: A2APart[];
+  text: string; // first text part, or empty string — kept for convenience
 };
 
 export type StartHttpOpts = {
@@ -48,15 +54,21 @@ export async function startHttp(opts: StartHttpOpts) {
   // Express path encoding: ":" must be escaped in route definition.
   app.post("/message\\:send", async (req: Request, res: Response) => {
     const msg = req.body?.message;
-    const textPart = msg?.parts?.[0]?.text;
-    if (typeof textPart !== "string") {
-      res.status(400).json({ error: "message.parts[0].text is required" });
+    if (!msg) {
+      res.status(400).json({ error: "message is required" });
       return;
     }
-    if (Buffer.byteLength(textPart, "utf8") > MAX_TEXT_BYTES) {
+
+    const parts: A2APart[] = Array.isArray(msg.parts) ? msg.parts : [];
+    const textPart = parts.find((p) => p.kind === "text") as
+      | { kind: "text"; text: string }
+      | undefined;
+    const text = textPart?.text ?? "";
+
+    if (Buffer.byteLength(JSON.stringify(parts), "utf8") > MAX_TEXT_BYTES) {
       res
         .status(413)
-        .json({ error: `message text exceeds ${MAX_TEXT_BYTES} byte limit` });
+        .json({ error: `message parts exceed ${MAX_TEXT_BYTES} byte limit` });
       return;
     }
 
@@ -83,7 +95,8 @@ export async function startHttp(opts: StartHttpOpts) {
         messageId,
         peer,
         participants,
-        text: textPart,
+        parts,
+        text,
       });
     } catch (err) {
       process.stderr.write(

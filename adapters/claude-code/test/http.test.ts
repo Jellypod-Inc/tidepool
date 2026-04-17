@@ -18,7 +18,7 @@ describe("startHttp inbound endpoint", () => {
     await server.close();
   });
 
-  it("emits InboundInfo with peer/contextId/messageId/text on POST /message:send", async () => {
+  it("emits InboundInfo with peer/contextId/messageId/text/parts on POST /message:send", async () => {
     const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -42,17 +42,64 @@ describe("startHttp inbound endpoint", () => {
       peer: "alice",
       text: "hello",
     });
+    expect(received[0].parts).toHaveLength(1);
+    expect(received[0].parts[0]).toEqual({ kind: "text", text: "hello" });
     expect(received[0].taskId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it("returns 400 when message.parts[0].text is missing", async () => {
+  it("returns 400 when message is missing entirely", async () => {
     const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: { messageId: "M1", contextId: "C1" } }),
+      body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
     expect(received).toHaveLength(0);
+  });
+
+  it("accepts a message with only non-text parts (text becomes empty string)", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "M1",
+          contextId: "C1",
+          metadata: { from: "bob" },
+          parts: [{ kind: "data", data: { x: 1 } }],
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].text).toBe("");
+    expect(received[0].parts).toHaveLength(1);
+    expect(received[0].parts[0]).toEqual({ kind: "data", data: { x: 1 } });
+  });
+
+  it("parses full A2A Message including structured parts", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "m-1",
+          contextId: "ctx-1",
+          metadata: { from: "bob" },
+          parts: [
+            { kind: "text", text: "hello" },
+            { kind: "data", data: { tags: ["a"] } },
+          ],
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].text).toBe("hello");
+    expect(received[0].parts).toHaveLength(2);
+    expect(received[0].parts[0]).toEqual({ kind: "text", text: "hello" });
+    expect(received[0].parts[1]).toEqual({ kind: "data", data: { tags: ["a"] } });
+    expect(received[0].peer).toBe("bob");
   });
 
   it("returns 400 when metadata.from is missing (server-injected — its absence is a bug)", async () => {
@@ -71,7 +118,7 @@ describe("startHttp inbound endpoint", () => {
     expect(received).toHaveLength(0);
   });
 
-  it("rejects oversized text with 413", async () => {
+  it("rejects oversized parts with 413", async () => {
     const big = "x".repeat(MAX_TEXT_BYTES + 1);
     const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",
