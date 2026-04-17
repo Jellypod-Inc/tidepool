@@ -165,11 +165,11 @@ export function peerNotFoundResponse(handle: string): StructuredErrorResponse {
   );
 }
 
-export function sessionConflictResponse(name: string): StructuredErrorResponse {
+export function sessionConflictResponse(handle: string): StructuredErrorResponse {
   return structuredError(
     409,
     "session_conflict",
-    `Agent "${name}" already has an active session.`,
+    `Agent "${handle}" already has an active session.`,
     "Another adapter process is registered as this agent. Use `tidepool status` to inspect.",
   );
 }

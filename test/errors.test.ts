@@ -138,34 +138,43 @@ describe("peerNotFoundResponse (structured)", () => {
 });
 
 describe("sessionConflictResponse", () => {
-  it("returns 409 session_conflict", () => {
+  it("returns 409 session_conflict with handle in message", () => {
     const resp = sessionConflictResponse("alice");
     expect(resp.statusCode).toBe(409);
     expect(resp.body.error.code).toBe("session_conflict");
+    expect(resp.body.error.message).toContain("alice");
+    expect(resp.body.error.hint).toBeTruthy();
   });
 });
 
 describe("peerUnreachableResponse", () => {
-  it("returns 502 peer_unreachable", () => {
+  it("returns 502 peer_unreachable with handle in message", () => {
     const resp = peerUnreachableResponse("bob");
     expect(resp.statusCode).toBe(502);
     expect(resp.body.error.code).toBe("peer_unreachable");
+    expect(resp.body.error.message).toContain("bob");
+    expect(resp.body.error.hint).toBeTruthy();
   });
 });
 
 describe("agentOfflineResponse", () => {
-  it("returns 503 agent_offline", () => {
+  it("returns 503 agent_offline with handle in message", () => {
     const resp = agentOfflineResponse("alice");
     expect(resp.statusCode).toBe(503);
     expect(resp.body.error.code).toBe("agent_offline");
+    expect(resp.body.error.message).toContain("alice");
+    expect(resp.body.error.hint).toBeTruthy();
   });
 });
 
 describe("peerTimeoutResponse (structured)", () => {
-  it("returns 504 peer_timeout", () => {
+  it("returns 504 peer_timeout with handle and timeout in message", () => {
     const resp = peerTimeoutResponse("bob", 30);
     expect(resp.statusCode).toBe(504);
     expect(resp.body.error.code).toBe("peer_timeout");
+    expect(resp.body.error.message).toContain("bob");
+    expect(resp.body.error.message).toContain("30");
+    expect(resp.body.error.hint).toBeTruthy();
   });
 });
 
