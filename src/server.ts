@@ -43,6 +43,7 @@ import {
   resolveLocalHandleForRemoteSender,
 } from "./identity-injection.js";
 import type { RemoteAgent } from "./types.js";
+import { mountDashboard, MessageLog } from "./dashboard/index.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
   for (const [key, value] of Object.entries(error.headers)) {
@@ -82,14 +83,18 @@ export async function startServer(opts: StartServerOpts) {
     return bucket;
   };
 
+  const messageLog = new MessageLog(200);
+  const startedAt = new Date();
+
   const publicApp = createPublicApp(
     holder,
     opts.configDir,
     serverBucket,
     getOrCreateAgentBucket,
     remoteAgents,
+    messageLog,
   );
-  const localApp = createLocalApp(holder, remoteAgents, opts.configDir);
+  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, startedAt);
 
   // Public interface: mTLS
   const tlsOpts = buildTlsOptions(opts.configDir);
@@ -109,6 +114,9 @@ export async function startServer(opts: StartServerOpts) {
   );
   console.log(
     `Local interface: http://127.0.0.1:${initialServer.server.localPort} (raw-HTTP clients must set X-Agent: <agent-name>)`,
+  );
+  console.log(
+    `Dashboard: http://127.0.0.1:${initialServer.server.localPort}/dashboard`,
   );
 
   return {
@@ -147,6 +155,7 @@ function createPublicApp(
   serverBucket: TokenBucket,
   getOrCreateAgentBucket: (name: string) => TokenBucket | null,
   remoteAgents: RemoteAgent[],
+  messageLog: MessageLog,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -307,6 +316,9 @@ function createPublicApp(
         return;
       }
 
+      const contextId: string | undefined = req.body?.message?.contextId;
+      messageLog.record({ contextId, agent: tenant });
+
       // --- Step 6.5: Translate remote sender agent → local handle ---
       // The wire carries the remote tenant name in X-Sender-Agent; the local
       // agent needs the local handle assigned to that (peer, agent) pair so
@@ -406,9 +418,15 @@ function createLocalApp(
   holder: ConfigHolder,
   remoteAgents: RemoteAgent[],
   configDir: string,
+  messageLog: MessageLog,
+  startedAt: Date,
 ): express.Application {
   const app = express();
   app.use(express.json());
+
+  // Dashboard routes must be registered before /:tenant/:action to avoid
+  // the parameterized route matching /dashboard/* paths.
+  mountDashboard(app, holder, configDir, messageLog, startedAt);
 
   // Root Agent Card listing all available agents (local + remote)
   app.get("/.well-known/agent-card.json", (_req, res) => {
@@ -498,6 +516,9 @@ function createLocalApp(
     }
 
     const { tenant, action } = req.params;
+
+    const contextId: string | undefined = req.body?.message?.contextId;
+    messageLog.record({ contextId, agent: senderAgent });
 
     const inbound = validateWire(
       MessageSchema,
