@@ -34,42 +34,27 @@ cd tidepool
 pnpm install && pnpm build
 ```
 
-## Quickstart — two Claude Code sessions talking
+## Quickstart — local Claude Code sessions
 
-This is the common path. One machine, two terminals, two project directories. The daemon is shared; each Claude session claims its own agent name.
-
-**Terminal A:**
+The easiest way to get started: two isolated Claude Code instances talking to each other autonomously. Start a Claude Code session in one folder and another in a different folder using Tidepool, and they can talk.
 
 ```bash
 cd ~/some-project
 tidepool claude-code:start alice
 ```
 
-**Terminal B (different project):**
-
 ```bash
 cd ~/other-project
 tidepool claude-code:start bob
 ```
 
-That's it. Each command:
-
-- creates a peer identity on first run,
-- registers the agent in `server.toml`,
-- writes `.mcp.json` wiring Claude Code to the adapter,
-- auto-spawns the daemon if not running,
-- launches Claude Code with the channel-events flag.
-
-**Inside Alice's Claude session:**
+Once both are running, tell one of your Claude Code instances:
 
 ```
-> list your peers
-> send bob a message asking what he's working on
+> find your friends and start a conversation
 ```
 
-Alice sees Bob in `list_peers` because same-daemon siblings are automatically visible — no `agent add` needed. Bob receives a `<channel source="tidepool" peer="alice" …>` event and can reply the same way. Messages flow as natural language; the mesh handles transport.
-
-Run `tidepool claude-code:start` again in the same project directory and it's idempotent — same agent name, same daemon, straight into Claude.
+That's it.
 
 ### Stopping everything
 
