@@ -44,12 +44,27 @@ import {
 } from "./identity-injection.js";
 import type { RemoteAgent } from "./types.js";
 import { mountDashboard, MessageLog } from "./dashboard/index.js";
+import { isOriginAllowed, isHostAllowed } from "./origin-check.js";
+import { originDeniedResponse } from "./errors.js";
 
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
   for (const [key, value] of Object.entries(error.headers)) {
     res.setHeader(key, value);
   }
   res.status(error.statusCode).json(error.body);
+}
+
+function makeOriginGuard(port: number) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const origin = req.header("origin") ?? undefined;
+    const host = req.header("host") ?? undefined;
+    if (!isOriginAllowed(origin, port) || !isHostAllowed(host, port)) {
+      const err = originDeniedResponse(origin ?? host ?? "<unknown>");
+      res.status(err.statusCode).set(err.headers).json(err.body);
+      return;
+    }
+    next();
+  };
 }
 
 export interface StartServerOpts {
@@ -86,6 +101,21 @@ export async function startServer(opts: StartServerOpts) {
   const messageLog = new MessageLog(200);
   const startedAt = new Date();
 
+  // Public interface: mTLS
+  const tlsOpts = buildTlsOptions(opts.configDir);
+
+  const publicServer = https.createServer(tlsOpts);
+  const localServer = http.createServer();
+
+  await new Promise<void>((resolve) => {
+    publicServer.listen(initialServer.server.port, initialServer.server.host, () => resolve());
+  });
+  await new Promise<void>((resolve) => {
+    localServer.listen(initialServer.server.localPort, "127.0.0.1", () => resolve());
+  });
+
+  const localPort = (localServer.address() as { port: number }).port;
+
   const publicApp = createPublicApp(
     holder,
     opts.configDir,
@@ -94,29 +124,19 @@ export async function startServer(opts: StartServerOpts) {
     remoteAgents,
     messageLog,
   );
-  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, startedAt);
+  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, startedAt, localPort);
 
-  // Public interface: mTLS
-  const tlsOpts = buildTlsOptions(opts.configDir);
-
-  const publicServer = https.createServer(tlsOpts, publicApp);
-  const localServer = http.createServer(localApp);
-
-  await new Promise<void>((resolve) => {
-    publicServer.listen(initialServer.server.port, initialServer.server.host, resolve);
-  });
-  await new Promise<void>((resolve) => {
-    localServer.listen(initialServer.server.localPort, "127.0.0.1", resolve);
-  });
+  publicServer.on("request", publicApp);
+  localServer.on("request", localApp);
 
   console.log(
     `Public interface: https://${initialServer.server.host}:${initialServer.server.port}`,
   );
   console.log(
-    `Local interface: http://127.0.0.1:${initialServer.server.localPort} (raw-HTTP clients must set X-Agent: <agent-name>)`,
+    `Local interface: http://127.0.0.1:${localPort} (raw-HTTP clients must set X-Agent: <agent-name>)`,
   );
   console.log(
-    `Dashboard: http://127.0.0.1:${initialServer.server.localPort}/dashboard`,
+    `Dashboard: http://127.0.0.1:${localPort}/dashboard`,
   );
 
   return {
@@ -420,6 +440,7 @@ function createLocalApp(
   configDir: string,
   messageLog: MessageLog,
   startedAt: Date,
+  port: number,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -427,6 +448,16 @@ function createLocalApp(
   // Dashboard routes must be registered before /:tenant/:action to avoid
   // the parameterized route matching /dashboard/* paths.
   mountDashboard(app, holder, configDir, messageLog, startedAt);
+
+  // Tidepool extensions gated by origin check.
+  const tidepoolGuard = makeOriginGuard(port);
+  app.get("/.well-known/tidepool/peers", tidepoolGuard, (_req, res) => {
+    const friends = holder.friends();
+    const peers = Object.keys(friends.friends)
+      .sort()
+      .map((handle) => ({ handle, did: null as string | null }));
+    res.json(peers);
+  });
 
   // Root Agent Card listing all available agents (local + remote)
   app.get("/.well-known/agent-card.json", (_req, res) => {
