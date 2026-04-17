@@ -15,13 +15,14 @@ function tmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "cc-daemon-"));
 }
 
-async function startStubServer(port: number): Promise<http.Server> {
+async function startStubServer(): Promise<{ server: http.Server; port: number }> {
   const server = http.createServer((_req, res) => {
     res.statusCode = 200;
     res.end("{}");
   });
-  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
-  return server;
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as any).port;
+  return { server, port };
 }
 
 const servers: http.Server[] = [];
@@ -54,8 +55,7 @@ describe("isServeRunning", () => {
     await runInit({ configDir: dir });
     fs.writeFileSync(path.join(dir, PID_FILENAME), String(process.pid));
 
-    const localPort = 51234;
-    const stub = await startStubServer(localPort);
+    const { server: stub, port: localPort } = await startStubServer();
     servers.push(stub);
 
     const result = await isServeRunning({
@@ -82,8 +82,7 @@ describe("spawnServeDaemon", () => {
       kill: () => true,
     };
 
-    const port = 51235;
-    const stub = await startStubServer(port);
+    const { server: stub, port } = await startStubServer();
     servers.push(stub);
 
     await spawnServeDaemon({

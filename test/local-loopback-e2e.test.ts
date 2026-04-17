@@ -16,13 +16,14 @@ function tmp(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-async function listenOn(port: number, handler: express.RequestHandler) {
+async function listenOn(handler: express.RequestHandler): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
   app.post("/message\\:send", handler);
   const server = http.createServer(app);
-  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
-  return server;
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as any).port;
+  return { server, port };
 }
 
 describe("local loopback — two agents on one tidepool", () => {
@@ -42,21 +43,15 @@ describe("local loopback — two agents on one tidepool", () => {
     const dir = tmp("cc-loopback-");
     await runInit({ configDir: dir });
 
-    // Pick ports that won't collide with defaults or other tests
-    const PUBLIC_PORT = 49700;
-    const LOCAL_PORT = 49701;
-    const A_ENDPOINT_PORT = 49710;
-    const B_ENDPOINT_PORT = 49711;
-
-    // Write server.toml directly with the test ports (cleaner than regex-patching)
+    // Write server.toml with ephemeral ports
     const serverPath = path.join(dir, "server.toml");
     fs.writeFileSync(
       serverPath,
       TOML.stringify({
         server: {
-          port: PUBLIC_PORT,
+          port: 0,
           host: "0.0.0.0",
-          localPort: LOCAL_PORT,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 300,
         },
@@ -73,7 +68,7 @@ describe("local loopback — two agents on one tidepool", () => {
     // Stand up bob's local endpoint — this is what the a2a-claude-code-adapter
     // would normally run. We capture what it receives.
     let bobReceived: unknown = null;
-    const bobServer = await listenOn(B_ENDPOINT_PORT, (req, res) => {
+    const { server: bobServer, port: B_ENDPOINT_PORT } = await listenOn((req, res) => {
       bobReceived = req.body;
       res.status(200).json({
         id: "task-1",
@@ -97,6 +92,8 @@ describe("local loopback — two agents on one tidepool", () => {
       remoteAgents: Object.values(remotes.remotes),
     });
     servers.push({ close: () => handle.close() });
+
+    const LOCAL_PORT = (handle.localServer.address() as any).port;
 
     // Register sessions so daemon can route to each agent's endpoint.
     sessions.push(await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`));
@@ -140,18 +137,13 @@ describe("local loopback — two agents on one tidepool", () => {
     const dir = tmp("cc-reload-");
     await runInit({ configDir: dir });
 
-    const PUBLIC_PORT = 49720;
-    const LOCAL_PORT = 49721;
-    const A_ENDPOINT_PORT = 49730;
-    const CAROL_ENDPOINT_PORT = 49731;
-
     fs.writeFileSync(
       path.join(dir, "server.toml"),
       TOML.stringify({
         server: {
-          port: PUBLIC_PORT,
+          port: 0,
           host: "0.0.0.0",
-          localPort: LOCAL_PORT,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 300,
         },
@@ -168,6 +160,8 @@ describe("local loopback — two agents on one tidepool", () => {
       remoteAgents: [],
     });
     servers.push({ close: () => handle.close() });
+
+    const LOCAL_PORT = (handle.localServer.address() as any).port;
 
     // Before carol is registered → 404. alice is registered, so X-Agent: alice
     // passes the sender check; then the tenant lookup for carol yields 404.
@@ -192,7 +186,7 @@ describe("local loopback — two agents on one tidepool", () => {
 
     // Register carol (config) and spin up her endpoint while the daemon keeps running.
     await runRegister({ configDir: dir, name: "carol" });
-    const carolServer = await listenOn(CAROL_ENDPOINT_PORT, (_req, res) => {
+    const { server: carolServer, port: CAROL_ENDPOINT_PORT } = await listenOn((_req, res) => {
       res.status(200).json({
         id: "t",
         contextId: "c",
@@ -245,18 +239,13 @@ describe("local loopback — two agents on one tidepool", () => {
     const dir = tmp("cc-symmetric-");
     await runInit({ configDir: dir });
 
-    const PUBLIC_PORT = 49740;
-    const LOCAL_PORT = 49741;
-    const A_ENDPOINT_PORT = 49750;
-    const B_ENDPOINT_PORT = 49751;
-
     fs.writeFileSync(
       path.join(dir, "server.toml"),
       TOML.stringify({
         server: {
-          port: PUBLIC_PORT,
+          port: 0,
           host: "0.0.0.0",
-          localPort: LOCAL_PORT,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 300,
         },
@@ -277,7 +266,7 @@ describe("local loopback — two agents on one tidepool", () => {
     let bobReceived: any = null;
     const SHARED_CTX = "ctx-shared-1";
 
-    const aliceServer = await listenOn(A_ENDPOINT_PORT, (req, res) => {
+    const { server: aliceServer, port: A_ENDPOINT_PORT } = await listenOn((req, res) => {
       aliceReceived = req.body;
       res.status(200).json({
         id: "task-alice-2",
@@ -290,7 +279,7 @@ describe("local loopback — two agents on one tidepool", () => {
     });
     servers.push(aliceServer);
 
-    const bobServer = await listenOn(B_ENDPOINT_PORT, (req, res) => {
+    const { server: bobServer, port: B_ENDPOINT_PORT } = await listenOn((req, res) => {
       bobReceived = req.body;
       res.status(200).json({
         id: "task-bob-1",
@@ -309,6 +298,8 @@ describe("local loopback — two agents on one tidepool", () => {
       remoteAgents: Object.values(remotes.remotes),
     });
     servers.push({ close: () => handle.close() });
+
+    const LOCAL_PORT = (handle.localServer.address() as any).port;
 
     // Register sessions for both alice and bob.
     sessions.push(await registerTestSession(LOCAL_PORT, "alice", `http://127.0.0.1:${A_ENDPOINT_PORT}`));
@@ -395,18 +386,13 @@ describe("local loopback — two agents on one tidepool", () => {
     const dir = tmp("cc-ephemeral-");
     await runInit({ configDir: dir });
 
-    const PUBLIC_PORT = 49760;
-    const LOCAL_PORT = 49761;
-    const A_ENDPOINT_PORT = 49770;
-    const B_ENDPOINT_PORT = 49771;
-
     fs.writeFileSync(
       path.join(dir, "server.toml"),
       TOML.stringify({
         server: {
-          port: PUBLIC_PORT,
+          port: 0,
           host: "0.0.0.0",
-          localPort: LOCAL_PORT,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 300,
         },
@@ -421,7 +407,7 @@ describe("local loopback — two agents on one tidepool", () => {
     await runRegister({ configDir: dir, name: "bob" });
 
     let bobReceived: any = null;
-    const bobServer = await listenOn(B_ENDPOINT_PORT, (req, res) => {
+    const { server: bobServer, port: B_ENDPOINT_PORT } = await listenOn((req, res) => {
       bobReceived = req.body;
       res.status(200).json({
         id: "task-1",
@@ -434,12 +420,15 @@ describe("local loopback — two agents on one tidepool", () => {
     });
     servers.push(bobServer);
 
-    // First daemon incarnation
+    // First daemon incarnation — use a fixed localPort we can reconnect to
+    // after restart. We probe port 0 first to avoid collisions.
     const remotes = loadRemotesConfig(path.join(dir, "remotes.toml"));
     const handle1 = await startServer({
       configDir: dir,
       remoteAgents: Object.values(remotes.remotes),
     });
+
+    const LOCAL_PORT = (handle1.localServer.address() as any).port;
 
     // Register session for first incarnation.
     const session1 = await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
@@ -473,19 +462,21 @@ describe("local loopback — two agents on one tidepool", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     // Restart. The new incarnation has no memory of ctx-pre and no active sessions.
-    // The adapter must open a new session.
+    // Since port 0 was used, we get a new ephemeral port — that's fine for this test.
     const handle2 = await startServer({
       configDir: dir,
       remoteAgents: Object.values(remotes.remotes),
     });
     servers.push({ close: () => handle2.close() });
 
+    const LOCAL_PORT2 = (handle2.localServer.address() as any).port;
+
     // Register session for second incarnation.
-    const session2 = await registerTestSession(LOCAL_PORT, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
+    const session2 = await registerTestSession(LOCAL_PORT2, "bob", `http://127.0.0.1:${B_ENDPOINT_PORT}`);
     sessions.push(session2);
 
     const post = await fetch(
-      `http://127.0.0.1:${LOCAL_PORT}/bob/message:send`,
+      `http://127.0.0.1:${LOCAL_PORT2}/bob/message:send`,
       {
         method: "POST",
         headers: {

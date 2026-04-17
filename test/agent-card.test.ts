@@ -71,10 +71,10 @@ describe("buildRemoteAgentCard", () => {
 });
 
 describe("fetchRemoteAgentCard validation", () => {
-  const PORT = 51771;
   let server: http.Server;
+  let port: number;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     const app = express();
     app.get("/valid", (_req, res) => {
       res.json({ name: "ok-agent", url: "https://example.com/ok" });
@@ -85,7 +85,9 @@ describe("fetchRemoteAgentCard validation", () => {
     app.get("/html", (_req, res) => {
       res.type("text/plain").send("not json");
     });
-    server = app.listen(PORT, "127.0.0.1");
+    server = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    port = (server.address() as any).port;
   });
 
   afterAll(() => {
@@ -93,27 +95,27 @@ describe("fetchRemoteAgentCard validation", () => {
   });
 
   it("returns the card when response matches the schema", async () => {
-    const card = await fetchRemoteAgentCard(`http://127.0.0.1:${PORT}/valid`);
+    const card = await fetchRemoteAgentCard(`http://127.0.0.1:${port}/valid`);
     expect(card).not.toBeNull();
     expect(card!.name).toBe("ok-agent");
   });
 
   it("returns null on malformed JSON response", async () => {
     const card = await fetchRemoteAgentCard(
-      `http://127.0.0.1:${PORT}/malformed`,
+      `http://127.0.0.1:${port}/malformed`,
     );
     expect(card).toBeNull();
   });
 
   it("returns null on non-JSON response", async () => {
-    const card = await fetchRemoteAgentCard(`http://127.0.0.1:${PORT}/html`);
+    const card = await fetchRemoteAgentCard(`http://127.0.0.1:${port}/html`);
     expect(card).toBeNull();
   });
 });
 
 describe("v1.0 conformance: Agent Card emitted by the server validates against AgentCardSchema", () => {
   let tmpDir: string;
-  let server: { close: () => void };
+  let server: Awaited<ReturnType<typeof startServer>>;
   let clientCert: Buffer;
   let clientKey: Buffer;
 
@@ -142,9 +144,9 @@ describe("v1.0 conformance: Agent Card emitted by the server validates against A
       path.join(configDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 57700,
+          port: 0,
           host: "0.0.0.0",
-          localPort: 57701,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 10,
         },
@@ -173,7 +175,8 @@ describe("v1.0 conformance: Agent Card emitted by the server validates against A
   });
 
   it("parses as a valid v1.0 AgentCard", async () => {
-    const res = await fetch("https://127.0.0.1:57700/probe/.well-known/agent-card.json", {
+    const publicPort = (server.publicServer.address() as any).port;
+    const res = await fetch(`https://127.0.0.1:${publicPort}/probe/.well-known/agent-card.json`, {
       // @ts-expect-error — undici dispatcher for mTLS
       dispatcher: new UndiciAgent({
         connect: {
@@ -207,10 +210,10 @@ describe("local agent-card.json merges fragment from session", () => {
   it("reflects adapter-supplied description after session registers", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tp-card-merge-"));
     await runInit({ configDir: dir });
-    // Override to use unique ports for this test
+    // Override to use ephemeral ports for this test
     fs.writeFileSync(
       path.join(dir, "server.toml"),
-      `[server]\nport = 57710\nhost = "127.0.0.1"\nlocalPort = 57712\nrateLimit = "1000/hour"\nstreamTimeoutSeconds = 30\n[connectionRequests]\nmode = "deny"\n[discovery]\nproviders = ["static"]\ncacheTtlSeconds = 300\n[validation]\nmode = "warn"\n`,
+      `[server]\nport = 0\nhost = "127.0.0.1"\nlocalPort = 0\nrateLimit = "1000/hour"\nstreamTimeoutSeconds = 30\n[connectionRequests]\nmode = "deny"\n[discovery]\nproviders = ["static"]\ncacheTtlSeconds = 300\n[validation]\nmode = "warn"\n`,
     );
     const handle = await startServer({ configDir: dir });
     const port = (handle.localServer.address() as any).port;
@@ -254,10 +257,10 @@ describe("local agent-card.json merges fragment from session", () => {
   it("returns 503 agent_offline when no session and not a remote agent", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tp-card-offline-"));
     await runInit({ configDir: dir });
-    // Override to use unique ports for this test
+    // Override to use ephemeral ports for this test
     fs.writeFileSync(
       path.join(dir, "server.toml"),
-      `[server]\nport = 57711\nhost = "127.0.0.1"\nlocalPort = 57713\nrateLimit = "1000/hour"\nstreamTimeoutSeconds = 30\n[connectionRequests]\nmode = "deny"\n[discovery]\nproviders = ["static"]\ncacheTtlSeconds = 300\n[validation]\nmode = "warn"\n`,
+      `[server]\nport = 0\nhost = "127.0.0.1"\nlocalPort = 0\nrateLimit = "1000/hour"\nstreamTimeoutSeconds = 30\n[connectionRequests]\nmode = "deny"\n[discovery]\nproviders = ["static"]\ncacheTtlSeconds = 300\n[validation]\nmode = "warn"\n`,
     );
     const handle = await startServer({ configDir: dir });
     const port = (handle.localServer.address() as any).port;

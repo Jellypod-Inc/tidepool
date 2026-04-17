@@ -10,7 +10,15 @@ import { startServer } from "../src/server.js";
 import { formatSseEvent } from "../src/a2a.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
-function createStreamingMockAgent(port: number, name: string): http.Server {
+function listenEphemeral(server: http.Server): Promise<number> {
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      resolve((server.address() as any).port);
+    });
+  });
+}
+
+async function createStreamingMockAgent(name: string): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
 
@@ -60,10 +68,12 @@ function createStreamingMockAgent(port: number, name: string): http.Server {
     }, 100);
   });
 
-  return app.listen(port, "127.0.0.1");
+  const server = http.createServer(app);
+  const port = await listenEphemeral(server);
+  return { server, port };
 }
 
-function createHangingMockAgent(port: number): http.Server {
+async function createHangingMockAgent(): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
 
@@ -79,7 +89,9 @@ function createHangingMockAgent(port: number): http.Server {
     // Never write a body — the proxy's stream timeout should fire.
   });
 
-  return app.listen(port, "127.0.0.1");
+  const server = http.createServer(app);
+  const port = await listenEphemeral(server);
+  return { server, port };
 }
 
 async function collectSSEEvents(response: Response): Promise<unknown[]> {
@@ -115,8 +127,10 @@ describe("e2e: SSE streaming through local interface", () => {
   let tmpDir: string;
   let configDir: string;
   let mockAgent: http.Server;
-  let server: { close: () => void };
+  let server: Awaited<ReturnType<typeof startServer>>;
   let agentSession: TestSession;
+  let localPort: number;
+  let mockAgentPort: number;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-e2e-"));
@@ -128,13 +142,15 @@ describe("e2e: SSE streaming through local interface", () => {
       keyPath: path.join(configDir, "identity.key"),
     });
 
+    ({ server: mockAgent, port: mockAgentPort } = await createStreamingMockAgent("streaming-agent"));
+
     fs.writeFileSync(
       path.join(configDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 59900,
+          port: 0,
           host: "0.0.0.0",
-          localPort: 59901,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 30,
         },
@@ -155,10 +171,9 @@ describe("e2e: SSE streaming through local interface", () => {
       TOML.stringify({ friends: {} } as any),
     );
 
-    mockAgent = createStreamingMockAgent(59800, "streaming-agent");
-
     server = await startServer({ configDir });
-    agentSession = await registerTestSession(59901, "streaming-agent", "http://127.0.0.1:59800");
+    localPort = (server.localServer.address() as any).port;
+    agentSession = await registerTestSession(localPort, "streaming-agent", `http://127.0.0.1:${mockAgentPort}`);
   });
 
   afterAll(async () => {
@@ -171,7 +186,7 @@ describe("e2e: SSE streaming through local interface", () => {
 
   it("streams SSE events through the local interface for local agents", async () => {
     const response = await fetch(
-      "http://127.0.0.1:59901/streaming-agent/message:stream",
+      `http://127.0.0.1:${localPort}/streaming-agent/message:stream`,
       {
         method: "POST",
         headers: {
@@ -220,8 +235,10 @@ describe("e2e: SSE stream timeout", () => {
   let tmpDir: string;
   let configDir: string;
   let hangingAgent: http.Server;
-  let server: { close: () => void };
+  let server: Awaited<ReturnType<typeof startServer>>;
   let agentSession: TestSession;
+  let localPort: number;
+  let hangingAgentPort: number;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-timeout-"));
@@ -233,13 +250,15 @@ describe("e2e: SSE stream timeout", () => {
       keyPath: path.join(configDir, "identity.key"),
     });
 
+    ({ server: hangingAgent, port: hangingAgentPort } = await createHangingMockAgent());
+
     fs.writeFileSync(
       path.join(configDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 59910,
+          port: 0,
           host: "0.0.0.0",
-          localPort: 59911,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 1,
         },
@@ -260,10 +279,9 @@ describe("e2e: SSE stream timeout", () => {
       TOML.stringify({ friends: {} } as any),
     );
 
-    hangingAgent = createHangingMockAgent(59820);
-
     server = await startServer({ configDir });
-    agentSession = await registerTestSession(59911, "slow-agent", "http://127.0.0.1:59820");
+    localPort = (server.localServer.address() as any).port;
+    agentSession = await registerTestSession(localPort, "slow-agent", `http://127.0.0.1:${hangingAgentPort}`);
   });
 
   afterAll(async () => {
@@ -276,7 +294,7 @@ describe("e2e: SSE stream timeout", () => {
 
   it("sends state=failed status-update when stream times out with no data", async () => {
     const response = await fetch(
-      "http://127.0.0.1:59911/slow-agent/message:stream",
+      `http://127.0.0.1:${localPort}/slow-agent/message:stream`,
       {
         method: "POST",
         headers: {
@@ -307,7 +325,7 @@ describe("e2e: SSE stream timeout", () => {
 
 // --- Upstream SSE validation in enforce mode ---
 
-function createMalformedSseMockAgent(port: number): http.Server {
+async function createMalformedSseMockAgent(): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
 
@@ -333,15 +351,19 @@ function createMalformedSseMockAgent(port: number): http.Server {
     res.end();
   });
 
-  return app.listen(port, "127.0.0.1");
+  const server = http.createServer(app);
+  const port = await listenEphemeral(server);
+  return { server, port };
 }
 
 describe("upstream SSE validation: enforce mode", () => {
   let tmpDir: string;
   let configDir: string;
   let mockAgent: http.Server;
-  let server: { close: () => void };
+  let server: Awaited<ReturnType<typeof startServer>>;
   let agentSession: TestSession;
+  let localPort: number;
+  let mockAgentPort: number;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-enforce-"));
@@ -353,13 +375,15 @@ describe("upstream SSE validation: enforce mode", () => {
       keyPath: path.join(configDir, "identity.key"),
     });
 
+    ({ server: mockAgent, port: mockAgentPort } = await createMalformedSseMockAgent());
+
     fs.writeFileSync(
       path.join(configDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 58950,
+          port: 0,
           host: "0.0.0.0",
-          localPort: 58951,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 30,
         },
@@ -381,10 +405,9 @@ describe("upstream SSE validation: enforce mode", () => {
       TOML.stringify({ friends: {} } as any),
     );
 
-    mockAgent = createMalformedSseMockAgent(58952);
-
     server = await startServer({ configDir });
-    agentSession = await registerTestSession(58951, "strict-stream-agent", "http://127.0.0.1:58952");
+    localPort = (server.localServer.address() as any).port;
+    agentSession = await registerTestSession(localPort, "strict-stream-agent", `http://127.0.0.1:${mockAgentPort}`);
   });
 
   afterAll(async () => {
@@ -397,7 +420,7 @@ describe("upstream SSE validation: enforce mode", () => {
 
   it("tears down stream and emits failed status-update on malformed upstream event", async () => {
     const response = await fetch(
-      "http://127.0.0.1:58951/strict-stream-agent/message:stream",
+      `http://127.0.0.1:${localPort}/strict-stream-agent/message:stream`,
       {
         method: "POST",
         headers: {
@@ -431,7 +454,7 @@ describe("upstream SSE validation: enforce mode", () => {
 
 // --- Upstream invalid-JSON SSE data: enforce rejection ---
 
-function createInvalidJsonSseMockAgent(port: number): http.Server {
+async function createInvalidJsonSseMockAgent(): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
 
@@ -449,15 +472,19 @@ function createInvalidJsonSseMockAgent(port: number): http.Server {
     res.end();
   });
 
-  return app.listen(port, "127.0.0.1");
+  const server = http.createServer(app);
+  const port = await listenEphemeral(server);
+  return { server, port };
 }
 
 describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
   let tmpDir: string;
   let configDir: string;
   let mockAgent: http.Server;
-  let server: { close: () => void };
+  let server: Awaited<ReturnType<typeof startServer>>;
   let agentSession: TestSession;
+  let localPort: number;
+  let mockAgentPort: number;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-stream-bad-json-"));
@@ -469,13 +496,15 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
       keyPath: path.join(configDir, "identity.key"),
     });
 
+    ({ server: mockAgent, port: mockAgentPort } = await createInvalidJsonSseMockAgent());
+
     fs.writeFileSync(
       path.join(configDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 58960,
+          port: 0,
           host: "0.0.0.0",
-          localPort: 58961,
+          localPort: 0,
           rateLimit: "100/hour",
           streamTimeoutSeconds: 30,
         },
@@ -497,10 +526,9 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
       TOML.stringify({ friends: {} } as any),
     );
 
-    mockAgent = createInvalidJsonSseMockAgent(58962);
-
     server = await startServer({ configDir });
-    agentSession = await registerTestSession(58961, "bad-json-agent", "http://127.0.0.1:58962");
+    localPort = (server.localServer.address() as any).port;
+    agentSession = await registerTestSession(localPort, "bad-json-agent", `http://127.0.0.1:${mockAgentPort}`);
   });
 
   afterAll(async () => {
@@ -513,7 +541,7 @@ describe("upstream SSE validation: enforce rejects invalid-JSON data", () => {
 
   it("tears down stream and emits failed status-update when upstream sends unparseable JSON", async () => {
     const response = await fetch(
-      "http://127.0.0.1:58961/bad-json-agent/message:stream",
+      `http://127.0.0.1:${localPort}/bad-json-agent/message:stream`,
       {
         method: "POST",
         headers: {

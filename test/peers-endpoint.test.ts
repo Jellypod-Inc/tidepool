@@ -6,21 +6,17 @@ import TOML from "@iarna/toml";
 import { startServer } from "../src/server.js";
 import { runInit } from "../src/cli/init.js";
 
-// Test-dedicated ports — chosen to avoid collision with other test suites.
-const PUBLIC_PORT = 47900;
-const LOCAL_PORT = 47901;
-
 async function setupTmp() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tp-peers-"));
   await runInit({ configDir: dir });
-  // Override server.toml with test-dedicated ports.
+  // Override server.toml with ephemeral ports.
   fs.writeFileSync(
     path.join(dir, "server.toml"),
     TOML.stringify({
       server: {
-        port: PUBLIC_PORT,
+        port: 0,
         host: "127.0.0.1",
-        localPort: LOCAL_PORT,
+        localPort: 0,
         rateLimit: "1000/hour",
         streamTimeoutSeconds: 30,
       },

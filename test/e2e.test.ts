@@ -11,7 +11,7 @@ import { startServer } from "../src/server.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
 // Two mock A2A agents — simple echo servers
-function createMockAgent(port: number, name: string): http.Server {
+async function createMockAgent(name: string): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
 
@@ -35,7 +35,10 @@ function createMockAgent(port: number, name: string): http.Server {
     });
   });
 
-  return app.listen(port, "127.0.0.1");
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as any).port;
+  return { server, port };
 }
 
 describe("e2e: two Tidepool servers", () => {
@@ -44,10 +47,14 @@ describe("e2e: two Tidepool servers", () => {
   let bobConfigDir: string;
   let aliceMockAgent: http.Server;
   let bobMockAgent: http.Server;
-  let aliceServer: { close: () => void };
-  let bobServer: { close: () => void };
+  let aliceServer: Awaited<ReturnType<typeof startServer>>;
+  let bobServer: Awaited<ReturnType<typeof startServer>>;
   let aliceSession: TestSession;
   let bobSession: TestSession;
+  let aliceLocalPort: number;
+  let bobLocalPort: number;
+  let alicePublicPort: number;
+  let bobPublicPort: number;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-e2e-"));
@@ -70,11 +77,50 @@ describe("e2e: two Tidepool servers", () => {
       keyPath: path.join(bobConfigDir, "identity.key"),
     });
 
-    // --- Alice's config ---
+    // --- Start mock agents (ephemeral ports) ---
+    let aliceMockPort: number;
+    let bobMockPort: number;
+    ({ server: aliceMockAgent, port: aliceMockPort } = await createMockAgent("alice-dev"));
+    ({ server: bobMockAgent, port: bobMockPort } = await createMockAgent("rust-expert"));
+
+    // --- Phase 1: probe ephemeral public ports by doing a dry-start ---
+    // Write placeholder configs (port: 0), start both, grab ports, close both.
+    const writePlaceholderConfig = (dir: string, agentName: string) => {
+      fs.writeFileSync(
+        path.join(dir, "server.toml"),
+        TOML.stringify({
+          server: { port: 0, host: "0.0.0.0", localPort: 0, rateLimit: "100/hour" },
+          agents: {
+            [agentName]: { rateLimit: "50/hour", description: `${agentName} agent` },
+          },
+          connectionRequests: { mode: "deny" },
+          discovery: { providers: ["static"], cacheTtlSeconds: 300 },
+        } as any),
+      );
+      fs.writeFileSync(
+        path.join(dir, "friends.toml"),
+        TOML.stringify({ friends: {} } as any),
+      );
+    };
+
+    writePlaceholderConfig(aliceConfigDir, "alice-dev");
+    writePlaceholderConfig(bobConfigDir, "rust-expert");
+
+    const aliceProbe = await startServer({ configDir: aliceConfigDir, remoteAgents: [] });
+    alicePublicPort = (aliceProbe.publicServer.address() as any).port;
+    aliceProbe.close();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const bobProbe = await startServer({ configDir: bobConfigDir, remoteAgents: [] });
+    bobPublicPort = (bobProbe.publicServer.address() as any).port;
+    bobProbe.close();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // --- Phase 2: write real configs with cross-references and start for real ---
     fs.writeFileSync(
       path.join(aliceConfigDir, "server.toml"),
       TOML.stringify({
-        server: { port: 19900, host: "0.0.0.0", localPort: 19901, rateLimit: "100/hour" },
+        server: { port: alicePublicPort, host: "0.0.0.0", localPort: 0, rateLimit: "100/hour" },
         agents: {
           "alice-dev": {
             rateLimit: "50/hour",
@@ -96,11 +142,10 @@ describe("e2e: two Tidepool servers", () => {
       } as any),
     );
 
-    // --- Bob's config ---
     fs.writeFileSync(
       path.join(bobConfigDir, "server.toml"),
       TOML.stringify({
-        server: { port: 29900, host: "0.0.0.0", localPort: 29901, rateLimit: "100/hour" },
+        server: { port: bobPublicPort, host: "0.0.0.0", localPort: 0, rateLimit: "100/hour" },
         agents: {
           "rust-expert": {
             rateLimit: "50/hour",
@@ -122,38 +167,36 @@ describe("e2e: two Tidepool servers", () => {
       } as any),
     );
 
-    // --- Start mock agents ---
-    aliceMockAgent = createMockAgent(28800, "alice-dev");
-    bobMockAgent = createMockAgent(38800, "rust-expert");
-
-    // --- Start Tidepool servers ---
+    // --- Start Tidepool servers with cross-references ---
     aliceServer = await startServer({
       configDir: aliceConfigDir,
       remoteAgents: [
         {
           localHandle: "bobs-rust",
-          remoteEndpoint: "https://127.0.0.1:29900",
+          remoteEndpoint: `https://127.0.0.1:${bobPublicPort}`,
           remoteTenant: "rust-expert",
           certFingerprint: bobIdentity.fingerprint,
         },
       ],
     });
+    aliceLocalPort = (aliceServer.localServer.address() as any).port;
 
     bobServer = await startServer({
       configDir: bobConfigDir,
       remoteAgents: [
         {
           localHandle: "alices-dev",
-          remoteEndpoint: "https://127.0.0.1:19900",
+          remoteEndpoint: `https://127.0.0.1:${alicePublicPort}`,
           remoteTenant: "alice-dev",
           certFingerprint: aliceIdentity.fingerprint,
         },
       ],
     });
+    bobLocalPort = (bobServer.localServer.address() as any).port;
 
     // Register sessions so inbound A2A can be routed to mock agents.
-    aliceSession = await registerTestSession(19901, "alice-dev", "http://127.0.0.1:28800");
-    bobSession = await registerTestSession(29901, "rust-expert", "http://127.0.0.1:38800");
+    aliceSession = await registerTestSession(aliceLocalPort, "alice-dev", `http://127.0.0.1:${aliceMockPort}`);
+    bobSession = await registerTestSession(bobLocalPort, "rust-expert", `http://127.0.0.1:${bobMockPort}`);
   });
 
   afterAll(async () => {
@@ -169,7 +212,7 @@ describe("e2e: two Tidepool servers", () => {
 
   it("Alice's agent can ask Bob's agent through both Tidepool servers", async () => {
     const response = await fetch(
-      "http://127.0.0.1:19901/bobs-rust/message:send",
+      `http://127.0.0.1:${aliceLocalPort}/bobs-rust/message:send`,
       {
         method: "POST",
         headers: {
@@ -197,7 +240,7 @@ describe("e2e: two Tidepool servers", () => {
 
   it("Bob's agent can ask Alice's agent through both Tidepool servers", async () => {
     const response = await fetch(
-      "http://127.0.0.1:29901/alices-dev/message:send",
+      `http://127.0.0.1:${bobLocalPort}/alices-dev/message:send`,
       {
         method: "POST",
         headers: {
@@ -225,7 +268,7 @@ describe("e2e: two Tidepool servers", () => {
 
   it("Alice's Tidepool serves Agent Cards on local interface", async () => {
     const response = await fetch(
-      "http://127.0.0.1:19901/.well-known/agent-card.json",
+      `http://127.0.0.1:${aliceLocalPort}/.well-known/agent-card.json`,
     );
     const card = await response.json() as any;
 
@@ -237,7 +280,7 @@ describe("e2e: two Tidepool servers", () => {
 
   it("rejects unknown peers on public interface", async () => {
     try {
-      await fetch("https://127.0.0.1:19900/alice-dev/message:send", {
+      await fetch(`https://127.0.0.1:${alicePublicPort}/alice-dev/message:send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -259,9 +302,10 @@ describe("e2e: two Tidepool servers", () => {
 describe("inbound validation: enforce mode", () => {
   let tmpDir: string;
   let configDir: string;
-  let server: { close: () => void };
+  let server: Awaited<ReturnType<typeof startServer>>;
   let clientCert: Buffer;
   let clientKey: Buffer;
+  let publicPort: number;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-enforce-inbound-"));
@@ -292,9 +336,9 @@ describe("inbound validation: enforce mode", () => {
       path.join(configDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 58850,
+          port: 0,
           host: "0.0.0.0",
-          localPort: 58851,
+          localPort: 0,
           rateLimit: "100/hour",
         },
         agents: {
@@ -315,6 +359,7 @@ describe("inbound validation: enforce mode", () => {
     );
 
     server = await startServer({ configDir });
+    publicPort = (server.publicServer.address() as any).port;
   });
 
   afterAll(() => {
@@ -324,7 +369,7 @@ describe("inbound validation: enforce mode", () => {
 
   it("rejects malformed inbound message with HTTP 400 and state=failed", async () => {
     const response = await fetch(
-      "https://127.0.0.1:58850/strict-agent/message:send",
+      `https://127.0.0.1:${publicPort}/strict-agent/message:send`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

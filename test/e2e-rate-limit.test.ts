@@ -11,7 +11,7 @@ import { startServer } from "../src/server.js";
 import type { RemoteAgent } from "../src/types.js";
 import { registerTestSession, type TestSession } from "./test-helpers.js";
 
-function createMockAgent(port: number, name: string): http.Server {
+async function createMockAgent(name: string): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
 
@@ -30,10 +30,13 @@ function createMockAgent(port: number, name: string): http.Server {
     });
   });
 
-  return app.listen(port, "127.0.0.1");
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as any).port;
+  return { server, port };
 }
 
-function createSlowAgent(port: number): http.Server {
+async function createSlowAgent(): Promise<{ server: http.Server; port: number }> {
   const app = express();
   app.use(express.json());
 
@@ -41,7 +44,10 @@ function createSlowAgent(port: number): http.Server {
     // Never respond — hangs forever
   });
 
-  return app.listen(port, "127.0.0.1");
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as any).port;
+  return { server, port };
 }
 
 async function mTLSFetch(
@@ -101,11 +107,13 @@ describe("e2e: rate limiting and timeout", () => {
   let serverConfigDir: string;
   let mockAgent: http.Server;
   let slowAgent: http.Server;
-  let server: { close: () => void };
+  let server: Awaited<ReturnType<typeof startServer>>;
   let peerCertPath: string;
   let peerKeyPath: string;
   let fastAgentSession: TestSession;
   let slowAgentSession: TestSession;
+  let publicPort: number;
+  let localPort: number;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-e2e-rl-"));
@@ -129,13 +137,19 @@ describe("e2e: rate limiting and timeout", () => {
     peerCertPath = path.join(peerConfigDir, "identity.crt");
     peerKeyPath = path.join(peerConfigDir, "identity.key");
 
+    // Start mock agents with ephemeral ports
+    let fastAgentPort: number;
+    let slowAgentPort: number;
+    ({ server: mockAgent, port: fastAgentPort } = await createMockAgent("fast-agent"));
+    ({ server: slowAgent, port: slowAgentPort } = await createSlowAgent());
+
     fs.writeFileSync(
       path.join(serverConfigDir, "server.toml"),
       TOML.stringify({
         server: {
-          port: 49900,
+          port: 0,
           host: "0.0.0.0",
-          localPort: 49901,
+          localPort: 0,
           rateLimit: "100/minute",
         },
         agents: {
@@ -164,9 +178,6 @@ describe("e2e: rate limiting and timeout", () => {
       } as any),
     );
 
-    mockAgent = createMockAgent(58800, "fast-agent");
-    slowAgent = createSlowAgent(58801);
-
     // Register peer-agent as a remote so inbound mTLS requests can be
     // translated back to a local handle by fingerprint + X-Sender-Agent.
     const peerRemote: RemoteAgent = {
@@ -181,9 +192,12 @@ describe("e2e: rate limiting and timeout", () => {
       remoteAgents: [peerRemote],
     });
 
+    publicPort = (server.publicServer.address() as any).port;
+    localPort = (server.localServer.address() as any).port;
+
     // Register sessions so inbound A2A can be routed to mock agents.
-    fastAgentSession = await registerTestSession(49901, "fast-agent", "http://127.0.0.1:58800");
-    slowAgentSession = await registerTestSession(49901, "slow-agent", "http://127.0.0.1:58801");
+    fastAgentSession = await registerTestSession(localPort, "fast-agent", `http://127.0.0.1:${fastAgentPort}`);
+    slowAgentSession = await registerTestSession(localPort, "slow-agent", `http://127.0.0.1:${slowAgentPort}`);
   });
 
   afterAll(async () => {
@@ -198,7 +212,7 @@ describe("e2e: rate limiting and timeout", () => {
 
   it("allows requests within the agent rate limit", async () => {
     const resp = await mTLSFetch(
-      "https://127.0.0.1:49900/fast-agent/message:send",
+      `https://127.0.0.1:${publicPort}/fast-agent/message:send`,
       a2aMessage("hello"),
       peerCertPath,
       peerKeyPath,
@@ -211,20 +225,20 @@ describe("e2e: rate limiting and timeout", () => {
   it("returns 429 with Retry-After when agent rate limit is exceeded", async () => {
     // First test consumed 1 fast-agent token. Drain the remaining 2.
     await mTLSFetch(
-      "https://127.0.0.1:49900/fast-agent/message:send",
+      `https://127.0.0.1:${publicPort}/fast-agent/message:send`,
       a2aMessage("msg 2"),
       peerCertPath,
       peerKeyPath,
     );
     await mTLSFetch(
-      "https://127.0.0.1:49900/fast-agent/message:send",
+      `https://127.0.0.1:${publicPort}/fast-agent/message:send`,
       a2aMessage("msg 3"),
       peerCertPath,
       peerKeyPath,
     );
 
     const resp = await mTLSFetch(
-      "https://127.0.0.1:49900/fast-agent/message:send",
+      `https://127.0.0.1:${publicPort}/fast-agent/message:send`,
       a2aMessage("msg 4"),
       peerCertPath,
       peerKeyPath,
@@ -238,7 +252,7 @@ describe("e2e: rate limiting and timeout", () => {
 
   it("returns TASK_STATE_FAILED with 504 when agent times out", async () => {
     const resp = await mTLSFetch(
-      "https://127.0.0.1:49900/slow-agent/message:send",
+      `https://127.0.0.1:${publicPort}/slow-agent/message:send`,
       a2aMessage("this will timeout"),
       peerCertPath,
       peerKeyPath,
@@ -260,7 +274,7 @@ describe("e2e: rate limiting and timeout", () => {
     });
 
     const resp = await mTLSFetch(
-      "https://127.0.0.1:49900/fast-agent/message:send",
+      `https://127.0.0.1:${publicPort}/fast-agent/message:send`,
       a2aMessage("let me in"),
       path.join(strangerDir, "identity.crt"),
       path.join(strangerDir, "identity.key"),
@@ -272,7 +286,7 @@ describe("e2e: rate limiting and timeout", () => {
 
   it("returns 404 for unknown agent tenant", async () => {
     const resp = await mTLSFetch(
-      "https://127.0.0.1:49900/nonexistent-agent/message:send",
+      `https://127.0.0.1:${publicPort}/nonexistent-agent/message:send`,
       a2aMessage("hello?"),
       peerCertPath,
       peerKeyPath,

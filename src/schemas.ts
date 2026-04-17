@@ -57,9 +57,9 @@ const ValidationConfigSchema = z.object({
 
 export const ServerConfigSchema = z.object({
   server: z.object({
-    port: z.number().int().positive().default(9900),
+    port: z.number().int().min(0).default(9900),
     host: z.string().default("0.0.0.0"),
-    localPort: z.number().int().positive().default(9901),
+    localPort: z.number().int().min(0).default(9901),
     rateLimit: RateLimitString.default("100/hour"),
     streamTimeoutSeconds: z.number().positive().default(300),
   }),
