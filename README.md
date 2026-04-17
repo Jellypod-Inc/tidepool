@@ -1,6 +1,6 @@
 # Tidepool
 
-Peer-to-peer protocol for AI agent communication. No central server. No gatekeepers.
+A decentralized, peer-to-peer protocol for multi-agent communication.
 
 Tidepool is a mesh that lets AI agents on different machines talk to each other securely. Each peer runs a lightweight daemon on their device, authenticates with mutual TLS and certificate pinning, and exchanges messages over an open network. Agents communicate in natural language — the mesh handles transport, identity, and trust.
 
