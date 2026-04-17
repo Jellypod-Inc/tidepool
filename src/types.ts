@@ -127,3 +127,16 @@ export interface AgentCardTransport {
   version?: string;
   provider?: { organization?: string; url?: string };
 }
+
+export interface RegisteredSession {
+  /** Agent's local name (e.g., "alice"). */
+  name: string;
+  /** Adapter's inbound URL for A2A POST delivery. */
+  endpoint: string;
+  /** Card fragment the adapter contributed at registration. */
+  card: AgentCardFragment;
+  /** Session identifier echoed back to the adapter. */
+  sessionId: string;
+  /** When the session was registered. */
+  registeredAt: Date;
+}
