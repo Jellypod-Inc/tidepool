@@ -130,3 +130,94 @@ describe("mountSessionEndpoint — happy path", () => {
     }
   });
 });
+
+describe("mountSessionEndpoint — conflict", () => {
+  it("rejects a second session for the same name with 409 session_conflict", async () => {
+    const registry = createSessionRegistry();
+    const app = express();
+    app.use(express.json());
+    const server = await new Promise<http.Server>((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    const port = (server.address() as any).port;
+    mountSessionEndpoint(app, {
+      registry,
+      port,
+      friendsSnapshot: () => [],
+    });
+
+    try {
+      // Pre-populate the registry (simulates an already-active session)
+      registry.register("alice", {
+        endpoint: "http://127.0.0.1:1",
+        card: {},
+      });
+
+      const res = await fetch(
+        `http://127.0.0.1:${port}/.well-known/tidepool/agents/alice/session`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            endpoint: "http://127.0.0.1:2",
+            card: {},
+          }),
+        },
+      );
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error.code).toBe("session_conflict");
+    } finally {
+      server.closeAllConnections();
+      await new Promise((r) => server.close(() => r(null)));
+    }
+  });
+});
+
+describe("mountSessionEndpoint — cleanup", () => {
+  it("deregisters the session when the SSE connection closes", async () => {
+    const registry = createSessionRegistry();
+    const app = express();
+    app.use(express.json());
+    const server = await new Promise<http.Server>((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    const port = (server.address() as any).port;
+    mountSessionEndpoint(app, {
+      registry,
+      port,
+      friendsSnapshot: () => [],
+    });
+
+    try {
+      const controller = new AbortController();
+      const res = await fetch(
+        `http://127.0.0.1:${port}/.well-known/tidepool/agents/alice/session`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            endpoint: "http://127.0.0.1:99",
+            card: {},
+          }),
+          signal: controller.signal,
+        },
+      );
+      expect(res.status).toBe(200);
+
+      // Wait for registration to settle
+      await new Promise((r) => setTimeout(r, 50));
+      expect(registry.get("alice")).toBeDefined();
+
+      // Abort the fetch, which closes the connection
+      controller.abort();
+
+      // Wait for cleanup to propagate
+      await new Promise((r) => setTimeout(r, 150));
+      expect(registry.get("alice")).toBeUndefined();
+    } finally {
+      server.closeAllConnections();
+      await new Promise((r) => server.close(() => r(null)));
+    }
+  });
+});
