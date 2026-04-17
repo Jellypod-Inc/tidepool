@@ -10,7 +10,7 @@ function setup(overrides?: {
     text: string;
     participants?: string[];
   }) => Promise<{ messageId: string }>;
-  listPeers?: () => string[];
+  listPeers?: () => Promise<string[]>;
   self?: string;
 }) {
   const store = createThreadStore({ maxMessagesPerThread: 100, maxThreads: 50 });
@@ -19,7 +19,7 @@ function setup(overrides?: {
   const ch = createChannel({
     self: overrides?.self ?? "alice",
     store,
-    listPeers: overrides?.listPeers ?? (() => ["bob", "carol"]),
+    listPeers: overrides?.listPeers ?? (async () => ["bob", "carol"]),
     send:
       overrides?.send ??
       (async (args) => {

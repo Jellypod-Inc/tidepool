@@ -5,7 +5,8 @@ import { startHttp, type InboundInfo } from "./http.js";
 import { createChannel } from "./channel.js";
 import { sendOutbound } from "./outbound.js";
 import { createThreadStore } from "./thread-store.js";
-import { openSession, type Peer } from "./session-client.js";
+import { openSession } from "./session-client.js";
+import { fetchPeers } from "./peers-client.js";
 
 export type StartOpts = {
   configDir: string;
@@ -28,15 +29,18 @@ export async function start(opts: StartOpts) {
     maxThreads: opts.maxThreads ?? 100,
   });
 
-  // Mutable peer list populated by SSE snapshots
-  const peersBox: { current: Peer[] } = { current: [] };
   // Session token populated after SSE registration; threaded into outbound deps.
   const sessionBox: { id: string } = { id: "" };
+
+  const daemonUrl = `http://${host}:${proxy.localPort}`;
 
   const channel = createChannel({
     self: agent.agentName,
     store,
-    listPeers: () => peersBox.current.map((p) => p.handle),
+    listPeers: async () => {
+      const peers = await fetchPeers(daemonUrl);
+      return peers.map((p) => p.handle);
+    },
     send: ({ peer, contextId, text, participants }) =>
       sendOutbound({
         peer,
@@ -68,9 +72,9 @@ export async function start(opts: StartOpts) {
 
   const inboundEndpoint = `http://${host}:${httpServer.port}`;
 
-  // Open the SSE session to register our endpoint and receive peer updates
+  // Open the SSE session to register our endpoint; the stream is liveness-only
   const session = await openSession({
-    daemonUrl: `http://${host}:${proxy.localPort}`,
+    daemonUrl,
     name: agent.agentName,
     endpoint: inboundEndpoint,
     card: {
@@ -79,9 +83,6 @@ export async function start(opts: StartOpts) {
       capabilities: { streaming: false, extensions: [] },
       defaultInputModes: ["text/plain"],
       defaultOutputModes: ["text/plain"],
-    },
-    onPeers: (peers) => {
-      peersBox.current = peers;
     },
   });
   sessionBox.id = session.sessionId;

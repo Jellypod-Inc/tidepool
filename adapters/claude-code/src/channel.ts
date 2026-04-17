@@ -13,7 +13,7 @@ import { ADAPTER_VERSION } from "./version.js";
 export type CreateChannelOpts = {
   self: string;
   store: ThreadStore;
-  listPeers: () => string[];
+  listPeers: () => Promise<string[]>;
   send: (args: {
     peer: string;
     contextId: string;
@@ -242,18 +242,19 @@ export function createChannel(opts: CreateChannelOpts) {
     content: [{ type: "text", text: JSON.stringify({ handle: opts.self }) }],
   });
 
-  const handleListPeers = (): ToolCallResult => ({
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({
-          peers: [...opts.listPeers()]
-            .sort()
-            .map((handle) => ({ handle })),
-        }),
-      },
-    ],
-  });
+  const handleListPeers = async (): Promise<ToolCallResult> => {
+    const peers = await opts.listPeers();
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            peers: [...peers].sort().map((handle) => ({ handle })),
+          }),
+        },
+      ],
+    };
+  };
 
   const handleListThreads = (req: ToolCallRequest): ToolCallResult => {
     const parsed = ListThreadsArgsSchema.safeParse(req.arguments);
