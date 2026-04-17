@@ -2,6 +2,7 @@ import forge from "node-forge";
 import type {
   FriendsConfig,
   FriendEntry,
+  PeersConfig,
   ServerConfig,
   AgentConfig,
 } from "./types.js";
@@ -22,6 +23,28 @@ export function checkFriend(
   for (const [handle, entry] of Object.entries(friends.friends)) {
     if (entry.fingerprint === fingerprint) {
       return { handle, friend: entry };
+    }
+  }
+  return null;
+}
+
+interface PeerLookup {
+  handle: string;
+  fingerprint: string;
+}
+
+/**
+ * Find a peer by cert fingerprint in peers.toml.
+ * Comparison is case-insensitive so sha256: prefix casing doesn't matter.
+ */
+export function findPeerByFingerprint(
+  peers: PeersConfig,
+  fingerprint: string,
+): PeerLookup | null {
+  const target = fingerprint.toLowerCase();
+  for (const [handle, entry] of Object.entries(peers.peers)) {
+    if (entry.fingerprint && entry.fingerprint.toLowerCase() === target) {
+      return { handle, fingerprint: entry.fingerprint };
     }
   }
   return null;

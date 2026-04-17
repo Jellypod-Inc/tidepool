@@ -5,9 +5,10 @@ import {
   resolveTenant,
   extractFingerprint,
   isConnectionRequest,
+  findPeerByFingerprint,
   CONNECTION_EXTENSION_URL,
 } from "../src/middleware.js";
-import type { FriendsConfig, ServerConfig } from "../src/types.js";
+import type { FriendsConfig, PeersConfig, ServerConfig } from "../src/types.js";
 
 const friends: FriendsConfig = {
   friends: {
@@ -173,5 +174,75 @@ describe("isConnectionRequest", () => {
       },
     };
     expect(isConnectionRequest(bodyWrong, {})).toBe(false);
+  });
+});
+
+describe("middleware — peers-based inbound trust", () => {
+  const peers: PeersConfig = {
+    peers: {
+      "bob-agent": {
+        fingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        endpoint: "https://bob.example.com",
+        agents: [],
+      },
+      "dave-agent": {
+        fingerprint: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        endpoint: "https://dave.example.com",
+        agents: ["rust-expert"],
+      },
+    },
+  };
+
+  const emptyPeers: PeersConfig = { peers: {} };
+
+  it("accepts an inbound cert matching a peer entry fingerprint", () => {
+    const result = findPeerByFingerprint(
+      peers,
+      "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    );
+    expect(result).toEqual({
+      handle: "bob-agent",
+      fingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    });
+  });
+
+  it("rejects an inbound cert that is in neither peers nor friends", () => {
+    const peerResult = findPeerByFingerprint(emptyPeers, "sha256:0000000000000000000000000000000000000000000000000000000000000000");
+    const friendResult = checkFriend({ friends: {} }, "sha256:0000000000000000000000000000000000000000000000000000000000000000");
+    expect(peerResult).toBeNull();
+    expect(friendResult).toBeNull();
+  });
+
+  it("finds peer by fingerprint case-insensitively", () => {
+    // peers.toml stores lowercase; incoming cert fingerprint may vary in case
+    const result = findPeerByFingerprint(
+      peers,
+      "SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.handle).toBe("bob-agent");
+  });
+
+  it("returns null for fingerprint not in peers", () => {
+    const result = findPeerByFingerprint(peers, "sha256:aaaa");
+    expect(result).toBeNull();
+  });
+
+  it("prefers peers entry when both peers and friends contain the fingerprint", () => {
+    // Both have the same fingerprint — both lookups succeed independently (no crash)
+    const sharedFp = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    const friendsWithOverlap: FriendsConfig = {
+      friends: {
+        "bob-friend-alias": { fingerprint: sharedFp },
+      },
+    };
+    const peerResult = findPeerByFingerprint(peers, sharedFp);
+    const friendResult = checkFriend(friendsWithOverlap, sharedFp);
+    // peers check wins (done first in the trust pipeline)
+    expect(peerResult).not.toBeNull();
+    expect(peerResult?.handle).toBe("bob-agent");
+    // friends path would also have found it — no crash, no undefined behavior
+    expect(friendResult).not.toBeNull();
+    expect(friendResult?.handle).toBe("bob-friend-alias");
   });
 });
