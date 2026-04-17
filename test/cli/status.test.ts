@@ -30,6 +30,6 @@ describe("runStatus", () => {
     const out = await runStatus({ configDir: dir, localPortOverride: 1 });
     expect(out).toMatch(/Daemon: not running/);
     expect(out).toMatch(/claude-code:start/);
-    expect(out).toMatch(/tidepool serve/);
+    expect(out).toMatch(/tidepool start/);
   });
 });

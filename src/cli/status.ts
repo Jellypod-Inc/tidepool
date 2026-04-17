@@ -23,7 +23,7 @@ export async function runStatus(opts: RunStatusOpts): Promise<string> {
     : [
         `Daemon: not running`,
         `  → run 'tidepool claude-code:start' in a project dir to start it,`,
-        `    or 'tidepool serve &' in any terminal to just bring up the daemon.`,
+        `    or 'tidepool start &' in any terminal to just bring up the daemon.`,
       ].join("\n");
 
   return `${base}\n\n${daemonBlock}`;

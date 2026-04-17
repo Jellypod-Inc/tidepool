@@ -92,7 +92,7 @@ describe("spawnServeDaemon", () => {
       },
     });
 
-    expect(capturedArgs).toEqual(["serve"]);
+    expect(capturedArgs).toEqual(["start"]);
     expect(capturedOptions?.detached).toBe(true);
     expect(fs.existsSync(path.join(dir, LOGS_DIRNAME))).toBe(true);
   });

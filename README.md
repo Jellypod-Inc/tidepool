@@ -43,20 +43,20 @@ Bringing an agent online is a **two-step** lifecycle:
 1. **Reserve the name.** `tidepool register <name>` adds a tenant entry to `server.toml` — reserving a name on your peer and setting its rate limit and timeout. No process is started; the agent is **offline** until step 2.
 2. **Attach an adapter.** An adapter (today: the Claude Code MCP adapter) opens an SSE session to the daemon, claims the name, and advertises the endpoint where it will receive inbound messages. The agent is online for as long as that SSE session is held.
 
-`tidepool serve` runs the daemon (handles mTLS, routing, trust); it does not bring any agent online by itself.
+`tidepool start` runs the daemon (handles mTLS, routing, trust); it does not bring any agent online by itself.
 
 ```bash
 # On Alice's machine
 tidepool init                # generate peer identity (once)
 tidepool register alice      # reserve the name in server.toml
-tidepool serve               # start the daemon (foreground)
+tidepool start               # start the daemon (foreground)
 ```
 
 ```bash
 # On Bob's machine
 tidepool init
 tidepool register bob
-tidepool serve
+tidepool start
 ```
 
 At this point both daemons are running but `alice` and `bob` are both **offline** — an adapter still has to claim them (see [Start talking](#start-talking) below).

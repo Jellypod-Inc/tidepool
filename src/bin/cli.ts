@@ -44,7 +44,7 @@ program.addHelpText(
     `  $ tidepool whoami\n` +
     `  $ tidepool friend add bob sha256:...\n` +
     `  $ tidepool remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
-    `  $ tidepool serve\n`,
+    `  $ tidepool start\n`,
 );
 
 program
@@ -207,8 +207,7 @@ program
   });
 
 program
-  .command("serve")
-  .alias("start")
+  .command("start")
   .description("Boot the Tidepool server")
   .action(async () => {
     const configDir = resolveConfigDir(program.opts());
@@ -246,7 +245,7 @@ directory
 program
   .command("claude-code:start [agent]")
   .description("Start a Claude Code session wired up via A2A")
-  .option("--debug", "Run tidepool serve in the foreground; don't exec claude")
+  .option("--debug", "Run tidepool start in the foreground; don't exec claude")
   .action(async (agent: string | undefined, cmdOpts) => {
     const configDir = resolveConfigDir(program.opts());
     await runClaudeCodeStart({

@@ -56,7 +56,7 @@ export async function spawnServeDaemon(opts: SpawnServeDaemonOpts): Promise<{ pi
   const logFd = fs.openSync(logPath, "a");
 
   const spawner = opts.spawner ?? nodeSpawn;
-  const child = spawner("tidepool", ["serve"], {
+  const child = spawner("tidepool", ["start"], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, TIDEPOOL_HOME: opts.configDir },

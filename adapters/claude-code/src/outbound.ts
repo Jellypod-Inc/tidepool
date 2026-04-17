@@ -91,7 +91,7 @@ export async function sendOutbound(args: {
       throw new SendError(
         "daemon-down",
         "the tidepool daemon isn't running",
-        "Ask the user to run `tidepool claude-code:start` (or `tidepool serve &`) and retry.",
+        "Ask the user to run `tidepool claude-code:start` (or `tidepool start &`) and retry.",
       );
     }
     throw new SendError(
