@@ -1,0 +1,54 @@
+test/metadata-from-injection.test.ts
+  655ea5a9b26de87d 57,91-97,107,109,118,136,140
+test/x-agent-validation.test.ts
+  655ea5a9b26de87d 8,15,48,52,60-62,66-67,71,80-81,84,87,93-94
+test/mTLS-pinning.test.ts
+  655ea5a9b26de87d 10,53,184-186,189-191,206
+test/e2e.test.ts
+  655ea5a9b26de87d 220,248
+test/test-helpers.ts
+  655ea5a9b26de87d 4,11-12,22-25,38,42-43,46,48-67,79-85
+test/local-loopback-e2e.test.ts
+  655ea5a9b26de87d 97-99,109,125,167-172,179,222,310-313,324,359,430,439-440,449,466-467,483-484,486,495,512
+src/server.ts
+  655ea5a9b26de87d 37,158,591-603,606-614,617
+test/session-registry.test.ts
+  655ea5a9b26de87d 69-80
+test/streaming-e2e.test.ts
+  655ea5a9b26de87d 194,302,428,549
+src/session/registry.ts
+  655ea5a9b26de87d 15,60-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "6cb377944b27173a858fed576c1f60d7fb440a18",
+  "prompts": {
+    "655ea5a9b26de87d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0b483778-b88c-41a6-a2d0-f5ebbffe4f1c",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 155,
+      "total_deletions": 58,
+      "accepted_lines": 378,
+      "overriden_lines": 2
+    },
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2270,
+      "overriden_lines": 0
+    }
+  }
+}
