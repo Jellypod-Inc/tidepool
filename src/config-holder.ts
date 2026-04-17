@@ -1,11 +1,13 @@
 import fs from "fs";
 import { loadServerConfig, loadFriendsConfig } from "./config.js";
-import type { ServerConfig, FriendsConfig } from "./types.js";
+import { loadPeersConfig } from "./peers/config.js";
+import type { ServerConfig, FriendsConfig, PeersConfig } from "./types.js";
 
 export interface ConfigHolder {
   server: () => ServerConfig;
   friends: () => FriendsConfig;
   setFriends: (cfg: FriendsConfig) => void;
+  peers: () => PeersConfig;
   stop: () => void;
 }
 
@@ -23,9 +25,11 @@ export interface ConfigHolder {
 export function createConfigHolder(configDir: string): ConfigHolder {
   const serverPath = `${configDir}/server.toml`;
   const friendsPath = `${configDir}/friends.toml`;
+  const peersPath = `${configDir}/peers.toml`;
 
   let serverCfg = loadServerConfig(serverPath);
   let friendsCfg = loadFriendsConfig(friendsPath);
+  let peersCfg = loadPeersConfig(peersPath);
 
   const onServerChange = () => {
     try {
@@ -45,17 +49,29 @@ export function createConfigHolder(configDir: string): ConfigHolder {
       );
     }
   };
+  const onPeersChange = () => {
+    try {
+      peersCfg = loadPeersConfig(peersPath);
+    } catch (err) {
+      process.stderr.write(
+        `[tidepool] reload of peers.toml failed: ${String(err)} — keeping prior config\n`,
+      );
+    }
+  };
 
   fs.watchFile(serverPath, { interval: 500 }, onServerChange);
   fs.watchFile(friendsPath, { interval: 500 }, onFriendsChange);
+  fs.watchFile(peersPath, { interval: 500 }, onPeersChange);
 
   return {
     server: () => serverCfg,
     friends: () => friendsCfg,
     setFriends: (cfg: FriendsConfig) => { friendsCfg = cfg; },
+    peers: () => peersCfg,
     stop: () => {
       fs.unwatchFile(serverPath, onServerChange);
       fs.unwatchFile(friendsPath, onFriendsChange);
+      fs.unwatchFile(peersPath, onPeersChange);
     },
   };
 }

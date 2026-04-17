@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { loadServerConfig, loadFriendsConfig } from "../src/config.js";
 import { ServerConfigSchema } from "../src/schemas.js";
+import { createConfigHolder } from "../src/config-holder.js";
+import { runInit } from "../src/cli/init.js";
+import { writePeersConfig } from "../src/peers/config.js";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -149,5 +152,36 @@ describe("validation config", () => {
       validation: { mode: "panic" },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("ConfigHolder — peers hot-reload", () => {
+  it("exposes peers() and reflects file changes", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "holder-peers-"));
+    await runInit({ configDir: dir });
+    // Init may not create peers.toml yet (that comes in Task 5).
+    // Write an empty one ourselves for this test:
+    writePeersConfig(path.join(dir, "peers.toml"), { peers: {} });
+
+    const holder = createConfigHolder(dir);
+    try {
+      expect(holder.peers().peers).toEqual({});
+
+      writePeersConfig(path.join(dir, "peers.toml"), {
+        peers: {
+          alice: {
+            fingerprint: "sha256:" + "a".repeat(64),
+            endpoint: "https://alice:9900",
+            agents: ["writer"],
+          },
+        },
+      });
+      await new Promise((r) => setTimeout(r, 700)); // poll interval ~500ms
+      expect(holder.peers().peers.alice).toBeDefined();
+      expect(holder.peers().peers.alice.agents).toEqual(["writer"]);
+    } finally {
+      holder.stop();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
