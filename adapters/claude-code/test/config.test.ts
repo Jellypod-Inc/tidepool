@@ -74,4 +74,10 @@ localEndpoint = "not-a-url"
 `);
     expect(() => loadAgentConfig(dir, "bob")).toThrow(/localEndpoint/);
   });
+
+  it("accepts an agent without localEndpoint (endpoint is picked at runtime)", () => {
+    write(`[agents.bob]
+`);
+    expect(loadAgentConfig(dir, "bob")).toEqual({ agentName: "bob" });
+  });
 });

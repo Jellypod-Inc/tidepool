@@ -89,6 +89,7 @@ export async function start(opts: StartOpts) {
 
   return {
     agent,
+    port: httpServer.port,
     close: async () => {
       await session.close();
       await httpServer.close();

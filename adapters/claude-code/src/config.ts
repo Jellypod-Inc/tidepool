@@ -4,7 +4,8 @@ import TOML from "@iarna/toml";
 
 export type AgentConfig = {
   agentName: string;
-  port: number;
+  /** If set, bind the inbound HTTP server to this port; otherwise pick an ephemeral one. */
+  port?: number;
 };
 
 export type ProxyConfig = {
@@ -56,6 +57,9 @@ export function loadAgentConfig(
   }
 
   const endpoint = agents[chosen].localEndpoint;
+  if (endpoint === undefined) {
+    return { agentName: chosen };
+  }
   if (typeof endpoint !== "string") {
     throw new Error(`agents.${chosen}.localEndpoint must be a string URL`);
   }

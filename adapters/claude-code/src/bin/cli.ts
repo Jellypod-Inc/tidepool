@@ -34,10 +34,10 @@ program
       agentName: opts.agent,
     });
     process.stderr.write(
-      `[a2a-adapter] serving agent "${handle.agent.agentName}" on http://127.0.0.1:${handle.agent.port}\n`,
+      `[tidepool-adapter] serving agent "${handle.agent.agentName}" on http://127.0.0.1:${handle.port}\n`,
     );
     const shutdown = async (sig: string) => {
-      process.stderr.write(`[a2a-adapter] ${sig} — shutting down\n`);
+      process.stderr.write(`[tidepool-adapter] ${sig} — shutting down\n`);
       await handle.close();
       process.exit(0);
     };
