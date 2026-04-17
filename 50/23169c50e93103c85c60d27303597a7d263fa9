@@ -1,0 +1,54 @@
+tasks/01-per-friend-rate-limits.md
+  687858472e2bbe7d 1-63
+tasks/02-audit-log.md
+  687858472e2bbe7d 1-71
+tasks/03-message-stream.md
+  687858472e2bbe7d 1-73
+tasks/07-web-dashboard.md
+  687858472e2bbe7d 1-80
+tasks/06-distributed-knowledge-layer.md
+  687858472e2bbe7d 1-276
+tasks/04-dht-identity-and-discovery.md
+  687858472e2bbe7d 1-246
+tasks/09-wireguard-transport.md
+  687858472e2bbe7d 1-335
+docs/vision-connect-ux.md
+  687858472e2bbe7d 1-122
+tasks/08-framework-agnostic-adapter.md
+  687858472e2bbe7d 1-94
+tasks/README.md
+  687858472e2bbe7d 1-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "5023169c50e93103c85c60d27303597a7d263fa9",
+  "prompts": {
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 1822,
+      "total_deletions": 250,
+      "accepted_lines": 1401,
+      "overriden_lines": 0
+    },
+    "9ebdbc39b05cf35b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64d68c12-55c5-4aad-b70f-0efd6b4ccbfc",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 261,
+      "total_deletions": 0,
+      "accepted_lines": 261,
+      "overriden_lines": 0
+    }
+  }
+}
