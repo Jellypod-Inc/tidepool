@@ -1,8 +1,8 @@
-# Claw Connect: Review Follow-ups (Deferred Fixes)
+# Tidepool: Review Follow-ups (Deferred Fixes)
 
 **Context:** After Phase 1–5 implementation, five parallel code-reviewer subagents (one per phase) reviewed the work. Most issues were fixed in commit 5204d4a. This plan tracks what was **not** fixed and why, plus concrete steps to address them later.
 
-**Spec:** `docs/superpowers/specs/2026-04-13-claw-connect-revised-design.md`
+**Spec:** `docs/superpowers/specs/2026-04-13-tidepool-revised-design.md`
 **Starting state:** All 140 tests passing, typecheck clean. No regressions expected from any item here.
 
 ---
@@ -55,7 +55,7 @@
 ## Task 2: Full discovery → connect e2e test
 
 **Severity:** Important (plan called for it; functionality works but end-to-end integration is untested)
-**Deferred because:** The individual providers (static, directory, registry) already have unit + integration tests. The e2e gap is specifically "discovery result feeds into `claw-connect connect`", which requires coordinating three servers (discovery target, directory, requester).
+**Deferred because:** The individual providers (static, directory, registry) already have unit + integration tests. The e2e gap is specifically "discovery result feeds into `tidepool connect`", which requires coordinating three servers (discovery target, directory, requester).
 
 ### Steps
 
@@ -116,7 +116,7 @@
 
 ### Steps
 
-- [ ] Add a comment above the `securitySchemes: {}, securityRequirements: []` lines in `buildRichRemoteAgentCard` (`src/agent-card.ts`) explaining that the local interface is plain HTTP on localhost and deliberately drops the remote card's mTLS scheme so local agents don't try to present client certs when talking to their own Claw Connect.
+- [ ] Add a comment above the `securitySchemes: {}, securityRequirements: []` lines in `buildRichRemoteAgentCard` (`src/agent-card.ts`) explaining that the local interface is plain HTTP on localhost and deliberately drops the remote card's mTLS scheme so local agents don't try to present client certs when talking to their own Tidepool.
 
 ---
 
@@ -149,7 +149,7 @@
 After completing any task above:
 
 ```bash
-cd claw-connect
+cd tidepool
 pnpm typecheck && pnpm test
 ```
 

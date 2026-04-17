@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate Claw Connect's A2A wire layer from a pre-ADR-001 verbose dialect (`"TASK_STATE_COMPLETED"`, `"ROLE_USER"`, `final: true`, `stateTransitionHistory`) to A2A spec v1.0 conformance, isolated behind a new `src/a2a.ts` module.
+**Goal:** Migrate Tidepool's A2A wire layer from a pre-ADR-001 verbose dialect (`"TASK_STATE_COMPLETED"`, `"ROLE_USER"`, `final: true`, `stateTransitionHistory`) to A2A spec v1.0 conformance, isolated behind a new `src/a2a.ts` module.
 
-**Architecture:** Introduce `src/a2a.ts` as the sole home for A2A v1.0 types, zod schemas, SSE helpers, extension-header helpers, and a terminality helper. Migrate callers to import wire types from this one file. Keep everything that makes Claw Connect *Claw Connect* (friends, discovery, handshake, pinning, tenancy, policy) untouched. When `@a2a-js/sdk` ships v1.0, `a2a.ts` contents become a re-export of the SDK.
+**Architecture:** Introduce `src/a2a.ts` as the sole home for A2A v1.0 types, zod schemas, SSE helpers, extension-header helpers, and a terminality helper. Migrate callers to import wire types from this one file. Keep everything that makes Tidepool *Tidepool* (friends, discovery, handshake, pinning, tenancy, policy) untouched. When `@a2a-js/sdk` ships v1.0, `a2a.ts` contents become a re-export of the SDK.
 
 **Tech Stack:** TypeScript 5.9, vitest 3.2, zod 4.3, express 5, undici 7. No new dependencies.
 
 **Spec:** `docs/superpowers/specs/2026-04-13-a2a-v1-migration-design.md`
 
-**Starting state:** 155/155 tests passing, typecheck clean. All work happens in `/Users/piersonmarks/src/tries/2026-04-13-clawconnect/claw-connect/`. All `pnpm` commands run from that directory.
+**Starting state:** 155/155 tests passing, typecheck clean. All work happens in `/Users/piersonmarks/src/tries/2026-04-13-tidepool/tidepool/`. All `pnpm` commands run from that directory.
 
 ---
 
@@ -28,7 +28,7 @@
 - `src/middleware.ts` — `isConnectionRequest` accepts headers
 - `src/server.ts` — parse/emit `X-A2A-Extensions`, update enum literals in 504 fallback
 - `src/ping.ts` — import `AgentCardSchema` from a2a.ts
-- `src/types.ts` — delete A2A types (keep Claw-Connect-only)
+- `src/types.ts` — delete A2A types (keep Tidepool-only)
 - `src/schemas.ts` — delete wire-shape schemas (keep config schemas)
 
 **Edited (tests — mostly mechanical):**
@@ -409,7 +409,7 @@ describe("AgentCardSchema", () => {
       defaultOutputModes: ["text/plain"],
       capabilities: {
         streaming: true,
-        extensions: [{ uri: "https://clawconnect.dev/ext/connection/v1" }],
+        extensions: [{ uri: "https://tidepool.dev/ext/connection/v1" }],
       },
       securitySchemes: { mtls: { type: "mtls", description: "mTLS" } },
       securityRequirements: [{ mtls: [] }],
@@ -1279,7 +1279,7 @@ describe("buildAcceptedResponse", () => {
     expect(response.role).toBe("agent");
     expect(response.parts[0]).toEqual({ kind: "text", text: "Connection accepted" });
     expect(
-      response.metadata?.["https://clawconnect.dev/ext/connection/v1"],
+      response.metadata?.["https://tidepool.dev/ext/connection/v1"],
     ).toEqual({ type: "accepted" });
   });
 });
@@ -1292,7 +1292,7 @@ describe("buildDeniedResponse", () => {
     expect(response.role).toBe("agent");
     expect(response.parts[0]).toEqual({ kind: "text", text: "Connection denied" });
     expect(
-      response.metadata?.["https://clawconnect.dev/ext/connection/v1"],
+      response.metadata?.["https://tidepool.dev/ext/connection/v1"],
     ).toEqual({ type: "denied", reason: "Not accepting connections" });
   });
 });
@@ -1392,7 +1392,7 @@ const data = (await response.json()) as {
 };
 expect(data.status.state).toBe("TASK_STATE_COMPLETED");
 expect(
-  data.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
+  data.artifacts[0].metadata["https://tidepool.dev/ext/connection/v1"]
     .type,
 ).toBe("accepted");
 
@@ -1406,7 +1406,7 @@ const data = (await response.json()) as {
 expect(data.role).toBe("agent");
 expect(data.parts[0].text).toBe("Connection accepted");
 expect(
-  data.metadata["https://clawconnect.dev/ext/connection/v1"].type,
+  data.metadata["https://tidepool.dev/ext/connection/v1"].type,
 ).toBe("accepted");
 ```
 
@@ -1422,7 +1422,7 @@ const data = (await response.json()) as {
 };
 expect(data.status.state).toBe("TASK_STATE_COMPLETED");
 expect(
-  data.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
+  data.artifacts[0].metadata["https://tidepool.dev/ext/connection/v1"]
     .type,
 ).toBe("accepted");
 
@@ -1434,7 +1434,7 @@ const data = (await response.json()) as {
   metadata: Record<string, Record<string, string>>;
 };
 expect(data.role).toBe("agent");
-expect(data.metadata["https://clawconnect.dev/ext/connection/v1"].type).toBe("accepted");
+expect(data.metadata["https://tidepool.dev/ext/connection/v1"].type).toBe("accepted");
 ```
 
 - [ ] **Step 7: Run full suite**
@@ -1486,7 +1486,7 @@ describe("buildLocalAgentCard", () => {
     // v1.0: extensions declared under capabilities
     expect(card.capabilities.extensions).toBeDefined();
     expect(card.capabilities.extensions?.[0]?.uri).toBe(
-      "https://clawconnect.dev/ext/connection/v1",
+      "https://tidepool.dev/ext/connection/v1",
     );
     // v1.0 securitySchemes shape: { type: "mtls" }
     expect(card.securitySchemes.mtls).toEqual({
@@ -1545,7 +1545,7 @@ export function buildLocalAgentCard(opts: BuildLocalOpts): AgentCard {
       pushNotifications: false,
       extensions: [
         declareExtension(CONNECTION_EXTENSION_URL, {
-          description: "Claw Connect peer friending handshake",
+          description: "Tidepool peer friending handshake",
           required: false,
         }),
       ],
@@ -1623,10 +1623,10 @@ export function buildRichRemoteAgentCard(opts: BuildRichRemoteOpts): AgentCard {
     defaultOutputModes: remoteCard.defaultOutputModes,
     capabilities: remoteCard.capabilities,
     // The local interface is plain HTTP on 127.0.0.1 — local agents talk to
-    // their own Claw Connect without credentials. We deliberately drop the
+    // their own Tidepool without credentials. We deliberately drop the
     // remote card's mTLS scheme so local agents don't try to present client
     // certs when calling localhost. mTLS happens server-to-server on the
-    // public interface, handled transparently by the Claw Connect proxy.
+    // public interface, handled transparently by the Tidepool proxy.
     securitySchemes: {},
     securityRequirements: [],
   };
@@ -1955,7 +1955,7 @@ if (isConnectionRequest(req.body, req.headers)) {
 Find the `res.json(result.response)` call inside the handshake handler (where we return `buildAcceptedResponse` / `buildDeniedResponse`). Just before that line, set the response header:
 
 ```ts
-res.setHeader("X-A2A-Extensions", "https://clawconnect.dev/ext/connection/v1");
+res.setHeader("X-A2A-Extensions", "https://tidepool.dev/ext/connection/v1");
 res.json(result.response);
 ```
 
@@ -2207,7 +2207,7 @@ Keep only the config + discovery schemas. Delete `AgentCardSchema` (moved to `a2
 import { z } from "zod";
 
 /**
- * Zod schemas for Claw-Connect-specific structures (server config, friends
+ * Zod schemas for Tidepool-specific structures (server config, friends
  * config, directory responses). A2A wire-shape schemas live in a2a.ts.
  */
 
@@ -2441,7 +2441,7 @@ describe("v1.0 conformance: Agent Card emitted by the server validates against A
       // Declared our extension
       expect(parsed.data.capabilities.extensions).toBeDefined();
       expect(parsed.data.capabilities.extensions?.[0]?.uri).toBe(
-        "https://clawconnect.dev/ext/connection/v1",
+        "https://tidepool.dev/ext/connection/v1",
       );
       // v1.0 does NOT have stateTransitionHistory on capabilities
       expect((parsed.data.capabilities as any).stateTransitionHistory).toBeUndefined();
@@ -2499,5 +2499,5 @@ Other items deferred:
 - `grep -rn "TASK_STATE_\|ROLE_\|final:\s*true\|stateTransitionHistory" src/ test/` returns 0 matches
 - Agent Card emitted by a running server validates against `AgentCardSchema`
 - `src/a2a.ts` is the sole home of A2A wire types and schemas
-- `types.ts` holds only Claw-Connect-specific types
+- `types.ts` holds only Tidepool-specific types
 - `schemas.ts` holds only config + directory schemas

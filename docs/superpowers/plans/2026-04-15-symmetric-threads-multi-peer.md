@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix the asymmetric-reply and missing-peer-identity bugs in claw-connect by switching the adapter to fire-and-forget A2A, threading via `contextId`, and having the claw-connect server inject authoritative `metadata.from` based on a NAT-style identity model.
+**Goal:** Fix the asymmetric-reply and missing-peer-identity bugs in tidepool by switching the adapter to fire-and-forget A2A, threading via `contextId`, and having the tidepool server inject authoritative `metadata.from` based on a NAT-style identity model.
 
-**Architecture:** Three layers stay distinct. (1) The A2A wire is unchanged — pure spec, no extensions. (2) The `claw-connect` server gains `X-Agent` (localhost) and `X-Sender-Agent` (peer-to-peer) header handling, and injects `metadata.from` into A2A bodies it forwards to local adapters. (3) The `a2a-claude-code-adapter` is rewritten for fire-and-forget messaging: outbound returns immediately after ack; inbound is just a notification (no waiting); a per-session in-memory thread store backs `list_threads` / `thread_history`. The legacy `claw_connect_reply` tool, the `PendingRegistry`, and the sync request-response correlation are deleted.
+**Architecture:** Three layers stay distinct. (1) The A2A wire is unchanged — pure spec, no extensions. (2) The `tidepool` server gains `X-Agent` (localhost) and `X-Sender-Agent` (peer-to-peer) header handling, and injects `metadata.from` into A2A bodies it forwards to local adapters. (3) The `a2a-claude-code-adapter` is rewritten for fire-and-forget messaging: outbound returns immediately after ack; inbound is just a notification (no waiting); a per-session in-memory thread store backs `list_threads` / `thread_history`. The legacy `tidepool_reply` tool, the `PendingRegistry`, and the sync request-response correlation are deleted.
 
 **Tech Stack:** TypeScript, pnpm workspaces, vitest, MCP SDK (`@modelcontextprotocol/sdk`), Express, mTLS via Node `https` + `undici` dispatcher.
 
@@ -14,14 +14,14 @@
 
 ## File map
 
-### claw-connect server changes
+### tidepool server changes
 
-- **Modify** `packages/claw-connect/src/server.ts` (~586 lines today): in `createLocalApp`, add `X-Agent` header validation against `server.toml`; for local→local forwarding, inject `metadata.from`; for local→remote forwarding, set `X-Sender-Agent`. In the public mTLS app, read `X-Sender-Agent`, translate via `remotes.toml`, inject `metadata.from`.
-- **Create** `packages/claw-connect/src/identity-injection.ts`: small pure helper module exporting `injectMetadataFrom(body, fromHandle)` and `resolveLocalHandleForRemoteSender(remoteAgents, peerFingerprint, senderAgentName)`. Keeps `server.ts` from growing further and isolates the identity logic for testing.
-- **Create** `packages/claw-connect/test/identity-injection.test.ts`: unit tests for the helper.
-- **Modify** `packages/claw-connect/test/local-loopback-e2e.test.ts`: assert that `X-Agent` header is validated and `metadata.from` is present in messages forwarded to the local agent.
-- **Create** `packages/claw-connect/test/x-agent-validation.test.ts`: tests for missing/unknown `X-Agent` rejection.
-- **Create** `packages/claw-connect/test/x-sender-agent-translation.test.ts`: tests for the remote→local translation path (mocked remoteAgents).
+- **Modify** `packages/tidepool/src/server.ts` (~586 lines today): in `createLocalApp`, add `X-Agent` header validation against `server.toml`; for local→local forwarding, inject `metadata.from`; for local→remote forwarding, set `X-Sender-Agent`. In the public mTLS app, read `X-Sender-Agent`, translate via `remotes.toml`, inject `metadata.from`.
+- **Create** `packages/tidepool/src/identity-injection.ts`: small pure helper module exporting `injectMetadataFrom(body, fromHandle)` and `resolveLocalHandleForRemoteSender(remoteAgents, peerFingerprint, senderAgentName)`. Keeps `server.ts` from growing further and isolates the identity logic for testing.
+- **Create** `packages/tidepool/test/identity-injection.test.ts`: unit tests for the helper.
+- **Modify** `packages/tidepool/test/local-loopback-e2e.test.ts`: assert that `X-Agent` header is validated and `metadata.from` is present in messages forwarded to the local agent.
+- **Create** `packages/tidepool/test/x-agent-validation.test.ts`: tests for missing/unknown `X-Agent` rejection.
+- **Create** `packages/tidepool/test/x-sender-agent-translation.test.ts`: tests for the remote→local translation path (mocked remoteAgents).
 
 ### a2a-claude-code-adapter changes (substantial rewrite)
 
@@ -38,12 +38,12 @@
 - **Rewrite** `packages/a2a-claude-code-adapter/test/outbound.test.ts`
 - **Rewrite** `packages/a2a-claude-code-adapter/test/http.test.ts`
 - **Rewrite** `packages/a2a-claude-code-adapter/test/integration.test.ts` (symmetric round-trip with mock relay)
-- **Modify** `packages/a2a-claude-code-adapter/scripts/smoke.ts`: replace `claw_connect_reply` call with `send` using `thread`.
+- **Modify** `packages/a2a-claude-code-adapter/scripts/smoke.ts`: replace `tidepool_reply` call with `send` using `thread`.
 
 ### docs
 
 - **Modify** `packages/a2a-claude-code-adapter/README.md`: new tool list, new channel event shape, removal of reply.
-- **Modify** `packages/claw-connect/README.md`: only if any user-facing behavior surfaces (mostly internal).
+- **Modify** `packages/tidepool/README.md`: only if any user-facing behavior surfaces (mostly internal).
 
 ---
 
@@ -53,15 +53,15 @@ Server-side identity comes first because the adapter's new inbound handler depen
 
 ---
 
-## Task 1: claw-connect identity-injection helper
+## Task 1: tidepool identity-injection helper
 
 **Files:**
-- Create: `packages/claw-connect/src/identity-injection.ts`
-- Test: `packages/claw-connect/test/identity-injection.test.ts`
+- Create: `packages/tidepool/src/identity-injection.ts`
+- Test: `packages/tidepool/test/identity-injection.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/claw-connect/test/identity-injection.test.ts`:
+Create `packages/tidepool/test/identity-injection.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -139,12 +139,12 @@ describe("resolveLocalHandleForRemoteSender", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter claw-connect test identity-injection`
+Run: `pnpm --filter tidepool test identity-injection`
 Expected: FAIL with module-not-found for `identity-injection`.
 
 - [ ] **Step 3: Implement the helper**
 
-Create `packages/claw-connect/src/identity-injection.ts`:
+Create `packages/tidepool/src/identity-injection.ts`:
 
 ```ts
 import type { RemoteAgent } from "./types.js";
@@ -186,31 +186,31 @@ export function resolveLocalHandleForRemoteSender(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter claw-connect test identity-injection`
+Run: `pnpm --filter tidepool test identity-injection`
 Expected: PASS, all 7 cases.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/claw-connect/src/identity-injection.ts packages/claw-connect/test/identity-injection.test.ts
-git commit -m "feat(claw-connect): identity-injection helper for metadata.from + remote sender translation"
+git add packages/tidepool/src/identity-injection.ts packages/tidepool/test/identity-injection.test.ts
+git commit -m "feat(tidepool): identity-injection helper for metadata.from + remote sender translation"
 ```
 
 ---
 
-## Task 2: claw-connect local-app `X-Agent` validation
+## Task 2: tidepool local-app `X-Agent` validation
 
 **Files:**
-- Modify: `packages/claw-connect/src/server.ts` (the `createLocalApp` function or the equivalent local POST handler around line 454)
-- Test: `packages/claw-connect/test/x-agent-validation.test.ts`
+- Modify: `packages/tidepool/src/server.ts` (the `createLocalApp` function or the equivalent local POST handler around line 454)
+- Test: `packages/tidepool/test/x-agent-validation.test.ts`
 
 - [ ] **Step 1: Read the current local-app handler**
 
-Read `packages/claw-connect/src/server.ts` lines 440–520 to confirm where the local POST `/:tenant/:action` is handled. Note: `createLocalApp` builds `localApp`, listening on `127.0.0.1:localPort`. The handler routes by recipient tenant.
+Read `packages/tidepool/src/server.ts` lines 440–520 to confirm where the local POST `/:tenant/:action` is handled. Note: `createLocalApp` builds `localApp`, listening on `127.0.0.1:localPort`. The handler routes by recipient tenant.
 
 - [ ] **Step 2: Write the failing test**
 
-Create `packages/claw-connect/test/x-agent-validation.test.ts`:
+Create `packages/tidepool/test/x-agent-validation.test.ts`:
 
 ```ts
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
@@ -303,12 +303,12 @@ describe("X-Agent validation on local POST", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `pnpm --filter claw-connect test x-agent-validation`
+Run: `pnpm --filter tidepool test x-agent-validation`
 Expected: FAIL — both cases return non-403 (currently 504/500 because there's no agent-X listening).
 
 - [ ] **Step 4: Add `X-Agent` validation to the local POST handler**
 
-In `packages/claw-connect/src/server.ts`, locate the local app handler `app.post("/:tenant/:action", ...)` (around line 454 based on current code). At the very top of that handler, before any other logic, insert:
+In `packages/tidepool/src/server.ts`, locate the local app handler `app.post("/:tenant/:action", ...)` (around line 454 based on current code). At the very top of that handler, before any other logic, insert:
 
 ```ts
 const senderAgent = req.header("x-agent");
@@ -327,33 +327,33 @@ if (!config.agents[senderAgent]) {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `pnpm --filter claw-connect test x-agent-validation`
+Run: `pnpm --filter tidepool test x-agent-validation`
 Expected: PASS, both cases return 403.
 
-- [ ] **Step 6: Run the full claw-connect suite to catch regressions**
+- [ ] **Step 6: Run the full tidepool suite to catch regressions**
 
-Run: `pnpm --filter claw-connect test`
+Run: `pnpm --filter tidepool test`
 Expected: All previously-passing tests still pass. Some integration tests that POST without `X-Agent` will now fail — those will be updated in Task 3 and Task 4.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/claw-connect/src/server.ts packages/claw-connect/test/x-agent-validation.test.ts
-git commit -m "feat(claw-connect): require X-Agent header on local POST"
+git add packages/tidepool/src/server.ts packages/tidepool/test/x-agent-validation.test.ts
+git commit -m "feat(tidepool): require X-Agent header on local POST"
 ```
 
 ---
 
-## Task 3: claw-connect local→local `metadata.from` injection
+## Task 3: tidepool local→local `metadata.from` injection
 
 **Files:**
-- Modify: `packages/claw-connect/src/server.ts`
-- Modify: `packages/claw-connect/test/local-loopback-e2e.test.ts` (existing test should be updated to assert the new behavior; if it doesn't currently exercise the body, leave it and add a new focused test)
-- Create: `packages/claw-connect/test/metadata-from-injection.test.ts`
+- Modify: `packages/tidepool/src/server.ts`
+- Modify: `packages/tidepool/test/local-loopback-e2e.test.ts` (existing test should be updated to assert the new behavior; if it doesn't currently exercise the body, leave it and add a new focused test)
+- Create: `packages/tidepool/test/metadata-from-injection.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/claw-connect/test/metadata-from-injection.test.ts`:
+Create `packages/tidepool/test/metadata-from-injection.test.ts`:
 
 ```ts
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
@@ -477,12 +477,12 @@ describe("metadata.from injection on local→local forward", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter claw-connect test metadata-from-injection`
+Run: `pnpm --filter tidepool test metadata-from-injection`
 Expected: FAIL — `received.message.metadata.from` is undefined (current server passes body through unchanged).
 
 - [ ] **Step 3: Inject `metadata.from` before forwarding to local agent**
 
-In `packages/claw-connect/src/server.ts`, find the local-tenant forwarding branch (around line 472 `if (agent)` after `if (!remote)`). Just before constructing the `fetch(targetUrl, ...)` call (both the streaming and non-streaming branches), import and invoke the helper:
+In `packages/tidepool/src/server.ts`, find the local-tenant forwarding branch (around line 472 `if (agent)` after `if (!remote)`). Just before constructing the `fetch(targetUrl, ...)` call (both the streaming and non-streaming branches), import and invoke the helper:
 
 At the top of `server.ts`, add to the imports:
 
@@ -502,32 +502,32 @@ Apply this in **both** the streaming branch (around line 484) and the non-stream
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter claw-connect test metadata-from-injection`
+Run: `pnpm --filter tidepool test metadata-from-injection`
 Expected: PASS, both cases.
 
-- [ ] **Step 5: Run the full claw-connect suite**
+- [ ] **Step 5: Run the full tidepool suite**
 
-Run: `pnpm --filter claw-connect test`
+Run: `pnpm --filter tidepool test`
 Expected: Same set passing as after Task 2; no new failures introduced.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/claw-connect/src/server.ts packages/claw-connect/test/metadata-from-injection.test.ts
-git commit -m "feat(claw-connect): inject metadata.from on local-to-local forward"
+git add packages/tidepool/src/server.ts packages/tidepool/test/metadata-from-injection.test.ts
+git commit -m "feat(tidepool): inject metadata.from on local-to-local forward"
 ```
 
 ---
 
-## Task 4: claw-connect local→remote `X-Sender-Agent` header
+## Task 4: tidepool local→remote `X-Sender-Agent` header
 
 **Files:**
-- Modify: `packages/claw-connect/src/server.ts` (the remote-forwarding branch, around line 539)
-- Create: `packages/claw-connect/test/x-sender-agent-outbound.test.ts`
+- Modify: `packages/tidepool/src/server.ts` (the remote-forwarding branch, around line 539)
+- Create: `packages/tidepool/test/x-sender-agent-outbound.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/claw-connect/test/x-sender-agent-outbound.test.ts`:
+Create `packages/tidepool/test/x-sender-agent-outbound.test.ts`:
 
 ```ts
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
@@ -542,13 +542,13 @@ import type { RemoteAgent } from "../src/types.js";
 // This test mocks a remote peer endpoint with a self-signed cert and verifies
 // our outbound POST sets X-Sender-Agent.
 // NOTE: this test relies on the existing test scaffolding for cert generation.
-// If the harness in packages/claw-connect/test/e2e-handshake.test.ts generates
+// If the harness in packages/tidepool/test/e2e-handshake.test.ts generates
 // peer certs, follow that pattern.
 
 describe.skip("X-Sender-Agent on remote outbound", () => {
   // Skipped scaffold; flesh out using the same cert-generation utilities used
   // by e2e-handshake.test.ts. The assertion to make:
-  //   - When alice's claw-connect POSTs to a remote peer (outbound), the
+  //   - When alice's tidepool POSTs to a remote peer (outbound), the
   //     request includes header `X-Sender-Agent: alice`.
   it.todo("sets X-Sender-Agent header on outbound mTLS POST");
 });
@@ -558,7 +558,7 @@ describe.skip("X-Sender-Agent on remote outbound", () => {
 
 - [ ] **Step 2: Add `X-Sender-Agent` to the outbound headers**
 
-In `packages/claw-connect/src/server.ts`, find the remote-forwarding `fetch` call (around line 539, the one that uses `dispatcher`). Modify the `headers` object:
+In `packages/tidepool/src/server.ts`, find the remote-forwarding `fetch` call (around line 539, the one that uses `dispatcher`). Modify the `headers` object:
 
 ```ts
 headers: {
@@ -569,33 +569,33 @@ headers: {
 
 `senderAgent` is in scope from the validation in Task 2.
 
-- [ ] **Step 3: Run the full claw-connect suite**
+- [ ] **Step 3: Run the full tidepool suite**
 
-Run: `pnpm --filter claw-connect test`
+Run: `pnpm --filter tidepool test`
 Expected: All previously-passing tests still pass.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/claw-connect/src/server.ts packages/claw-connect/test/x-sender-agent-outbound.test.ts
-git commit -m "feat(claw-connect): set X-Sender-Agent on remote outbound mTLS POST"
+git add packages/tidepool/src/server.ts packages/tidepool/test/x-sender-agent-outbound.test.ts
+git commit -m "feat(tidepool): set X-Sender-Agent on remote outbound mTLS POST"
 ```
 
 ---
 
-## Task 5: claw-connect remote→local sender translation + `metadata.from` injection
+## Task 5: tidepool remote→local sender translation + `metadata.from` injection
 
 **Files:**
-- Modify: `packages/claw-connect/src/server.ts` (the public mTLS app inbound handler — locate via `createPublicApp`)
-- Create: `packages/claw-connect/test/x-sender-agent-translation.test.ts`
+- Modify: `packages/tidepool/src/server.ts` (the public mTLS app inbound handler — locate via `createPublicApp`)
+- Create: `packages/tidepool/test/x-sender-agent-translation.test.ts`
 
 - [ ] **Step 1: Read the current public-app inbound handler**
 
-Read `packages/claw-connect/src/server.ts` `createPublicApp` and find where remote-incoming `message:send` POSTs are handled. Note where the mTLS fingerprint is extracted (likely via `extractFingerprint` from `middleware.ts`).
+Read `packages/tidepool/src/server.ts` `createPublicApp` and find where remote-incoming `message:send` POSTs are handled. Note where the mTLS fingerprint is extracted (likely via `extractFingerprint` from `middleware.ts`).
 
 - [ ] **Step 2: Write the failing test**
 
-Create `packages/claw-connect/test/x-sender-agent-translation.test.ts`:
+Create `packages/tidepool/test/x-sender-agent-translation.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -636,12 +636,12 @@ describe("public-app remote→local sender translation", () => {
 
 - [ ] **Step 3: Run test to verify it passes (helper already exists from Task 1)**
 
-Run: `pnpm --filter claw-connect test x-sender-agent-translation`
+Run: `pnpm --filter tidepool test x-sender-agent-translation`
 Expected: PASS — these assertions just exercise the helper from Task 1.
 
 - [ ] **Step 4: Wire translation into the public-app inbound handler**
 
-In `packages/claw-connect/src/server.ts`, in the `createPublicApp` function's inbound handler for `/:tenant/:action`, after the mTLS fingerprint is extracted and before the body is forwarded to the local agent:
+In `packages/tidepool/src/server.ts`, in the `createPublicApp` function's inbound handler for `/:tenant/:action`, after the mTLS fingerprint is extracted and before the body is forwarded to the local agent:
 
 ```ts
 import { resolveLocalHandleForRemoteSender, injectMetadataFrom } from "./identity-injection.js";
@@ -667,16 +667,16 @@ body: JSON.stringify(injectMetadataFrom(req.body, localHandle)),
 
 The exact placement depends on the current public-app handler structure — adapt to fit. The invariants: validate header → resolve → reject if missing → inject before forward.
 
-- [ ] **Step 5: Run the full claw-connect suite**
+- [ ] **Step 5: Run the full tidepool suite**
 
-Run: `pnpm --filter claw-connect test`
+Run: `pnpm --filter tidepool test`
 Expected: All previously-passing tests still pass. The mTLS handshake e2e tests may need `X-Sender-Agent` added to their outbound test stubs — fix any such regressions by adding the header to the stub fetch calls.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/claw-connect/src/server.ts packages/claw-connect/test/x-sender-agent-translation.test.ts
-git commit -m "feat(claw-connect): translate X-Sender-Agent + inject metadata.from on remote inbound"
+git add packages/tidepool/src/server.ts packages/tidepool/test/x-sender-agent-translation.test.ts
+git commit -m "feat(tidepool): translate X-Sender-Agent + inject metadata.from on remote inbound"
 ```
 
 ---
@@ -1084,7 +1084,7 @@ function isConnectionRefused(err: unknown): boolean {
 }
 
 /**
- * Fire-and-forget outbound. Awaits only the ack from the local claw-connect
+ * Fire-and-forget outbound. Awaits only the ack from the local tidepool
  * (HTTP 200 with a Task in `completed` state). Any reply from the peer
  * arrives later as a separate inbound POST handled by http.ts.
  *
@@ -1127,14 +1127,14 @@ export async function sendOutbound(args: {
     if (isConnectionRefused(err)) {
       throw <SendError>{
         kind: "daemon-down",
-        message: "the claw-connect daemon isn't running",
-        hint: "Ask the user to run `claw-connect claude-code:start` (or `claw-connect serve &`) and retry.",
+        message: "the tidepool daemon isn't running",
+        hint: "Ask the user to run `tidepool claude-code:start` (or `tidepool serve &`) and retry.",
       };
     }
     throw <SendError>{
       kind: "other",
       message: err instanceof Error ? err.message : String(err),
-      hint: "Ask the user to check `claw-connect status` and the daemon log at ~/.config/claw-connect/logs/.",
+      hint: "Ask the user to check `tidepool status` and the daemon log at ~/.config/tidepool/logs/.",
     };
   }
 
@@ -1157,7 +1157,7 @@ export async function sendOutbound(args: {
     throw <SendError>{
       kind: "other",
       message: `HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
-      hint: "Ask the user to check `claw-connect status` and the daemon log.",
+      hint: "Ask the user to check `tidepool status` and the daemon log.",
     };
   }
 
@@ -1350,7 +1350,7 @@ export async function startHttp(opts: StartHttpOpts) {
       opts.onInbound({ taskId, contextId, messageId, peer, text: textPart });
     } catch (err) {
       process.stderr.write(
-        `[claw-connect-adapter] onInbound threw: ${String(err)}\n`,
+        `[tidepool-adapter] onInbound threw: ${String(err)}\n`,
       );
     }
 
@@ -1496,8 +1496,8 @@ describe("channel tool dispatch", () => {
   it("send returns isError result on SendError", async () => {
     const send = vi.fn().mockRejectedValue(<SendError>{
       kind: "daemon-down",
-      message: "the claw-connect daemon isn't running",
-      hint: "run claw-connect claude-code:start",
+      message: "the tidepool daemon isn't running",
+      hint: "run tidepool claude-code:start",
     });
     const { ch } = setup({ send });
     const result = await ch.handleToolCall({
@@ -1506,7 +1506,7 @@ describe("channel tool dispatch", () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/daemon isn't running/);
-    expect(result.content[0].text).toMatch(/run claw-connect/);
+    expect(result.content[0].text).toMatch(/run tidepool/);
   });
 
   it("whoami returns the agent handle", async () => {
@@ -1577,7 +1577,7 @@ describe("channel tool dispatch", () => {
   it("unknown tool throws", async () => {
     const { ch } = setup();
     await expect(
-      ch.handleToolCall({ name: "claw_connect_reply", arguments: {} }),
+      ch.handleToolCall({ name: "tidepool_reply", arguments: {} }),
     ).rejects.toThrow(/unknown tool/);
   });
 });
@@ -1642,8 +1642,8 @@ const ThreadHistoryArgsSchema = z.object({
 });
 
 const INSTRUCTIONS =
-  "This MCP server connects you to peer agents over the claw-connect network. " +
-  "Inbound messages arrive as <channel source=\"claw-connect\" peer=\"...\" " +
+  "This MCP server connects you to peer agents over the tidepool network. " +
+  "Inbound messages arrive as <channel source=\"tidepool\" peer=\"...\" " +
   "context_id=\"...\" task_id=\"...\" message_id=\"...\"> events. To respond, " +
   "call `send` with thread=<context_id> from the tag — there is no separate " +
   "reply tool. To start a new conversation, call `send` without thread. Use " +
@@ -1662,7 +1662,7 @@ function isSendError(err: unknown): err is SendError {
 }
 
 export function createChannel(opts: CreateChannelOpts) {
-  const serverName = opts.serverName ?? "claw-connect";
+  const serverName = opts.serverName ?? "tidepool";
   const server = new Server(
     { name: serverName, version: "0.0.1" },
     {
@@ -1679,7 +1679,7 @@ export function createChannel(opts: CreateChannelOpts) {
       {
         name: "send",
         description:
-          "Send a message to a peer. Use `thread` to continue an existing conversation (pass the `context_id` from a prior <channel> event). Omit `thread` to start a new conversation. Replies arrive later as a separate <channel source=\"claw-connect\"> event with the same context_id. Always call `list_peers` before guessing a handle.",
+          "Send a message to a peer. Use `thread` to continue an existing conversation (pass the `context_id` from a prior <channel> event). Omit `thread` to start a new conversation. Replies arrive later as a separate <channel source=\"tidepool\"> event with the same context_id. Always call `list_peers` before guessing a handle.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1696,7 +1696,7 @@ export function createChannel(opts: CreateChannelOpts) {
       },
       {
         name: "whoami",
-        description: "Return this agent's own handle on the claw-connect network.",
+        description: "Return this agent's own handle on the tidepool network.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
       },
       {
@@ -1783,7 +1783,7 @@ export function createChannel(opts: CreateChannelOpts) {
           content: [
             {
               type: "text",
-              text: `[claw-connect] send to "${parsed.data.peer}" failed: ${err.message}\n\nHow to recover: ${err.hint}`,
+              text: `[tidepool] send to "${parsed.data.peer}" failed: ${err.message}\n\nHow to recover: ${err.hint}`,
             },
           ],
         };
@@ -2001,7 +2001,7 @@ export async function start(opts: StartOpts) {
   const emitInbound = (info: InboundInfo): void => {
     channel.notifyInbound(info).catch((err) => {
       process.stderr.write(
-        `[claw-connect-adapter] notifyInbound failed: ${String(err)}\n`,
+        `[tidepool-adapter] notifyInbound failed: ${String(err)}\n`,
       );
     });
   };
@@ -2067,7 +2067,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { start } from "../src/start.js";
 
 /**
- * Mock relay that stands in for claw-connect.
+ * Mock relay that stands in for tidepool.
  * - Listens on `relayPort`.
  * - Validates X-Agent header against {alice, bob}.
  * - Forwards POST /:tenant/message:send to the appropriate adapter's HTTP port,
@@ -2308,15 +2308,15 @@ git commit -m "chore(adapter): delete PendingRegistry and --reply-timeout flag"
 
 - [ ] **Step 1: Read current smoke.ts**
 
-Read `packages/a2a-claude-code-adapter/scripts/smoke.ts` to find the `claw_connect_reply` invocation (around line 86 based on earlier diff).
+Read `packages/a2a-claude-code-adapter/scripts/smoke.ts` to find the `tidepool_reply` invocation (around line 86 based on earlier diff).
 
-- [ ] **Step 2: Replace claw_connect_reply with send + thread**
+- [ ] **Step 2: Replace tidepool_reply with send + thread**
 
 In `smoke.ts`, find the notification handler that called:
 
 ```ts
 await client.callTool({
-  name: "claw_connect_reply",
+  name: "tidepool_reply",
   arguments: { task_id: taskId, text: `auto-reply to: ${inbound}` },
 });
 ```
@@ -2355,35 +2355,35 @@ git commit -m "chore(adapter): update smoke script to use send+thread"
 ## Task 14: end-to-end test (real daemon + two adapter subprocesses)
 
 **Files:**
-- Modify: `packages/claw-connect/test/local-loopback-e2e.test.ts` (the existing two-adapter e2e — update to assert new behavior)
+- Modify: `packages/tidepool/test/local-loopback-e2e.test.ts` (the existing two-adapter e2e — update to assert new behavior)
 
 - [ ] **Step 1: Read existing local-loopback-e2e.test.ts**
 
-Read the file. It already spins up real adapters and a real claw-connect daemon for two-agent loopback. Locate the existing assertions that exercise the inbound channel event and the `claw_connect_reply` flow.
+Read the file. It already spins up real adapters and a real tidepool daemon for two-agent loopback. Locate the existing assertions that exercise the inbound channel event and the `tidepool_reply` flow.
 
 - [ ] **Step 2: Update tests to:**
 
 1. Assert the inbound channel event includes `peer`, `context_id`, `task_id`, `message_id` attributes.
-2. Replace `claw_connect_reply` calls with `send(peer, text, thread=<context_id>)`.
+2. Replace `tidepool_reply` calls with `send(peer, text, thread=<context_id>)`.
 3. Add a third assertion: alice sends to bob, then bob sends a follow-up to alice with `thread=<context_id>` — alice receives the follow-up with the same `context_id`.
 4. Add an assertion: after restart of an adapter, `list_threads` returns `[]` (the ephemeral-store contract).
 
-Adapt to the actual structure of the existing file. The exact diff depends on how the file currently mocks Claude — the principle is: drop `claw_connect_reply`, drop pending-task assertions, add `peer`/`context_id`/`thread` assertions, add ephemeral-store assertion.
+Adapt to the actual structure of the existing file. The exact diff depends on how the file currently mocks Claude — the principle is: drop `tidepool_reply`, drop pending-task assertions, add `peer`/`context_id`/`thread` assertions, add ephemeral-store assertion.
 
 - [ ] **Step 3: Run e2e**
 
-Run: `pnpm --filter claw-connect test local-loopback-e2e`
+Run: `pnpm --filter tidepool test local-loopback-e2e`
 Expected: PASS.
 
 - [ ] **Step 4: Run the full suite across both packages**
 
 Run from repo root: `pnpm test`
-Expected: All tests pass across `claw-connect` and `a2a-claude-code-adapter`.
+Expected: All tests pass across `tidepool` and `a2a-claude-code-adapter`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/claw-connect/test/local-loopback-e2e.test.ts
+git add packages/tidepool/test/local-loopback-e2e.test.ts
 git commit -m "test(e2e): update local loopback to assert peer/context_id/thread continuation + ephemeral store"
 ```
 
@@ -2392,28 +2392,28 @@ git commit -m "test(e2e): update local loopback to assert peer/context_id/thread
 ## Task 15: CLI tests for the adapter (existing test files reference removed surface)
 
 **Files:**
-- Modify: `packages/claw-connect/test/cli/claude-code-start-e2e.test.ts` (if it asserts `claw_connect_reply` tool exists)
-- Modify: `packages/claw-connect/test/cli/mcp-json.test.ts` (if it asserts old MCP server name conventions)
-- Modify: `packages/claw-connect/test/cli/status.test.ts` (only if it surfaces tool names)
+- Modify: `packages/tidepool/test/cli/claude-code-start-e2e.test.ts` (if it asserts `tidepool_reply` tool exists)
+- Modify: `packages/tidepool/test/cli/mcp-json.test.ts` (if it asserts old MCP server name conventions)
+- Modify: `packages/tidepool/test/cli/status.test.ts` (only if it surfaces tool names)
 
 - [ ] **Step 1: Audit each file for stale references**
 
-Run: `pnpm --filter claw-connect test cli`
-Expected: Some failures referencing `claw_connect_reply` or `claw_connect_*` tool names.
+Run: `pnpm --filter tidepool test cli`
+Expected: Some failures referencing `tidepool_reply` or `tidepool_*` tool names.
 
 - [ ] **Step 2: Fix each failing test**
 
-Update assertions to use the new tool names (`send`, `list_peers`, `whoami`, `list_threads`, `thread_history`). The MCP server name (`claw-connect`) is unchanged.
+Update assertions to use the new tool names (`send`, `list_peers`, `whoami`, `list_threads`, `thread_history`). The MCP server name (`tidepool`) is unchanged.
 
 - [ ] **Step 3: Run again**
 
-Run: `pnpm --filter claw-connect test cli`
+Run: `pnpm --filter tidepool test cli`
 Expected: All CLI tests pass.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/claw-connect/test/cli/
+git add packages/tidepool/test/cli/
 git commit -m "test(cli): update CLI test assertions for new MCP tool names"
 ```
 
@@ -2423,23 +2423,23 @@ git commit -m "test(cli): update CLI test assertions for new MCP tool names"
 
 **Files:**
 - Modify: `packages/a2a-claude-code-adapter/README.md`
-- Modify: `packages/claw-connect/README.md` (only if it mentions adapter tool names or the old reply flow)
+- Modify: `packages/tidepool/README.md` (only if it mentions adapter tool names or the old reply flow)
 
 - [ ] **Step 1: Update adapter README**
 
 In `packages/a2a-claude-code-adapter/README.md`:
 
-1. Replace any mention of `claw_connect_reply` with `send` (with thread).
-2. Update the channel event example to show the new attributes: `<channel source="claw-connect" peer="bob" context_id="..." task_id="..." message_id="...">`.
+1. Replace any mention of `tidepool_reply` with `send` (with thread).
+2. Update the channel event example to show the new attributes: `<channel source="tidepool" peer="bob" context_id="..." task_id="..." message_id="...">`.
 3. Update tool list to: `send`, `whoami`, `list_peers`, `list_threads`, `thread_history` (no prefix).
 4. Add a paragraph explaining: messages are now async — `send` returns immediately with an ack; the peer's reply arrives later as a channel event with the same `context_id`. To respond, call `send` with `thread=<context_id>`.
 5. Remove any mention of `--reply-timeout`.
 
-- [ ] **Step 2: Update claw-connect README**
+- [ ] **Step 2: Update tidepool README**
 
-In `packages/claw-connect/README.md`:
+In `packages/tidepool/README.md`:
 
-1. If it references `claw_connect_*` tool names, update to the new names.
+1. If it references `tidepool_*` tool names, update to the new names.
 2. Add a brief note (in the relevant section) that local POSTs to the daemon must include `X-Agent: <agent-name>` for identity.
 
 - [ ] **Step 3: Run all tests one final time**
@@ -2450,7 +2450,7 @@ Expected: Green across both packages.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/a2a-claude-code-adapter/README.md packages/claw-connect/README.md
+git add packages/a2a-claude-code-adapter/README.md packages/tidepool/README.md
 git commit -m "docs: update READMEs for new tool surface, async send, and X-Agent header"
 ```
 
@@ -2473,14 +2473,14 @@ Expected: Green.
 In one terminal:
 ```bash
 cd /tmp && mkdir proj-a && cd proj-a
-claw-connect claude-code:start --agent alice --debug
+tidepool claude-code:start --agent alice --debug
 # Inside Claude: ask it to call list_peers, then send to bob.
 ```
 
 In another terminal:
 ```bash
 cd /tmp && mkdir proj-b && cd proj-b
-claw-connect claude-code:start --agent bob --debug
+tidepool claude-code:start --agent bob --debug
 # Inside Claude: when it sees the inbound channel event, ask it to reply via send with thread=...
 ```
 
@@ -2499,4 +2499,4 @@ Record anything that didn't behave as the spec promised. These become follow-up 
 - [x] Type names consistent: `SendError`, `InboundInfo`, `ThreadStore`, `RecordArgs`, `ThreadSummary`, `StoredMessage` are all defined where introduced and referenced consistently.
 - [x] File paths are absolute or repo-relative, not vague.
 - [x] Commit after each task. Tasks are bite-sized.
-- [x] Removed code (`pending.ts`, `claw_connect_reply`, `--reply-timeout`) is explicitly deleted in Task 12.
+- [x] Removed code (`pending.ts`, `tidepool_reply`, `--reply-timeout`) is explicitly deleted in Task 12.

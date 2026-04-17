@@ -1,8 +1,8 @@
-# Claw Connect CLI Implementation Plan
+# Tidepool CLI Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver a `claw-connect` CLI that covers the full day-to-day workflow: initialize a config tree, register agent identities, start the server, manage friends and remote peers, and observe the running system (status, ping, whoami). `package.json` already declares `"bin": { "claw-connect": "./dist/bin/cli.js" }`; this plan fills in that entrypoint and its subcommands.
+**Goal:** Deliver a `tidepool` CLI that covers the full day-to-day workflow: initialize a config tree, register agent identities, start the server, manage friends and remote peers, and observe the running system (status, ping, whoami). `package.json` already declares `"bin": { "tidepool": "./dist/bin/cli.js" }`; this plan fills in that entrypoint and its subcommands.
 
 **Architecture:** Commander-v14 based CLI. A single entrypoint at `src/bin/cli.ts` wires root options (`--config-dir`, `--verbose`, `--version`) and registers each subcommand from its own module in `src/cli/`. Every subcommand is a thin shell that (a) parses args, (b) calls existing core helpers (`generateIdentity`, `loadServerConfig`, `addFriend`, `writeFriendsConfig`, `buildStatusOutput`, `pingAgent`, `startServer`, …), (c) writes human-readable output to stdout and errors to stderr, exiting with the right code. The CLI does **not** re-implement business logic — it orchestrates what `src/*.ts` already exposes, and adds one new helper (`writeServerConfig`) for TOML persistence on the server side.
 
@@ -10,13 +10,13 @@
 
 **Spec reference:** No separate spec document — requirements are inferred from:
 - `package.json#bin` declaring the binary name and path.
-- `src/server.ts:120-122` referencing `"Run 'claw-connect register' first."` as part of its error path.
+- `src/server.ts:120-122` referencing `"Run 'tidepool register' first."` as part of its error path.
 - `src/status.ts`, `src/ping.ts`, `src/friends.ts`, `src/identity.ts`, `src/directory-server.ts` each exposing helpers that need a CLI surface.
 - The smoke script at `scripts/smoke.ts` demonstrating the end-to-end workflow the CLI should compress into human-friendly commands.
 
-**Starting state:** HEAD is `46309d5`, 202/202 tests passing, typecheck clean. All work happens in `/Users/piersonmarks/src/tries/2026-04-13-clawconnect/claw-connect/`. All `pnpm` commands run from that directory.
+**Starting state:** HEAD is `46309d5`, 202/202 tests passing, typecheck clean. All work happens in `/Users/piersonmarks/src/tries/2026-04-13-tidepool/tidepool/`. All `pnpm` commands run from that directory.
 
-**Default config directory:** `${XDG_CONFIG_HOME:-$HOME/.config}/claw-connect/`. Overridable via `--config-dir <path>` on every subcommand, or `CLAW_CONNECT_HOME` environment variable.
+**Default config directory:** `${XDG_CONFIG_HOME:-$HOME/.config}/tidepool/`. Overridable via `--config-dir <path>` on every subcommand, or `TIDEPOOL_HOME` environment variable.
 
 ---
 
@@ -49,7 +49,7 @@
 
 **New source files (all under `src/`):**
 - `src/bin/cli.ts` — commander entry, registers subcommands, compiles to `dist/bin/cli.js` with shebang.
-- `src/cli/paths.ts` — `resolveConfigDir(opt)` helper: precedence `--config-dir` > `$CLAW_CONNECT_HOME` > XDG default.
+- `src/cli/paths.ts` — `resolveConfigDir(opt)` helper: precedence `--config-dir` > `$TIDEPOOL_HOME` > XDG default.
 - `src/cli/output.ts` — tiny `ok(msg)`, `warn(msg)`, `fail(msg, code = 1)` helpers that unify stdout/stderr style.
 - `src/cli/init.ts` — `init` subcommand.
 - `src/cli/register.ts` — `register <name>` subcommand.
@@ -108,19 +108,19 @@ describe("resolveConfigDir", () => {
     expect(resolveConfigDir({ configDir: "/tmp/x" }, {})).toBe("/tmp/x");
   });
 
-  it("falls back to CLAW_CONNECT_HOME", () => {
-    expect(resolveConfigDir({}, { CLAW_CONNECT_HOME: "/tmp/y" })).toBe("/tmp/y");
+  it("falls back to TIDEPOOL_HOME", () => {
+    expect(resolveConfigDir({}, { TIDEPOOL_HOME: "/tmp/y" })).toBe("/tmp/y");
   });
 
-  it("falls back to XDG_CONFIG_HOME/claw-connect", () => {
+  it("falls back to XDG_CONFIG_HOME/tidepool", () => {
     expect(resolveConfigDir({}, { XDG_CONFIG_HOME: "/tmp/cfg" })).toBe(
-      "/tmp/cfg/claw-connect",
+      "/tmp/cfg/tidepool",
     );
   });
 
-  it("falls back to $HOME/.config/claw-connect", () => {
+  it("falls back to $HOME/.config/tidepool", () => {
     expect(resolveConfigDir({}, { HOME: "/home/alice" })).toBe(
-      "/home/alice/.config/claw-connect",
+      "/home/alice/.config/tidepool",
     );
   });
 
@@ -132,7 +132,7 @@ describe("resolveConfigDir", () => {
     expect(
       resolveConfigDir(
         { configDir: "/explicit" },
-        { CLAW_CONNECT_HOME: "/env", HOME: "/home/a" },
+        { TIDEPOOL_HOME: "/env", HOME: "/home/a" },
       ),
     ).toBe("/explicit");
   });
@@ -153,15 +153,15 @@ interface CliRootOpts {
   configDir?: string;
 }
 
-type Env = Partial<Record<"CLAW_CONNECT_HOME" | "XDG_CONFIG_HOME" | "HOME", string>>;
+type Env = Partial<Record<"TIDEPOOL_HOME" | "XDG_CONFIG_HOME" | "HOME", string>>;
 
 export function resolveConfigDir(opts: CliRootOpts, env: Env = process.env): string {
   if (opts.configDir) return opts.configDir;
-  if (env.CLAW_CONNECT_HOME) return env.CLAW_CONNECT_HOME;
-  if (env.XDG_CONFIG_HOME) return path.join(env.XDG_CONFIG_HOME, "claw-connect");
-  if (env.HOME) return path.join(env.HOME, ".config", "claw-connect");
+  if (env.TIDEPOOL_HOME) return env.TIDEPOOL_HOME;
+  if (env.XDG_CONFIG_HOME) return path.join(env.XDG_CONFIG_HOME, "tidepool");
+  if (env.HOME) return path.join(env.HOME, ".config", "tidepool");
   throw new Error(
-    "Could not resolve config directory. Set --config-dir, CLAW_CONNECT_HOME, or HOME.",
+    "Could not resolve config directory. Set --config-dir, TIDEPOOL_HOME, or HOME.",
   );
 }
 ```
@@ -192,7 +192,7 @@ import { Command } from "commander";
 const program = new Command();
 
 program
-  .name("claw-connect")
+  .name("tidepool")
   .description("Local-first A2A peer server")
   .version("0.0.1")
   .option("-c, --config-dir <path>", "Override config directory")
@@ -245,7 +245,7 @@ Verify: `pnpm build && head -1 dist/bin/cli.js` prints `#!/usr/bin/env node`.
 
 ```bash
 git add src/bin/cli.ts src/cli/paths.ts src/cli/output.ts test/cli/paths.test.ts scripts/fix-shebang.mjs package.json
-git commit -m "feat(cli): scaffold claw-connect binary with resolveConfigDir"
+git commit -m "feat(cli): scaffold tidepool binary with resolveConfigDir"
 ```
 
 ---
@@ -1207,7 +1207,7 @@ program
     const configDir = resolveConfigDir(program.opts());
     const entries = await runWhoami({ configDir });
     if (entries.length === 0) {
-      ok("(no local agents — run 'claw-connect register <name>')");
+      ok("(no local agents — run 'tidepool register <name>')");
       return;
     }
     for (const e of entries) ok(`${e.name}  ${e.fingerprint}`);
@@ -1254,7 +1254,7 @@ describe("runStatus", () => {
     await runInit({ configDir: dir });
     await runRegister({ configDir: dir, name: "alice-dev", localEndpoint: "http://127.0.0.1:28800" });
     const out = await runStatus({ configDir: dir });
-    expect(out).toContain("Claw Connect Status");
+    expect(out).toContain("Tidepool Status");
     expect(out).toContain("alice-dev");
     expect(out).toContain("0 friends");
   });
@@ -1517,7 +1517,7 @@ import { runServe } from "../cli/serve.js";
 program
   .command("serve")
   .alias("start")
-  .description("Boot the Claw Connect server")
+  .description("Boot the Tidepool server")
   .action(async () => {
     const configDir = resolveConfigDir(program.opts());
     const handle = await runServe({ configDir });
@@ -1694,12 +1694,12 @@ Look for: missing descriptions, missing examples, unclear required-vs-optional o
 program.addHelpText(
   "after",
   `\nExamples:\n` +
-    `  $ claw-connect init\n` +
-    `  $ claw-connect register alice-dev --local-endpoint http://127.0.0.1:28800\n` +
-    `  $ claw-connect whoami\n` +
-    `  $ claw-connect friend add bob sha256:...\n` +
-    `  $ claw-connect remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
-    `  $ claw-connect serve\n`,
+    `  $ tidepool init\n` +
+    `  $ tidepool register alice-dev --local-endpoint http://127.0.0.1:28800\n` +
+    `  $ tidepool whoami\n` +
+    `  $ tidepool friend add bob sha256:...\n` +
+    `  $ tidepool remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
+    `  $ tidepool serve\n`,
 );
 ```
 
@@ -1734,7 +1734,7 @@ sleep 1
 node dist/bin/cli.js ping http://127.0.0.1:9901/.well-known/agent-card.json
 ```
 
-Expected: the `ping` prints `REACHABLE  claw-connect (...ms)` with both `alice-dev` and `bobs-rust` listed as skills.
+Expected: the `ping` prints `REACHABLE  tidepool (...ms)` with both `alice-dev` and `bobs-rust` listed as skills.
 
 - [ ] **Step 5: Commit**
 
@@ -1758,11 +1758,11 @@ Both must pass. TDD tasks may transiently fail between the red-write and green-i
 ## Explicitly deferred (future follow-ups, NOT part of this plan)
 
 - **`mdns advertise` / `mdns browse`** — today `ServerConfig.discovery.mdns` is loaded but there's no CLI surface. Add when mDNS is used.
-- **Directory-client subcommands** (`claw-connect directory search <query>`, `claw-connect directory resolve <handle>`) — usable via raw HTTP today.
+- **Directory-client subcommands** (`tidepool directory search <query>`, `tidepool directory resolve <handle>`) — usable via raw HTTP today.
 - **Friend verification workflows** — QR codes, OOB fingerprint display, verification TTL. Currently friendship is asymmetric: each side adds the other by fingerprint.
 - **`logs` subcommand** — no log aggregation exists; server writes to stderr today.
-- **Config migration** (`claw-connect upgrade`) — schemas are versioned via zod defaults; when a backwards-incompatible change lands, add this.
-- **Shell completion** — `claw-connect completion bash|zsh|fish`. Commander has a plugin but not wired here.
+- **Config migration** (`tidepool upgrade`) — schemas are versioned via zod defaults; when a backwards-incompatible change lands, add this.
+- **Shell completion** — `tidepool completion bash|zsh|fish`. Commander has a plugin but not wired here.
 - **`register --import <cert.pem> <key.pem>`** — today `register` always generates fresh keys. Import of existing key pairs is deferred.
 - **`friend add --from-url <agent-card-url>`** — fetch the card, print its fingerprint, confirm, then add. Current `friend add` requires a pre-known fingerprint.
 
@@ -1774,14 +1774,14 @@ Both must pass. TDD tasks may transiently fail between the red-write and green-i
 - `pnpm test` green (baseline 202 + new CLI tests).
 - `pnpm build && ls dist/bin/cli.js` produces an executable file with a `#!/usr/bin/env node` shebang.
 - All of the following commands work:
-  - `claw-connect --version` prints the package version.
-  - `claw-connect init` creates `server.toml`, `friends.toml`, `remotes.toml`.
-  - `claw-connect register <name> --local-endpoint <url>` produces identity files and updates `server.toml`.
-  - `claw-connect whoami` prints each local identity's fingerprint.
-  - `claw-connect friend add|list|remove` round-trip through `friends.toml`.
-  - `claw-connect remote add|list|remove` round-trip through `remotes.toml`.
-  - `claw-connect status` prints a human-readable summary.
-  - `claw-connect ping <url>` fetches and summarizes an Agent Card.
-  - `claw-connect serve` boots the server (reading `remotes.toml` for `remoteAgents`) and exits cleanly on SIGINT/SIGTERM.
-  - `claw-connect directory serve [--port]` runs the standalone directory server.
-- `npm install -g .` (after `pnpm build`) installs `claw-connect` as a global binary.
+  - `tidepool --version` prints the package version.
+  - `tidepool init` creates `server.toml`, `friends.toml`, `remotes.toml`.
+  - `tidepool register <name> --local-endpoint <url>` produces identity files and updates `server.toml`.
+  - `tidepool whoami` prints each local identity's fingerprint.
+  - `tidepool friend add|list|remove` round-trip through `friends.toml`.
+  - `tidepool remote add|list|remove` round-trip through `remotes.toml`.
+  - `tidepool status` prints a human-readable summary.
+  - `tidepool ping <url>` fetches and summarizes an Agent Card.
+  - `tidepool serve` boots the server (reading `remotes.toml` for `remoteAgents`) and exits cleanly on SIGINT/SIGTERM.
+  - `tidepool directory serve [--port]` runs the standalone directory server.
+- `npm install -g .` (after `pnpm build`) installs `tidepool` as a global binary.

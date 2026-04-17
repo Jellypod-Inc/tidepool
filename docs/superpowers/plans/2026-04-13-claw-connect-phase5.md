@@ -1,14 +1,14 @@
-# Claw Connect Phase 5: Streaming and Polish
+# Tidepool Phase 5: Streaming and Polish
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Long-running requests stream properly via SSE, CLI is complete, Agent Card synthesis is rich and correct. Production-ready for real use.
 
-**Architecture:** SSE streams are proxied transparently in both directions. Claw Connect never buffers, transforms, or adds to stream chunks. On the local interface, a local agent sends `SendStreamingMessage` and Claw Connect opens an SSE connection to the remote peer over mTLS, piping events back. On the public interface, a remote peer sends `SendStreamingMessage` and Claw Connect opens an SSE connection to the local agent, piping events back. If `timeout_seconds` passes with no data on either side, Claw Connect sends `TASK_STATE_FAILED` and closes both ends. If either side disconnects, the other side is cleaned up.
+**Architecture:** SSE streams are proxied transparently in both directions. Tidepool never buffers, transforms, or adds to stream chunks. On the local interface, a local agent sends `SendStreamingMessage` and Tidepool opens an SSE connection to the remote peer over mTLS, piping events back. On the public interface, a remote peer sends `SendStreamingMessage` and Tidepool opens an SSE connection to the local agent, piping events back. If `timeout_seconds` passes with no data on either side, Tidepool sends `TASK_STATE_FAILED` and closes both ends. If either side disconnects, the other side is cleaned up.
 
 **Tech Stack:** Same as previous phases. New dependency: `eventsource-parser` (for parsing SSE streams from upstream).
 
-**Spec:** `docs/superpowers/specs/2026-04-13-claw-connect-revised-design.md`
+**Spec:** `docs/superpowers/specs/2026-04-13-tidepool-revised-design.md`
 
 **Depends on:** Phases 1-4 complete (server, friends, rate limiting, discovery all working).
 
@@ -17,7 +17,7 @@
 ## File Structure
 
 ```
-claw-connect/
+tidepool/
 ├── src/
 │   ├── streaming.ts              # SSE proxy logic — pipe, timeout, cleanup
 │   ├── agent-card.ts             # MODIFIED — rich Agent Card synthesis from remote cards
@@ -38,13 +38,13 @@ claw-connect/
 ### Task 1: Streaming Types and SSE Utilities
 
 **Files:**
-- Modify: `claw-connect/src/types.ts`
-- Create: `claw-connect/src/streaming.ts`
-- Create: `claw-connect/test/streaming.test.ts`
+- Modify: `tidepool/src/types.ts`
+- Create: `tidepool/src/streaming.ts`
+- Create: `tidepool/test/streaming.test.ts`
 
 - [ ] **Step 1: Add streaming types to types.ts**
 
-Add to the end of `claw-connect/src/types.ts`:
+Add to the end of `tidepool/src/types.ts`:
 
 ```typescript
 export interface TaskStatusUpdateEvent {
@@ -80,7 +80,7 @@ export interface StreamTimeoutOptions {
 
 - [ ] **Step 2: Write the failing test**
 
-Create `claw-connect/test/streaming.test.ts`:
+Create `tidepool/test/streaming.test.ts`:
 
 ```typescript
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -192,12 +192,12 @@ describe("createTimeoutController", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/streaming.test.ts`
+Run: `cd tidepool && pnpm test -- test/streaming.test.ts`
 Expected: FAIL — `Cannot find module '../src/streaming.js'`
 
 - [ ] **Step 4: Write the implementation**
 
-Create `claw-connect/src/streaming.ts`:
+Create `tidepool/src/streaming.ts`:
 
 ```typescript
 import type { Response as ExpressResponse, Request as ExpressRequest } from "express";
@@ -408,14 +408,14 @@ export async function proxySSEStream(opts: {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/streaming.test.ts`
+Run: `cd tidepool && pnpm test -- test/streaming.test.ts`
 Expected: 8 tests PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add claw-connect/src/streaming.ts claw-connect/src/types.ts claw-connect/test/streaming.test.ts
-git commit -m "feat(claw-connect): SSE streaming utilities — format, parse, timeout, proxy"
+git add tidepool/src/streaming.ts tidepool/src/types.ts tidepool/test/streaming.test.ts
+git commit -m "feat(tidepool): SSE streaming utilities — format, parse, timeout, proxy"
 ```
 
 ---
@@ -423,12 +423,12 @@ git commit -m "feat(claw-connect): SSE streaming utilities — format, parse, ti
 ### Task 2: Streaming Routes on Public and Local Interfaces
 
 **Files:**
-- Modify: `claw-connect/src/server.ts`
-- Create: `claw-connect/test/streaming-e2e.test.ts`
+- Modify: `tidepool/src/server.ts`
+- Create: `tidepool/test/streaming-e2e.test.ts`
 
 - [ ] **Step 1: Write the failing e2e streaming test**
 
-Create `claw-connect/test/streaming-e2e.test.ts`:
+Create `tidepool/test/streaming-e2e.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -572,7 +572,7 @@ async function collectSSEEvents(response: Response): Promise<unknown[]> {
   return events;
 }
 
-describe("e2e: SSE streaming through two Claw Connect servers", () => {
+describe("e2e: SSE streaming through two Tidepool servers", () => {
   let tmpDir: string;
   let aliceConfigDir: string;
   let bobConfigDir: string;
@@ -676,7 +676,7 @@ describe("e2e: SSE streaming through two Claw Connect servers", () => {
     aliceMockAgent = createStreamingMockAgent(28810, "alice-dev");
     bobMockAgent = createStreamingMockAgent(38810, "rust-expert");
 
-    // --- Start Claw Connect servers ---
+    // --- Start Tidepool servers ---
     aliceServer = await startServer({
       configDir: aliceConfigDir,
       remoteAgents: [
@@ -872,12 +872,12 @@ describe("e2e: SSE stream timeout", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/streaming-e2e.test.ts`
+Run: `cd tidepool && pnpm test -- test/streaming-e2e.test.ts`
 Expected: FAIL — streaming routes do not exist yet in `server.ts`.
 
 - [ ] **Step 3: Add `streamTimeoutSeconds` to ServerConfig in types.ts**
 
-Add to the `server` field inside `ServerConfig` in `claw-connect/src/types.ts`:
+Add to the `server` field inside `ServerConfig` in `tidepool/src/types.ts`:
 
 ```typescript
 export interface ServerConfig {
@@ -901,7 +901,7 @@ export interface ServerConfig {
 
 - [ ] **Step 4: Update config.ts to parse streamTimeoutSeconds**
 
-In `claw-connect/src/config.ts`, inside `loadServerConfig`, update the `server` block:
+In `tidepool/src/config.ts`, inside `loadServerConfig`, update the `server` block:
 
 ```typescript
     server: {
@@ -915,7 +915,7 @@ In `claw-connect/src/config.ts`, inside `loadServerConfig`, update the `server` 
 
 - [ ] **Step 5: Add streaming routes to server.ts**
 
-In `claw-connect/src/server.ts`, add the import at the top:
+In `tidepool/src/server.ts`, add the import at the top:
 
 ```typescript
 import { proxySSEStream, buildFailedEvent, initSSEResponse } from "./streaming.js";
@@ -1064,8 +1064,8 @@ In the `createLocalApp` function, add a streaming route for outbound (remote age
     );
 
     const firstAgent = Object.keys(config.agents)[0];
-    const certPath = `${process.env.CC_CONFIG_DIR ?? "~/.claw-connect"}/agents/${firstAgent}/identity.crt`;
-    const keyPath = `${process.env.CC_CONFIG_DIR ?? "~/.claw-connect"}/agents/${firstAgent}/identity.key`;
+    const certPath = `${process.env.CC_CONFIG_DIR ?? "~/.tidepool"}/agents/${firstAgent}/identity.crt`;
+    const keyPath = `${process.env.CC_CONFIG_DIR ?? "~/.tidepool"}/agents/${firstAgent}/identity.key`;
 
     try {
       const response = await fetch(targetUrl, {
@@ -1108,19 +1108,19 @@ In the `createLocalApp` function, add a streaming route for outbound (remote age
 
 - [ ] **Step 6: Run the streaming e2e test**
 
-Run: `cd claw-connect && pnpm test -- test/streaming-e2e.test.ts`
+Run: `cd tidepool && pnpm test -- test/streaming-e2e.test.ts`
 Expected: All 3 tests PASS. If there are port conflicts, adjust ports and re-run.
 
 - [ ] **Step 7: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All existing tests still PASS plus the new streaming tests.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add claw-connect/src/server.ts claw-connect/src/config.ts claw-connect/src/types.ts claw-connect/test/streaming-e2e.test.ts
-git commit -m "feat(claw-connect): SSE stream passthrough for SendStreamingMessage with timeout"
+git add tidepool/src/server.ts tidepool/src/config.ts tidepool/src/types.ts tidepool/test/streaming-e2e.test.ts
+git commit -m "feat(tidepool): SSE stream passthrough for SendStreamingMessage with timeout"
 ```
 
 ---
@@ -1128,14 +1128,14 @@ git commit -m "feat(claw-connect): SSE stream passthrough for SendStreamingMessa
 ### Task 3: Rich Agent Card Synthesis
 
 **Files:**
-- Modify: `claw-connect/src/agent-card.ts`
-- Create: `claw-connect/test/agent-card-rich.test.ts`
+- Modify: `tidepool/src/agent-card.ts`
+- Create: `tidepool/test/agent-card-rich.test.ts`
 
 Currently, `buildRemoteAgentCard` uses a placeholder description. This task fetches the remote agent's actual Agent Card and uses its skills, description, input/output modes, and capabilities.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/agent-card-rich.test.ts`:
+Create `tidepool/test/agent-card-rich.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -1285,12 +1285,12 @@ describe("buildRichRemoteAgentCard", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/agent-card-rich.test.ts`
+Run: `cd tidepool && pnpm test -- test/agent-card-rich.test.ts`
 Expected: FAIL — `fetchRemoteAgentCard` and `buildRichRemoteAgentCard` do not exist.
 
 - [ ] **Step 3: Write the implementation**
 
-Add to `claw-connect/src/agent-card.ts`:
+Add to `tidepool/src/agent-card.ts`:
 
 ```typescript
 /**
@@ -1359,7 +1359,7 @@ export function buildRichRemoteAgentCard(opts: BuildRichRemoteOpts): AgentCard {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/agent-card-rich.test.ts`
+Run: `cd tidepool && pnpm test -- test/agent-card-rich.test.ts`
 Expected: 5 tests PASS.
 
 - [ ] **Step 5: Integrate rich cards into server.ts**
@@ -1394,14 +1394,14 @@ Also update the root Agent Card listing to use rich descriptions when available.
 
 - [ ] **Step 6: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add claw-connect/src/agent-card.ts claw-connect/src/server.ts claw-connect/test/agent-card-rich.test.ts
-git commit -m "feat(claw-connect): rich Agent Card synthesis from remote agent metadata"
+git add tidepool/src/agent-card.ts tidepool/src/server.ts tidepool/test/agent-card-rich.test.ts
+git commit -m "feat(tidepool): rich Agent Card synthesis from remote agent metadata"
 ```
 
 ---
@@ -1409,14 +1409,14 @@ git commit -m "feat(claw-connect): rich Agent Card synthesis from remote agent m
 ### Task 4: CLI `status` Command
 
 **Files:**
-- Modify: `claw-connect/bin/cli.ts`
-- Create: `claw-connect/test/cli-status.test.ts`
+- Modify: `tidepool/bin/cli.ts`
+- Create: `tidepool/test/cli-status.test.ts`
 
 The `status` command shows server info, registered agents, friend count, and rate limit status. It reads from config files (no running server required).
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/cli-status.test.ts`:
+Create `tidepool/test/cli-status.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -1526,12 +1526,12 @@ describe("buildStatusOutput", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/cli-status.test.ts`
+Run: `cd tidepool && pnpm test -- test/cli-status.test.ts`
 Expected: FAIL — `Cannot find module '../src/status.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/status.ts`:
+Create `tidepool/src/status.ts`:
 
 ```typescript
 import type { ServerConfig, FriendsConfig } from "./types.js";
@@ -1545,7 +1545,7 @@ export function buildStatusOutput(
 ): string {
   const lines: string[] = [];
 
-  lines.push("Claw Connect Status");
+  lines.push("Tidepool Status");
   lines.push("=".repeat(40));
 
   // Server info
@@ -1593,12 +1593,12 @@ export function buildStatusOutput(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/cli-status.test.ts`
+Run: `cd tidepool && pnpm test -- test/cli-status.test.ts`
 Expected: 6 tests PASS.
 
 - [ ] **Step 5: Wire into CLI**
 
-In `claw-connect/bin/cli.ts`, add the import:
+In `tidepool/bin/cli.ts`, add the import:
 
 ```typescript
 import { buildStatusOutput } from "../src/status.js";
@@ -1616,7 +1616,7 @@ program
     const serverTomlPath = path.join(configDir, "server.toml");
 
     if (!fs.existsSync(serverTomlPath)) {
-      console.error("Not initialized. Run 'claw-connect init' first.");
+      console.error("Not initialized. Run 'tidepool init' first.");
       process.exit(1);
     }
 
@@ -1639,7 +1639,7 @@ import { loadServerConfig, loadFriendsConfig } from "../src/config.js";
 
 Run:
 ```bash
-cd claw-connect
+cd tidepool
 npx tsx bin/cli.ts init --dir /tmp/cc-status-test
 npx tsx bin/cli.ts register --name test-agent --description "Test agent" --endpoint http://localhost:18800 --dir /tmp/cc-status-test
 npx tsx bin/cli.ts status --dir /tmp/cc-status-test
@@ -1647,7 +1647,7 @@ npx tsx bin/cli.ts status --dir /tmp/cc-status-test
 
 Expected:
 ```
-Claw Connect Status
+Tidepool Status
 ========================================
 
 Server
@@ -1671,8 +1671,8 @@ Agents (1)
 
 ```bash
 rm -rf /tmp/cc-status-test
-git add claw-connect/src/status.ts claw-connect/test/cli-status.test.ts claw-connect/bin/cli.ts
-git commit -m "feat(claw-connect): claw-connect status dashboard command"
+git add tidepool/src/status.ts tidepool/test/cli-status.test.ts tidepool/bin/cli.ts
+git commit -m "feat(tidepool): tidepool status dashboard command"
 ```
 
 ---
@@ -1680,15 +1680,15 @@ git commit -m "feat(claw-connect): claw-connect status dashboard command"
 ### Task 5: CLI `ping` Command
 
 **Files:**
-- Modify: `claw-connect/bin/cli.ts`
-- Create: `claw-connect/src/ping.ts`
-- Create: `claw-connect/test/cli-ping.test.ts`
+- Modify: `tidepool/bin/cli.ts`
+- Create: `tidepool/src/ping.ts`
+- Create: `tidepool/test/cli-ping.test.ts`
 
 The `ping` command fetches a remote agent's Agent Card to check if they're reachable. It can take a handle (looked up from config) or a direct Agent Card URL.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/cli-ping.test.ts`:
+Create `tidepool/test/cli-ping.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -1770,12 +1770,12 @@ describe("pingAgent", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/cli-ping.test.ts`
+Run: `cd tidepool && pnpm test -- test/cli-ping.test.ts`
 Expected: FAIL — `Cannot find module '../src/ping.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/ping.ts`:
+Create `tidepool/src/ping.ts`:
 
 ```typescript
 export interface PingResult {
@@ -1873,12 +1873,12 @@ export function formatPingResult(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/cli-ping.test.ts`
+Run: `cd tidepool && pnpm test -- test/cli-ping.test.ts`
 Expected: 3 tests PASS.
 
 - [ ] **Step 5: Wire into CLI**
 
-In `claw-connect/bin/cli.ts`, add the imports:
+In `tidepool/bin/cli.ts`, add the imports:
 
 ```typescript
 import { pingAgent, formatPingResult } from "../src/ping.js";
@@ -1907,7 +1907,7 @@ program
       const serverTomlPath = path.join(configDir, "server.toml");
 
       if (!fs.existsSync(serverTomlPath)) {
-        console.error("Not initialized. Run 'claw-connect init' first.");
+        console.error("Not initialized. Run 'tidepool init' first.");
         process.exit(1);
       }
 
@@ -1941,7 +1941,7 @@ program
 
 Run:
 ```bash
-cd claw-connect
+cd tidepool
 # Ping a nonexistent agent (should show UNREACHABLE)
 npx tsx bin/cli.ts ping http://127.0.0.1:59999/ghost/.well-known/agent-card.json
 echo "Exit code: $?"
@@ -1958,8 +1958,8 @@ Exit code: 1
 - [ ] **Step 7: Commit**
 
 ```bash
-git add claw-connect/src/ping.ts claw-connect/test/cli-ping.test.ts claw-connect/bin/cli.ts
-git commit -m "feat(claw-connect): claw-connect ping command for remote agent reachability"
+git add tidepool/src/ping.ts tidepool/test/cli-ping.test.ts tidepool/bin/cli.ts
+git commit -m "feat(tidepool): tidepool ping command for remote agent reachability"
 ```
 
 ---
@@ -1967,14 +1967,14 @@ git commit -m "feat(claw-connect): claw-connect ping command for remote agent re
 ### Task 6: Broken Connection Cleanup
 
 **Files:**
-- Modify: `claw-connect/src/streaming.ts`
-- Modify: `claw-connect/test/streaming.test.ts`
+- Modify: `tidepool/src/streaming.ts`
+- Modify: `tidepool/test/streaming.test.ts`
 
 This task ensures that when either end of an SSE stream disconnects, the other side is cleaned up properly. The `proxySSEStream` function already handles downstream close via `res.on("close")`. This task adds explicit upstream abort handling and tests for both directions.
 
 - [ ] **Step 1: Write additional tests for broken connection handling**
 
-Add to `claw-connect/test/streaming.test.ts`:
+Add to `tidepool/test/streaming.test.ts`:
 
 ```typescript
 import http from "http";
@@ -2115,14 +2115,14 @@ describe("proxySSEStream broken connections", () => {
 
 - [ ] **Step 2: Run tests**
 
-Run: `cd claw-connect && pnpm test -- test/streaming.test.ts`
+Run: `cd tidepool && pnpm test -- test/streaming.test.ts`
 Expected: All tests PASS including the new broken connection tests.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add claw-connect/src/streaming.ts claw-connect/test/streaming.test.ts
-git commit -m "test(claw-connect): broken connection cleanup tests for SSE proxy"
+git add tidepool/src/streaming.ts tidepool/test/streaming.test.ts
+git commit -m "test(tidepool): broken connection cleanup tests for SSE proxy"
 ```
 
 ---
@@ -2131,7 +2131,7 @@ git commit -m "test(claw-connect): broken connection cleanup tests for SSE proxy
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests PASS across all files:
 - `streaming.test.ts` — SSE utilities + broken connection cleanup
 - `streaming-e2e.test.ts` — full streaming through two servers + timeout
@@ -2142,13 +2142,13 @@ Expected: All tests PASS across all files:
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors.
 
 - [ ] **Step 3: Manual smoke test — streaming**
 
 ```bash
-cd claw-connect
+cd tidepool
 
 # Set up two servers
 npx tsx bin/cli.ts init --dir /tmp/cc-stream-a
@@ -2176,6 +2176,6 @@ rm -rf /tmp/cc-stream-a /tmp/cc-stream-b
 - [ ] **Step 5: Final commit with any fixes**
 
 ```bash
-git add -A claw-connect/
-git commit -m "feat(claw-connect): Phase 5 complete — SSE streaming, status dashboard, ping, rich Agent Cards"
+git add -A tidepool/
+git commit -m "feat(tidepool): Phase 5 complete — SSE streaming, status dashboard, ping, rich Agent Cards"
 ```

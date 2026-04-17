@@ -1,4 +1,4 @@
-# Claw Connect Phase 2: Friends and Handshake
+# Tidepool Phase 2: Friends and Handshake
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,14 +8,14 @@
 
 **Tech Stack:** Everything from Phase 1 (Node.js, TypeScript, Express, `@iarna/toml`, `node-forge`, `commander`, `vitest`) plus `ai` (Vercel AI SDK) for auto mode LLM evaluation.
 
-**Spec:** `docs/superpowers/specs/2026-04-13-claw-connect-revised-design.md`
+**Spec:** `docs/superpowers/specs/2026-04-13-tidepool-revised-design.md`
 
 ---
 
 ## File Structure
 
 ```
-claw-connect/
+tidepool/
 ├── src/
 │   ├── types.ts                  # MODIFIED — add ConnectionRequestConfig, auto mode types
 │   ├── config.ts                 # MODIFIED — parse connectionRequests.auto section
@@ -41,11 +41,11 @@ claw-connect/
 ### Task 1: Extend Types for Connection Requests
 
 **Files:**
-- Modify: `claw-connect/src/types.ts`
+- Modify: `tidepool/src/types.ts`
 
 - [ ] **Step 1: Add connection request types**
 
-Open `claw-connect/src/types.ts` and add the following types after the existing ones:
+Open `tidepool/src/types.ts` and add the following types after the existing ones:
 
 ```typescript
 // --- Add to the end of types.ts ---
@@ -89,14 +89,14 @@ With:
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors (existing code already uses `connectionRequests.mode` which is still present).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add claw-connect/src/types.ts
-git commit -m "feat(claw-connect): add connection request and auto mode types"
+git add tidepool/src/types.ts
+git commit -m "feat(tidepool): add connection request and auto mode types"
 ```
 
 ---
@@ -104,13 +104,13 @@ git commit -m "feat(claw-connect): add connection request and auto mode types"
 ### Task 2: Config Parsing for Auto Mode
 
 **Files:**
-- Modify: `claw-connect/src/config.ts`
-- Modify: `claw-connect/test/config.test.ts`
-- Modify: `claw-connect/fixtures/server.toml`
+- Modify: `tidepool/src/config.ts`
+- Modify: `tidepool/test/config.test.ts`
+- Modify: `tidepool/fixtures/server.toml`
 
 - [ ] **Step 1: Add auto mode fixture**
 
-Create `claw-connect/fixtures/server-auto.toml`:
+Create `tidepool/fixtures/server-auto.toml`:
 
 ```toml
 [server]
@@ -142,7 +142,7 @@ cacheTtlSeconds = 300
 
 - [ ] **Step 2: Write the failing test**
 
-Add to `claw-connect/test/config.test.ts`:
+Add to `tidepool/test/config.test.ts`:
 
 ```typescript
 // Add this import at the top alongside existing imports:
@@ -171,12 +171,12 @@ describe("loadServerConfig — auto mode", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/config.test.ts`
+Run: `cd tidepool && pnpm test -- test/config.test.ts`
 Expected: FAIL — auto config is not parsed.
 
 - [ ] **Step 4: Update config.ts to parse auto mode**
 
-In `claw-connect/src/config.ts`, update the `loadServerConfig` function. Replace the `connectionRequests` section of the return statement:
+In `tidepool/src/config.ts`, update the `loadServerConfig` function. Replace the `connectionRequests` section of the return statement:
 
 Replace:
 ```typescript
@@ -203,14 +203,14 @@ With:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/config.test.ts`
+Run: `cd tidepool && pnpm test -- test/config.test.ts`
 Expected: All tests PASS (existing + new).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add claw-connect/src/config.ts claw-connect/test/config.test.ts claw-connect/fixtures/server-auto.toml
-git commit -m "feat(claw-connect): parse connectionRequests.auto config from server.toml"
+git add tidepool/src/config.ts tidepool/test/config.test.ts tidepool/fixtures/server-auto.toml
+git commit -m "feat(tidepool): parse connectionRequests.auto config from server.toml"
 ```
 
 ---
@@ -218,12 +218,12 @@ git commit -m "feat(claw-connect): parse connectionRequests.auto config from ser
 ### Task 3: Friends Management (add/remove/list + write to disk)
 
 **Files:**
-- Create: `claw-connect/src/friends.ts`
-- Create: `claw-connect/test/friends.test.ts`
+- Create: `tidepool/src/friends.ts`
+- Create: `tidepool/test/friends.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/friends.test.ts`:
+Create `tidepool/test/friends.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -413,12 +413,12 @@ describe("friends management", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/friends.test.ts`
+Run: `cd tidepool && pnpm test -- test/friends.test.ts`
 Expected: FAIL — `Cannot find module '../src/friends.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/friends.ts`:
+Create `tidepool/src/friends.ts`:
 
 ```typescript
 import fs from "fs";
@@ -518,14 +518,14 @@ export function writeFriendsConfig(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/friends.test.ts`
+Run: `cd tidepool && pnpm test -- test/friends.test.ts`
 Expected: 8 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/friends.ts claw-connect/test/friends.test.ts
-git commit -m "feat(claw-connect): friends management — add, remove, list, write to disk"
+git add tidepool/src/friends.ts tidepool/test/friends.test.ts
+git commit -m "feat(tidepool): friends management — add, remove, list, write to disk"
 ```
 
 ---
@@ -533,12 +533,12 @@ git commit -m "feat(claw-connect): friends management — add, remove, list, wri
 ### Task 4: Middleware — Fingerprint Extraction and Connection Request Detection
 
 **Files:**
-- Modify: `claw-connect/src/middleware.ts`
-- Modify: `claw-connect/test/middleware.test.ts`
+- Modify: `tidepool/src/middleware.ts`
+- Modify: `tidepool/test/middleware.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `claw-connect/test/middleware.test.ts`:
+Add to `tidepool/test/middleware.test.ts`:
 
 ```typescript
 // Add these imports at the top:
@@ -590,9 +590,9 @@ describe("isConnectionRequest", () => {
     const body = {
       message: {
         parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
-        extensions: ["https://clawconnect.dev/ext/connection/v1"],
+        extensions: ["https://tidepool.dev/ext/connection/v1"],
         metadata: {
-          "https://clawconnect.dev/ext/connection/v1": {
+          "https://tidepool.dev/ext/connection/v1": {
             type: "request",
             reason: "Want to learn Rust",
             agent_card_url: "https://example.com/.well-known/agent-card.json",
@@ -631,19 +631,19 @@ describe("isConnectionRequest", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/middleware.test.ts`
+Run: `cd tidepool && pnpm test -- test/middleware.test.ts`
 Expected: FAIL — `extractFingerprint` and `isConnectionRequest` are not exported.
 
 - [ ] **Step 3: Update middleware.ts**
 
-Add to `claw-connect/src/middleware.ts`:
+Add to `tidepool/src/middleware.ts`:
 
 ```typescript
 import forge from "node-forge";
 
 // ... keep existing checkFriend, checkAgentScope, resolveTenant ...
 
-const EXTENSION_URL = "https://clawconnect.dev/ext/connection/v1";
+const EXTENSION_URL = "https://tidepool.dev/ext/connection/v1";
 
 /**
  * Extract SHA-256 fingerprint from a raw DER certificate buffer.
@@ -659,7 +659,7 @@ export function extractFingerprint(raw: Buffer | undefined): string | null {
 
 /**
  * Check if an inbound A2A request body is a CONNECTION_REQUEST.
- * Looks for the Claw Connect connection extension in the message.
+ * Looks for the Tidepool connection extension in the message.
  */
 export function isConnectionRequest(body: unknown): boolean {
   if (!body || typeof body !== "object") return false;
@@ -701,14 +701,14 @@ export function extractConnectionMetadata(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/middleware.test.ts`
+Run: `cd tidepool && pnpm test -- test/middleware.test.ts`
 Expected: All tests PASS (existing + new).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/middleware.ts claw-connect/test/middleware.test.ts
-git commit -m "feat(claw-connect): fingerprint extraction and connection request detection"
+git add tidepool/src/middleware.ts tidepool/test/middleware.test.ts
+git commit -m "feat(tidepool): fingerprint extraction and connection request detection"
 ```
 
 ---
@@ -716,12 +716,12 @@ git commit -m "feat(claw-connect): fingerprint extraction and connection request
 ### Task 5: Connection Handshake Handler
 
 **Files:**
-- Create: `claw-connect/src/handshake.ts`
-- Create: `claw-connect/test/handshake.test.ts`
+- Create: `tidepool/src/handshake.ts`
+- Create: `tidepool/test/handshake.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/handshake.test.ts`:
+Create `tidepool/test/handshake.test.ts`:
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";
@@ -744,7 +744,7 @@ describe("buildAcceptedResponse", () => {
     expect(response.artifacts).toHaveLength(1);
     expect(response.artifacts[0].parts[0].text).toBe("Connection accepted");
     expect(
-      response.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
+      response.artifacts[0].metadata["https://tidepool.dev/ext/connection/v1"]
         .type,
     ).toBe("accepted");
   });
@@ -758,11 +758,11 @@ describe("buildDeniedResponse", () => {
     expect(response.artifacts).toHaveLength(1);
     expect(response.artifacts[0].parts[0].text).toBe("Connection denied");
     expect(
-      response.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
+      response.artifacts[0].metadata["https://tidepool.dev/ext/connection/v1"]
         .type,
     ).toBe("denied");
     expect(
-      response.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
+      response.artifacts[0].metadata["https://tidepool.dev/ext/connection/v1"]
         .reason,
     ).toBe("Not accepting connections");
   });
@@ -914,12 +914,12 @@ describe("handleConnectionRequest — auto mode", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/handshake.test.ts`
+Run: `cd tidepool && pnpm test -- test/handshake.test.ts`
 Expected: FAIL — `Cannot find module '../src/handshake.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/handshake.ts`:
+Create `tidepool/src/handshake.ts`:
 
 ```typescript
 import { v4 as uuidv4 } from "uuid";
@@ -928,7 +928,7 @@ import type {
   FriendsConfig,
 } from "./types.js";
 
-const EXTENSION_URL = "https://clawconnect.dev/ext/connection/v1";
+const EXTENSION_URL = "https://tidepool.dev/ext/connection/v1";
 
 interface ConnectionResponse {
   id: string;
@@ -1149,14 +1149,14 @@ Agent Card URL: ${opts.agentCardUrl}`,
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/handshake.test.ts`
+Run: `cd tidepool && pnpm test -- test/handshake.test.ts`
 Expected: 8 tests PASS. (Tests use injected `evaluateWithLLM` mock, so no real API calls.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/handshake.ts claw-connect/test/handshake.test.ts
-git commit -m "feat(claw-connect): connection handshake handler with accept, deny, and auto modes"
+git add tidepool/src/handshake.ts tidepool/test/handshake.test.ts
+git commit -m "feat(tidepool): connection handshake handler with accept, deny, and auto modes"
 ```
 
 ---
@@ -1164,7 +1164,7 @@ git commit -m "feat(claw-connect): connection handshake handler with accept, den
 ### Task 6: Wire Handshake into Server
 
 **Files:**
-- Modify: `claw-connect/src/server.ts`
+- Modify: `tidepool/src/server.ts`
 
 This task modifies the public interface middleware in `server.ts` to:
 1. Extract cert fingerprints using `extractFingerprint` (replacing the raw PEM approach)
@@ -1174,7 +1174,7 @@ This task modifies the public interface middleware in `server.ts` to:
 
 - [ ] **Step 1: Update imports in server.ts**
 
-Add these imports at the top of `claw-connect/src/server.ts`:
+Add these imports at the top of `tidepool/src/server.ts`:
 
 ```typescript
 import {
@@ -1295,14 +1295,14 @@ No code change needed — the object reference is already mutable. This is inten
 
 - [ ] **Step 5: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add claw-connect/src/server.ts
-git commit -m "feat(claw-connect): wire connection handshake into public interface middleware"
+git add tidepool/src/server.ts
+git commit -m "feat(tidepool): wire connection handshake into public interface middleware"
 ```
 
 ---
@@ -1310,11 +1310,11 @@ git commit -m "feat(claw-connect): wire connection handshake into public interfa
 ### Task 7: CLI — Friends Commands
 
 **Files:**
-- Modify: `claw-connect/bin/cli.ts`
+- Modify: `tidepool/bin/cli.ts`
 
 - [ ] **Step 1: Add friends commands to CLI**
 
-Add the following commands to `claw-connect/bin/cli.ts`, after the existing `agents` command and before `start`:
+Add the following commands to `tidepool/bin/cli.ts`, after the existing `agents` command and before `start`:
 
 ```typescript
 // --- Add these imports at the top alongside existing imports ---
@@ -1394,9 +1394,9 @@ friendsCmd
   });
 ```
 
-- [ ] **Step 2: Make bare `claw-connect friends` show the list**
+- [ ] **Step 2: Make bare `tidepool friends` show the list**
 
-To make `claw-connect friends` (without subcommand) default to listing, add this after creating the `friendsCmd`:
+To make `tidepool friends` (without subcommand) default to listing, add this after creating the `friendsCmd`:
 
 ```typescript
 // Default action for bare "friends" command (no subcommand)
@@ -1423,7 +1423,7 @@ friendsCmd
 
 Run:
 ```bash
-cd claw-connect
+cd tidepool
 
 # Setup
 npx tsx bin/cli.ts init --dir /tmp/cc-friends-test
@@ -1455,8 +1455,8 @@ Removed friend "alice"
 
 ```bash
 rm -rf /tmp/cc-friends-test
-git add claw-connect/bin/cli.ts
-git commit -m "feat(claw-connect): CLI friends add/remove/list commands"
+git add tidepool/bin/cli.ts
+git commit -m "feat(tidepool): CLI friends add/remove/list commands"
 ```
 
 ---
@@ -1464,11 +1464,11 @@ git commit -m "feat(claw-connect): CLI friends add/remove/list commands"
 ### Task 8: CLI — Connect and Requests Commands
 
 **Files:**
-- Modify: `claw-connect/bin/cli.ts`
+- Modify: `tidepool/bin/cli.ts`
 
 - [ ] **Step 1: Add the connect command**
 
-Add to `claw-connect/bin/cli.ts`:
+Add to `tidepool/bin/cli.ts`:
 
 ```typescript
 // --- Add these imports at the top ---
@@ -1492,7 +1492,7 @@ program
     const keyPath = path.join(configDir, "agents", agentName, "identity.key");
 
     if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-      console.error(`Agent "${agentName}" not found. Run 'claw-connect register' first.`);
+      console.error(`Agent "${agentName}" not found. Run 'tidepool register' first.`);
       process.exit(1);
     }
 
@@ -1516,9 +1516,9 @@ program
         messageId: crypto.randomUUID(),
         role: "ROLE_USER",
         parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
-        extensions: ["https://clawconnect.dev/ext/connection/v1"],
+        extensions: ["https://tidepool.dev/ext/connection/v1"],
         metadata: {
-          "https://clawconnect.dev/ext/connection/v1": {
+          "https://tidepool.dev/ext/connection/v1": {
             type: "request",
             reason,
             agent_card_url: agentCardUrl,
@@ -1554,14 +1554,14 @@ program
         // Read the remote server's cert fingerprint from the TLS connection
         // For now, prompt the user to add manually
         console.log(
-          `  claw-connect friends add --handle "${remoteCard.name}" --fingerprint <their-fingerprint>`,
+          `  tidepool friends add --handle "${remoteCard.name}" --fingerprint <their-fingerprint>`,
         );
       } else if (status?.state === "TASK_STATE_REJECTED") {
         const artifacts = result.artifacts as Array<{
           metadata?: Record<string, Record<string, string>>;
         }>;
         const ext =
-          artifacts?.[0]?.metadata?.["https://clawconnect.dev/ext/connection/v1"];
+          artifacts?.[0]?.metadata?.["https://tidepool.dev/ext/connection/v1"];
         const denyReason = ext?.reason ?? "No reason given";
         console.log(`Connection denied: ${denyReason}`);
       } else {
@@ -1578,7 +1578,7 @@ program
 
 - [ ] **Step 2: Add the requests command**
 
-Add to `claw-connect/bin/cli.ts`:
+Add to `tidepool/bin/cli.ts`:
 
 ```typescript
 program
@@ -1617,7 +1617,7 @@ program
     }
 
     console.log("To approve, run:");
-    console.log('  claw-connect friends add --handle "<name>" --fingerprint "<fingerprint>"');
+    console.log('  tidepool friends add --handle "<name>" --fingerprint "<fingerprint>"');
   });
 ```
 
@@ -1627,7 +1627,7 @@ This is validated more thoroughly in the e2e test (Task 10). For now, verify the
 
 Run:
 ```bash
-cd claw-connect
+cd tidepool
 npx tsx bin/cli.ts connect --help
 npx tsx bin/cli.ts requests --help
 ```
@@ -1637,8 +1637,8 @@ Expected: Help text displays correctly with all options.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add claw-connect/bin/cli.ts
-git commit -m "feat(claw-connect): CLI connect and requests commands"
+git add tidepool/bin/cli.ts
+git commit -m "feat(tidepool): CLI connect and requests commands"
 ```
 
 ---
@@ -1646,14 +1646,14 @@ git commit -m "feat(claw-connect): CLI connect and requests commands"
 ### Task 9: Store Pending Requests (deny mode)
 
 **Files:**
-- Modify: `claw-connect/src/handshake.ts`
-- Modify: `claw-connect/test/handshake.test.ts`
+- Modify: `tidepool/src/handshake.ts`
+- Modify: `tidepool/test/handshake.test.ts`
 
-When mode is `deny`, the server should store the request in `pending-requests.json` so the user can review them with `claw-connect requests` and manually approve.
+When mode is `deny`, the server should store the request in `pending-requests.json` so the user can review them with `tidepool requests` and manually approve.
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `claw-connect/test/handshake.test.ts`:
+Add to `tidepool/test/handshake.test.ts`:
 
 ```typescript
 import fs from "fs";
@@ -1736,12 +1736,12 @@ describe("pending requests storage", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/handshake.test.ts`
+Run: `cd tidepool && pnpm test -- test/handshake.test.ts`
 Expected: FAIL — `storePendingRequest` and `loadPendingRequests` are not exported.
 
 - [ ] **Step 3: Add pending request storage to handshake.ts**
 
-Add to `claw-connect/src/handshake.ts`:
+Add to `tidepool/src/handshake.ts`:
 
 ```typescript
 import fs from "fs";
@@ -1792,12 +1792,12 @@ export function loadPendingRequests(filePath: string): StoredRequest[] {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/handshake.test.ts`
+Run: `cd tidepool && pnpm test -- test/handshake.test.ts`
 Expected: All tests PASS.
 
 - [ ] **Step 5: Wire pending storage into the deny mode handler**
 
-Update the `deny` case in `handleConnectionRequest` in `claw-connect/src/handshake.ts`:
+Update the `deny` case in `handleConnectionRequest` in `tidepool/src/handshake.ts`:
 
 Replace:
 ```typescript
@@ -1811,7 +1811,7 @@ Replace:
 With:
 ```typescript
     case "deny": {
-      // Store the request so the user can review with `claw-connect requests`
+      // Store the request so the user can review with `tidepool requests`
       if (opts.pendingRequestsPath) {
         storePendingRequest(opts.pendingRequestsPath, {
           fingerprint,
@@ -1848,7 +1848,7 @@ interface HandleConnectionRequestOpts {
 
 - [ ] **Step 6: Update server.ts to pass pendingRequestsPath**
 
-In `claw-connect/src/server.ts`, in the `handleConnectionRequest` call inside `createPublicApp`, add the path:
+In `tidepool/src/server.ts`, in the `handleConnectionRequest` call inside `createPublicApp`, add the path:
 
 Find the `handleConnectionRequest({` call and add after `agentCardUrl: metadata.agentCardUrl,`:
 
@@ -1858,14 +1858,14 @@ Find the `handleConnectionRequest({` call and add after `agentCardUrl: metadata.
 
 - [ ] **Step 7: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add claw-connect/src/handshake.ts claw-connect/test/handshake.test.ts claw-connect/src/server.ts
-git commit -m "feat(claw-connect): store pending connection requests for deny mode review"
+git add tidepool/src/handshake.ts tidepool/test/handshake.test.ts tidepool/src/server.ts
+git commit -m "feat(tidepool): store pending connection requests for deny mode review"
 ```
 
 ---
@@ -1873,13 +1873,13 @@ git commit -m "feat(claw-connect): store pending connection requests for deny mo
 ### Task 10: End-to-End Handshake Test
 
 **Files:**
-- Create: `claw-connect/test/e2e-handshake.test.ts`
+- Create: `tidepool/test/e2e-handshake.test.ts`
 
 This test proves the full flow: an unknown agent sends a CONNECTION_REQUEST, the server processes it based on mode, and the friend list is updated.
 
 - [ ] **Step 1: Write the e2e handshake test**
 
-Create `claw-connect/test/e2e-handshake.test.ts`:
+Create `tidepool/test/e2e-handshake.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -2060,9 +2060,9 @@ describe("e2e: connection handshake", () => {
             messageId: "conn-req-1",
             role: "ROLE_USER",
             parts: [{ kind: "text", text: "CONNECTION_REQUEST" }],
-            extensions: ["https://clawconnect.dev/ext/connection/v1"],
+            extensions: ["https://tidepool.dev/ext/connection/v1"],
             metadata: {
-              "https://clawconnect.dev/ext/connection/v1": {
+              "https://tidepool.dev/ext/connection/v1": {
                 type: "request",
                 reason: "Want to learn Rust error handling",
                 agent_card_url:
@@ -2091,7 +2091,7 @@ describe("e2e: connection handshake", () => {
     };
     expect(data.status.state).toBe("TASK_STATE_COMPLETED");
     expect(
-      data.artifacts[0].metadata["https://clawconnect.dev/ext/connection/v1"]
+      data.artifacts[0].metadata["https://tidepool.dev/ext/connection/v1"]
         .type,
     ).toBe("accepted");
   });
@@ -2150,7 +2150,7 @@ describe("e2e: connection handshake", () => {
 
 - [ ] **Step 2: Run the e2e test**
 
-Run: `cd claw-connect && pnpm test -- test/e2e-handshake.test.ts`
+Run: `cd tidepool && pnpm test -- test/e2e-handshake.test.ts`
 Expected: 4 tests PASS.
 
 If there are failures, debug them. Common issues:
@@ -2160,14 +2160,14 @@ If there are failures, debug them. Common issues:
 
 - [ ] **Step 3: Fix any issues and re-run until passing**
 
-Address any failures. Re-run: `cd claw-connect && pnpm test -- test/e2e-handshake.test.ts`
+Address any failures. Re-run: `cd tidepool && pnpm test -- test/e2e-handshake.test.ts`
 Expected: All 4 tests PASS.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add claw-connect/test/e2e-handshake.test.ts
-git commit -m "test(claw-connect): e2e handshake — unknown agent sends CONNECTION_REQUEST, gets friended"
+git add tidepool/test/e2e-handshake.test.ts
+git commit -m "test(tidepool): e2e handshake — unknown agent sends CONNECTION_REQUEST, gets friended"
 ```
 
 ---
@@ -2175,27 +2175,27 @@ git commit -m "test(claw-connect): e2e handshake — unknown agent sends CONNECT
 ### Task 11: Add @ai-sdk/anthropic Dependency
 
 **Files:**
-- Modify: `claw-connect/package.json`
+- Modify: `tidepool/package.json`
 
-The auto mode evaluator in `handshake.ts` uses `ai` (Vercel AI SDK) and `@ai-sdk/anthropic`. The `ai` package is already in the parent project, but `claw-connect` needs its own dependency.
+The auto mode evaluator in `handshake.ts` uses `ai` (Vercel AI SDK) and `@ai-sdk/anthropic`. The `ai` package is already in the parent project, but `tidepool` needs its own dependency.
 
 - [ ] **Step 1: Install dependencies**
 
 Run:
 ```bash
-cd claw-connect && pnpm add ai @ai-sdk/anthropic
+cd tidepool && pnpm add ai @ai-sdk/anthropic
 ```
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors. The dynamic imports in `handshake.ts` (`await import("ai")` and `await import("@ai-sdk/anthropic")`) should now resolve.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add claw-connect/package.json claw-connect/pnpm-lock.yaml
-git commit -m "feat(claw-connect): add ai and @ai-sdk/anthropic for auto mode evaluation"
+git add tidepool/package.json tidepool/pnpm-lock.yaml
+git commit -m "feat(tidepool): add ai and @ai-sdk/anthropic for auto mode evaluation"
 ```
 
 ---
@@ -2204,18 +2204,18 @@ git commit -m "feat(claw-connect): add ai and @ai-sdk/anthropic for auto mode ev
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests PASS across all files (identity, config, middleware, proxy, agent-card, friends, handshake, e2e, e2e-handshake).
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors.
 
 - [ ] **Step 3: Manual smoke test — friends CLI**
 
 ```bash
-cd claw-connect
+cd tidepool
 
 npx tsx bin/cli.ts init --dir /tmp/cc-phase2
 npx tsx bin/cli.ts register --name test-agent --description "Test" --endpoint http://localhost:18800 --dir /tmp/cc-phase2
@@ -2245,7 +2245,7 @@ Added friend "remote-peer" — sha256:0123... (all agents)
   remote-peer — sha256:0123... (all agents)
 Removed friend "remote-peer"
 No friends yet.
-Usage: claw-connect connect [options] <agent-card-url>
+Usage: tidepool connect [options] <agent-card-url>
 No pending connection requests.
 ```
 
@@ -2258,6 +2258,6 @@ rm -rf /tmp/cc-phase2
 - [ ] **Step 5: Final commit**
 
 ```bash
-git add -A claw-connect/
-git commit -m "feat(claw-connect): Phase 2 complete — friends management and connection handshake"
+git add -A tidepool/
+git commit -m "feat(tidepool): Phase 2 complete — friends management and connection handshake"
 ```

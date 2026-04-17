@@ -4,9 +4,9 @@
 
 **Goal:** Rewrite `packages/a2a-claude-code-adapter` from the current stdout-logging design into an MCP channel server that pushes inbound A2A messages into Claude Code sessions as `<channel>` events and lets Claude reply through an MCP tool.
 
-**Architecture:** The adapter is a dual-protocol process: (1) an MCP stdio server spawned by Claude Code that declares the `claude/channel` experimental capability; (2) an HTTP listener on `127.0.0.1` that claw-connect forwards authenticated A2A requests into. When a POST arrives, the adapter registers a pending task, emits a `notifications/claude/channel` event with the message content, and holds the HTTP request open. Claude sees the `<channel>` tag mid-turn and calls the `a2a_reply` tool with the task ID and reply text; that tool call resolves the pending request, which sends the A2A response back to claw-connect and onward to the remote peer.
+**Architecture:** The adapter is a dual-protocol process: (1) an MCP stdio server spawned by Claude Code that declares the `claude/channel` experimental capability; (2) an HTTP listener on `127.0.0.1` that tidepool forwards authenticated A2A requests into. When a POST arrives, the adapter registers a pending task, emits a `notifications/claude/channel` event with the message content, and holds the HTTP request open. Claude sees the `<channel>` tag mid-turn and calls the `a2a_reply` tool with the task ID and reply text; that tool call resolves the pending request, which sends the A2A response back to tidepool and onward to the remote peer.
 
-**Tech Stack:** Node ≥20, TypeScript, `@modelcontextprotocol/sdk` (MCP server + stdio transport), `express` (HTTP listener), `commander` (CLI flags), `@iarna/toml` (read claw-connect's `server.toml`), `zod` (tool-input validation), `vitest` (tests). Claude Code v2.1.80+, claude.ai login only (not API key). Loaded during dev with `claude --dangerously-load-development-channels server:a2a`.
+**Tech Stack:** Node ≥20, TypeScript, `@modelcontextprotocol/sdk` (MCP server + stdio transport), `express` (HTTP listener), `commander` (CLI flags), `@iarna/toml` (read tidepool's `server.toml`), `zod` (tool-input validation), `vitest` (tests). Claude Code v2.1.80+, claude.ai login only (not API key). Loaded during dev with `claude --dangerously-load-development-channels server:a2a`.
 
 ---
 
@@ -19,7 +19,7 @@
 - `scripts/e2e-cheatsheet.ts`
 - `.local-e2e/` (generated dir)
 - Root `package.json` scripts `e2e:init`, `e2e:alice`, `e2e:bob`, `e2e:cheatsheet`
-- Root `package.json` `devDependencies`: `@iarna/toml` (unused after script deletion), `a2a-claude-code-adapter`, `claw-connect` (workspace:* entries only needed by scripts)
+- Root `package.json` `devDependencies`: `@iarna/toml` (unused after script deletion), `a2a-claude-code-adapter`, `tidepool` (workspace:* entries only needed by scripts)
 - `packages/a2a-claude-code-adapter/src/server.ts` — current in-memory pending + Express logic is fully replaced
 
 **Create:**
@@ -74,13 +74,13 @@ Replace the file with exactly:
 
 ```json
 {
-  "name": "clawconnect-monorepo",
+  "name": "tidepool-monorepo",
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "smoke": "pnpm --filter claw-connect smoke"
+    "smoke": "pnpm --filter tidepool smoke"
   }
 }
 ```
@@ -102,7 +102,7 @@ Replace the file with exactly:
 {
   "name": "a2a-claude-code-adapter",
   "version": "0.0.1",
-  "description": "MCP channel server for Claude Code that receives A2A messages via claw-connect and lets Claude reply through an a2a_reply tool.",
+  "description": "MCP channel server for Claude Code that receives A2A messages via tidepool and lets Claude reply through an a2a_reply tool.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -172,7 +172,7 @@ pnpm install
 pnpm -r build
 ```
 
-Expected: install succeeds, both `claw-connect` and `a2a-claude-code-adapter` build. The adapter build will fail with "no input files" because we deleted `src/server.ts` and `src/bin/cli.ts` still imports it. That's expected — we'll restore a stub in Step 7.
+Expected: install succeeds, both `tidepool` and `a2a-claude-code-adapter` build. The adapter build will fail with "no input files" because we deleted `src/server.ts` and `src/bin/cli.ts` still imports it. That's expected — we'll restore a stub in Step 7.
 
 - [ ] **Step 7: Replace `src/bin/cli.ts` with a stub so the build passes**
 
@@ -384,7 +384,7 @@ Expected: all six tests pass.
 
 ```bash
 git add packages/a2a-claude-code-adapter/src/config.ts packages/a2a-claude-code-adapter/test/config.test.ts packages/a2a-claude-code-adapter/vitest.config.ts
-git commit -m "feat(adapter): load agent config from claw-connect server.toml"
+git commit -m "feat(adapter): load agent config from tidepool server.toml"
 ```
 
 ---
@@ -928,7 +928,7 @@ const INSTRUCTIONS =
   "Authenticated A2A messages arrive as <channel source=\"a2a\" task_id=\"...\"> events. " +
   "The task_id attribute uniquely identifies each incoming message. " +
   "To reply, call the a2a_reply tool with the exact task_id from the tag and your response text. " +
-  "The reply is delivered back to the sending peer through the claw-connect network.";
+  "The reply is delivered back to the sending peer through the tidepool network.";
 
 export function createChannel(opts: CreateChannelOpts) {
   const serverName = opts.serverName ?? "a2a";
@@ -1135,7 +1135,7 @@ localEndpoint = "http://127.0.0.1:${port}"
       notifications.push(n);
     });
 
-    // POST as if we were claw-connect.
+    // POST as if we were tidepool.
     const fetchPromise = fetch(`http://127.0.0.1:${port}/message:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1266,7 +1266,7 @@ git commit -m "feat(adapter): wire config + http + channel in start.ts"
 **Files:**
 - Modify: `packages/a2a-claude-code-adapter/src/bin/cli.ts`
 
-The CLI parses two flags — `--agent` and `--config-dir` — and calls `start()`. No subcommands. If `--config-dir` isn't given, default to `$CLAW_CONNECT_HOME` → `$XDG_CONFIG_HOME/claw-connect` → `$HOME/.config/claw-connect` (matching claw-connect's own defaults; see `packages/claw-connect/src/cli/paths.ts`).
+The CLI parses two flags — `--agent` and `--config-dir` — and calls `start()`. No subcommands. If `--config-dir` isn't given, default to `$TIDEPOOL_HOME` → `$XDG_CONFIG_HOME/tidepool` → `$HOME/.config/tidepool` (matching tidepool's own defaults; see `packages/tidepool/src/cli/paths.ts`).
 
 - [ ] **Step 1: Replace `packages/a2a-claude-code-adapter/src/bin/cli.ts`**
 
@@ -1277,13 +1277,13 @@ import { Command } from "commander";
 import { start } from "../start.js";
 
 function defaultConfigDir(): string {
-  if (process.env.CLAW_CONNECT_HOME) return process.env.CLAW_CONNECT_HOME;
+  if (process.env.TIDEPOOL_HOME) return process.env.TIDEPOOL_HOME;
   if (process.env.XDG_CONFIG_HOME)
-    return path.join(process.env.XDG_CONFIG_HOME, "claw-connect");
+    return path.join(process.env.XDG_CONFIG_HOME, "tidepool");
   if (process.env.HOME)
-    return path.join(process.env.HOME, ".config", "claw-connect");
+    return path.join(process.env.HOME, ".config", "tidepool");
   throw new Error(
-    "could not resolve config dir: set --config-dir, CLAW_CONNECT_HOME, or HOME",
+    "could not resolve config dir: set --config-dir, TIDEPOOL_HOME, or HOME",
   );
 }
 
@@ -1291,13 +1291,13 @@ const program = new Command();
 program
   .name("a2a-claude-code-adapter")
   .description(
-    "MCP channel server that receives A2A messages via claw-connect and lets Claude reply through the a2a_reply tool.",
+    "MCP channel server that receives A2A messages via tidepool and lets Claude reply through the a2a_reply tool.",
   )
   .version("0.0.1")
-  .option("-a, --agent <name>", "agent name in claw-connect's server.toml")
+  .option("-a, --agent <name>", "agent name in tidepool's server.toml")
   .option(
     "-c, --config-dir <path>",
-    "claw-connect config dir (default: $CLAW_CONNECT_HOME or $HOME/.config/claw-connect)",
+    "tidepool config dir (default: $TIDEPOOL_HOME or $HOME/.config/tidepool)",
   )
   .option(
     "--reply-timeout-ms <n>",
@@ -1343,10 +1343,10 @@ Expected: the build succeeds and `--help` prints the command description with `-
 - [ ] **Step 3: Verify it errors cleanly with no config**
 
 ```bash
-HOME=/tmp/nope CLAW_CONNECT_HOME= XDG_CONFIG_HOME= node packages/a2a-claude-code-adapter/dist/bin/cli.js --agent bob
+HOME=/tmp/nope TIDEPOOL_HOME= XDG_CONFIG_HOME= node packages/a2a-claude-code-adapter/dist/bin/cli.js --agent bob
 ```
 
-Expected: exit code 1, stderr contains `server.toml not found at /tmp/nope/.config/claw-connect/server.toml`.
+Expected: exit code 1, stderr contains `server.toml not found at /tmp/nope/.config/tidepool/server.toml`.
 
 - [ ] **Step 4: Commit**
 
@@ -1357,13 +1357,13 @@ git commit -m "feat(adapter): replace CLI with --agent/--config-dir flags (no su
 
 ---
 
-### Task 8: End-to-end smoke against real claw-connect
+### Task 8: End-to-end smoke against real tidepool
 
 **Files:**
 - Create: `packages/a2a-claude-code-adapter/scripts/smoke.ts`
 - Modify: `packages/a2a-claude-code-adapter/package.json` (add `"smoke"` script)
 
-Verifies the adapter works against a real `claw-connect` instance: we spin up one claw-connect server (Alice), point it at a running adapter (as Bob's upstream), skip the channel side (pass an in-memory MCP transport with a test harness that auto-replies), and send a message from Alice's local port through mTLS to Bob. Confirms the wire-level integration still works after the rewrite.
+Verifies the adapter works against a real `tidepool` instance: we spin up one tidepool server (Alice), point it at a running adapter (as Bob's upstream), skip the channel side (pass an in-memory MCP transport with a test harness that auto-replies), and send a message from Alice's local port through mTLS to Bob. Confirms the wire-level integration still works after the rewrite.
 
 This is a standalone script because it needs real sockets + mTLS and is more about platform confidence than unit coverage. Invoke with `pnpm --filter a2a-claude-code-adapter smoke`.
 
@@ -1377,8 +1377,8 @@ import TOML from "@iarna/toml";
 import { z } from "zod";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { generateIdentity } from "../../claw-connect/src/identity.js";
-import { startServer } from "../../claw-connect/src/server.js";
+import { generateIdentity } from "../../tidepool/src/identity.js";
+import { startServer } from "../../tidepool/src/server.js";
 import { start } from "../src/start.js";
 
 const ChannelNotificationSchema = z.object({
@@ -1463,7 +1463,7 @@ async function main() {
     });
   });
 
-  header("Boot Bob's claw-connect");
+  header("Boot Bob's tidepool");
   const bobCC = await startServer({
     configDir: bobDir,
     remoteAgents: [
@@ -1476,7 +1476,7 @@ async function main() {
     ],
   });
 
-  header("Boot Alice's claw-connect");
+  header("Boot Alice's tidepool");
   const aliceCC = await startServer({
     configDir: aliceDir,
     remoteAgents: [
@@ -1563,7 +1563,7 @@ Expected: finishes with `SMOKE PASSED` printed in green. The output includes aut
 
 ```bash
 git add packages/a2a-claude-code-adapter/scripts/smoke.ts packages/a2a-claude-code-adapter/package.json
-git commit -m "test(adapter): add end-to-end smoke against real claw-connect"
+git commit -m "test(adapter): add end-to-end smoke against real tidepool"
 ```
 
 ---
@@ -1580,15 +1580,15 @@ This is the load-bearing check that the channel contract works against the real 
 ```markdown
 # a2a-claude-code-adapter
 
-MCP **channel** server that exposes inbound [A2A](https://a2a-protocol.org) messages to Claude Code sessions. Pairs with [claw-connect](../claw-connect) for the mTLS / peer plumbing.
+MCP **channel** server that exposes inbound [A2A](https://a2a-protocol.org) messages to Claude Code sessions. Pairs with [tidepool](../tidepool) for the mTLS / peer plumbing.
 
-Each message a peer sends to your claw-connect arrives in Claude Code as a `<channel source="a2a" task_id="...">` event. Claude calls the `a2a_reply` tool to respond; the reply flows back to the peer.
+Each message a peer sends to your tidepool arrives in Claude Code as a `<channel source="a2a" task_id="...">` event. Claude calls the `a2a_reply` tool to respond; the reply flows back to the peer.
 
 ## Requirements
 
 - Claude Code **v2.1.80+** (v2.1.81+ for permission relay, which this adapter does not use)
 - claude.ai login (not API key / Console auth)
-- A working claw-connect install with at least one agent configured
+- A working tidepool install with at least one agent configured
 
 ## Install
 
@@ -1635,7 +1635,7 @@ The flag is required only until the adapter is on the approved allowlist.
 In a separate terminal:
 
 ```bash
-claw-connect serve
+tidepool serve
 ```
 
 Then from a peer, send a message. You should see a `<channel source="a2a" task_id="...">` block appear in the Claude Code session. Claude replies via `a2a_reply`; the peer receives the A2A response.
@@ -1645,14 +1645,14 @@ Then from a peer, send a message. You should see a `<channel source="a2a" task_i
 | Flag                       | Default                                  |
 | -------------------------- | ---------------------------------------- |
 | `--agent <name>`           | the sole agent in `server.toml`          |
-| `--config-dir <path>`      | `$CLAW_CONNECT_HOME` or `$HOME/.config/claw-connect` |
+| `--config-dir <path>`      | `$TIDEPOOL_HOME` or `$HOME/.config/tidepool` |
 | `--reply-timeout-ms <n>`   | `600000` (10 min)                        |
 
 ## Scope (v1)
 
 - `message:send` only. `message:stream` is future work.
 - No permission relay. (A peer cannot approve your Bash calls.)
-- HTTP listener binds to `127.0.0.1` only. Trust is delegated to claw-connect's mTLS.
+- HTTP listener binds to `127.0.0.1` only. Trust is delegated to tidepool's mTLS.
 ```
 
 - [ ] **Step 2: Manual smoke with a real Claude Code session**
@@ -1664,10 +1664,10 @@ Then from a peer, send a message. You should see a `<channel source="a2a" task_i
    pnpm -r build
    pnpm link --global --filter a2a-claude-code-adapter
    ```
-2. Provision claw-connect config (if not already done):
+2. Provision tidepool config (if not already done):
    ```bash
-   claw-connect init
-   claw-connect register bob --local-endpoint http://127.0.0.1:38800
+   tidepool init
+   tidepool register bob --local-endpoint http://127.0.0.1:38800
    ```
 3. Register the MCP server in `~/.claude.json`:
    ```json
@@ -1677,7 +1677,7 @@ Then from a peer, send a message. You should see a `<channel source="a2a" task_i
    ```bash
    claude --dangerously-load-development-channels server:a2a
    ```
-5. In another terminal, simulate claw-connect forwarding an inbound A2A POST directly to the adapter:
+5. In another terminal, simulate tidepool forwarding an inbound A2A POST directly to the adapter:
    ```bash
    curl -sS -X POST http://127.0.0.1:38800/message:send \
      -H 'Content-Type: application/json' \
@@ -1698,7 +1698,7 @@ git commit -m "docs(adapter): README + manual Claude Code verification steps"
 
 ## Post-plan notes
 
-- **Stream support** is not in v1. Add `POST /message\\:stream` to `http.ts` later, reusing `formatSseEvent` from `claw-connect/a2a.js`. The channel notification would emit once at inbound; the reply tool resolves the SSE stream rather than a JSON response.
-- **Peer identity in channel meta** (e.g. `meta: { task_id, peer: "alice" }`) requires claw-connect to forward the authenticated peer handle as a request header. Currently `packages/claw-connect/src/proxy.ts` doesn't do that. Adding it is a small follow-up in claw-connect; the adapter just has to read the header and include it in meta. Keys must match `[A-Za-z0-9_]+` per the channels contract.
+- **Stream support** is not in v1. Add `POST /message\\:stream` to `http.ts` later, reusing `formatSseEvent` from `tidepool/a2a.js`. The channel notification would emit once at inbound; the reply tool resolves the SSE stream rather than a JSON response.
+- **Peer identity in channel meta** (e.g. `meta: { task_id, peer: "alice" }`) requires tidepool to forward the authenticated peer handle as a request header. Currently `packages/tidepool/src/proxy.ts` doesn't do that. Adding it is a small follow-up in tidepool; the adapter just has to read the header and include it in meta. Keys must match `[A-Za-z0-9_]+` per the channels contract.
 - **Permission relay** (declare `claude/channel/permission` capability) intentionally not implemented — see the channels-reference docs for the contract when we're ready.
 - **Publishing** the adapter to npm is blocked by the channels research-preview allowlist. Until the adapter is approved (or orgs override via `allowedChannelPlugins`), users must use `--dangerously-load-development-channels server:a2a`.

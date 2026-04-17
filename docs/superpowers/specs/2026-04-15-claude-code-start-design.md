@@ -1,11 +1,11 @@
-# `claw-connect claude-code:start` — Design Spec
+# `tidepool claude-code:start` — Design Spec
 
 **Date:** 2026-04-15
 **Status:** Approved for planning
 
 ## Problem
 
-Getting two Claude Code sessions talking over claw-connect takes eight manual steps today: install two packages, export `CLAW_CONNECT_HOME`, run `init`, pick a port per agent, `register`, hand-author a `.mcp.json`, open a second terminal to run `claw-connect serve`, then finally launch Claude with the development-channels flag. A beginner reading the README gets lost somewhere around step 4.
+Getting two Claude Code sessions talking over tidepool takes eight manual steps today: install two packages, export `TIDEPOOL_HOME`, run `init`, pick a port per agent, `register`, hand-author a `.mcp.json`, open a second terminal to run `tidepool serve`, then finally launch Claude with the development-channels flag. A beginner reading the README gets lost somewhere around step 4.
 
 ## Goal
 
@@ -21,11 +21,11 @@ Reduce the happy-path to one command that a beginner can run in a fresh repo and
 ## Command surface
 
 ```
-claw-connect claude-code:start [agent-name]            # default: run claude after setup
-claw-connect claude-code:start [agent-name] --debug    # foreground serve, user runs claude themselves
+tidepool claude-code:start [agent-name]            # default: run claude after setup
+tidepool claude-code:start [agent-name] --debug    # foreground serve, user runs claude themselves
 
-claw-connect stop                                      # stop the background daemon
-claw-connect status                                    # extended: includes daemon state
+tidepool stop                                      # stop the background daemon
+tidepool status                                    # extended: includes daemon state
 ```
 
 The colon-separated command name (`claude-code:start`) establishes the namespace. Commander.js supports it directly. Future siblings: `cursor:start`, `codex:start`.
@@ -47,7 +47,7 @@ Narrow race: between closing the probe and the adapter binding. If the adapter f
 ## Default flow (no `--debug`)
 
 ```
-1. Resolve configDir                          ($CLAW_CONNECT_HOME || ~/.config/claw-connect)
+1. Resolve configDir                          ($TIDEPOOL_HOME || ~/.config/tidepool)
 2. runInit() if identity.crt missing          (idempotent)
 3. Resolve agent name                         (rules above)
 4. If [agents.<name>] absent in server.toml:
@@ -72,7 +72,7 @@ Narrow race: between closing the probe and the adapter binding. If the adapter f
      In another terminal, run:
        cd <cwd> && claude --dangerously-load-development-channels server:a2a
 6. ensureMcpJsonEntry({ cwd, agentName })
-7. Spawn `claw-connect serve` in the CURRENT process (or inherit-stdio child), streaming output.
+7. Spawn `tidepool serve` in the CURRENT process (or inherit-stdio child), streaming output.
    Ctrl+C stops it.
 
 No PID file, no log file, no auto-launch of claude.
@@ -81,7 +81,7 @@ No PID file, no log file, no auto-launch of claude.
 ## Daemon supervision
 
 **Spawn (default mode):**
-- `spawn('claw-connect', ['serve'], { detached: true, stdio: ['ignore', logFd, logFd] })`
+- `spawn('tidepool', ['serve'], { detached: true, stdio: ['ignore', logFd, logFd] })`
 - Write PID to `<configDir>/serve.pid`.
 - `.unref()` so the parent can exit.
 - Poll `GET http://127.0.0.1:<localPort>/.well-known/agent-card.json` every 100ms for up to 3s. On first 200, declare ready. On timeout, SIGTERM the child, delete partial PID file, error out with pointer to `--debug`.
@@ -95,12 +95,12 @@ No PID file, no log file, no auto-launch of claude.
 - If PID file present but `process.kill(pid, 0)` throws `ESRCH` → stale, delete file, return false.
 - If PID alive → probe local port for 200 response. If 200, true. If not, false (daemon is wedged — caller decides whether to kill+respawn or error).
 
-**`claw-connect stop`:**
-- Read PID file. Missing → "Claw Connect is not running." Exit 0.
+**`tidepool stop`:**
+- Read PID file. Missing → "Tidepool is not running." Exit 0.
 - Stale (process gone) → delete file, same message.
 - Alive → SIGTERM, poll `kill(pid, 0)` every 100ms for up to 2s. If still alive, SIGKILL with warning. Delete PID file. Print "Stopped (was PID …)."
 
-**`claw-connect status` (extended):**
+**`tidepool status` (extended):**
 - Existing config summary retained.
 - Append a "Daemon:" section: running (PID, log path) or not running.
 
@@ -117,7 +117,7 @@ No PID file, no log file, no auto-launch of claude.
 ## On-disk layout after first run
 
 ```
-$CLAW_CONNECT_HOME/
+$TIDEPOOL_HOME/
 ├── identity.crt
 ├── identity.key
 ├── server.toml           ← now contains [agents.donkey]
@@ -137,9 +137,9 @@ Plus in the project directory:
 
 | Case | Behavior |
 |---|---|
-| `$CLAW_CONNECT_HOME` unwritable | Fail fast on first write, include `(check permissions on <path>)` in the message. |
+| `$TIDEPOOL_HOME` unwritable | Fail fast on first write, include `(check permissions on <path>)` in the message. |
 | Port 9901 in use by foreign process | Detect via PID-file-mismatch or non-200 probe, abort with instruction to change `localPort` or stop the other service. |
-| Port 9901 in use by existing Claw Connect daemon | Detected as "our daemon is up," skip spawn. |
+| Port 9901 in use by existing Tidepool daemon | Detected as "our daemon is up," skip spawn. |
 | Daemon spawn succeeds but never becomes ready within 3s | SIGTERM child, delete PID file, instruct `--debug` to see output. |
 | Stale PID file | Delete and proceed. |
 | `claude` not on PATH | Print command with `cd <cwd> && …` prefix, exit 0. Setup still succeeded. |
@@ -152,7 +152,7 @@ Plus in the project directory:
 
 ## Testing
 
-**New unit tests** (under `packages/claw-connect/test/cli/`):
+**New unit tests** (under `packages/tidepool/test/cli/`):
 
 - `name-resolver.test.ts` — arg wins, `.mcp.json` wins, generated name avoids collisions, fallback on exhaustion.
 - `mcp-json.test.ts` — fresh write, merge preserves other mcpServers keys, overwrite on agent name change, refuse on parse error.
@@ -169,13 +169,13 @@ Plus in the project directory:
 
 ## Dependencies
 
-- **New:** `unique-names-generator` (runtime dep of `packages/claw-connect`). ~20KB.
+- **New:** `unique-names-generator` (runtime dep of `packages/tidepool`). ~20KB.
 - **No change:** node-forge, commander, express, undici, bonjour-service, zod, etc.
 
 ## Rollout
 
 - Breaking changes: none. All existing commands keep their shape.
-- Follow-up doc changes: update `packages/a2a-claude-code-adapter/README.md` to lead with `claw-connect claude-code:start` as the primary path, demoting the manual 6-step flow to an "under the hood" section.
+- Follow-up doc changes: update `packages/a2a-claude-code-adapter/README.md` to lead with `tidepool claude-code:start` as the primary path, demoting the manual 6-step flow to an "under the hood" section.
 
 ## Risk
 

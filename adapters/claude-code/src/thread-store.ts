@@ -1,0 +1,115 @@
+export type StoredMessage = {
+  messageId: string;
+  from: string;
+  text: string;
+  sentAt: number;
+};
+
+export type ThreadSummary = {
+  contextId: string;
+  peers: string[];
+  lastMessageAt: number;
+  messageCount: number;
+};
+
+export type ThreadStoreOpts = {
+  maxMessagesPerThread: number;
+  maxThreads: number;
+};
+
+export type RecordArgs = {
+  contextId: string;
+  peers: string[];
+  messageId: string;
+  from: string;
+  text: string;
+  sentAt: number;
+};
+
+type ThreadRecord = {
+  peers: Set<string>;
+  lastActivity: number;
+  messages: StoredMessage[];
+};
+
+export type ThreadStore = {
+  record(args: RecordArgs): void;
+  listThreads(opts?: { peer?: string; limit?: number }): ThreadSummary[];
+  history(contextId: string, opts?: { limit?: number }): StoredMessage[];
+};
+
+export function createThreadStore(opts: ThreadStoreOpts): ThreadStore {
+  const threads = new Map<string, ThreadRecord>();
+  let hasLoggedEviction = false;
+
+  function evictIfFull() {
+    while (threads.size > opts.maxThreads) {
+      let oldestKey: string | undefined;
+      let oldestActivity = Infinity;
+      for (const [k, v] of threads) {
+        if (v.lastActivity < oldestActivity) {
+          oldestActivity = v.lastActivity;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey === undefined) break;
+      threads.delete(oldestKey);
+      if (!hasLoggedEviction) {
+        hasLoggedEviction = true;
+        process.stderr.write(
+          `[tidepool-adapter] thread store at maxThreads=${opts.maxThreads} — evicting oldest by last_activity. Further evictions are silent.\n`,
+        );
+      }
+    }
+  }
+
+  return {
+    record(args) {
+      let t = threads.get(args.contextId);
+      if (!t) {
+        t = { peers: new Set(), lastActivity: args.sentAt, messages: [] };
+        threads.set(args.contextId, t);
+      }
+      for (const p of args.peers) t.peers.add(p);
+      t.lastActivity = args.sentAt;
+      t.messages.push({
+        messageId: args.messageId,
+        from: args.from,
+        text: args.text,
+        sentAt: args.sentAt,
+      });
+      if (t.messages.length > opts.maxMessagesPerThread) {
+        t.messages.splice(0, t.messages.length - opts.maxMessagesPerThread);
+      }
+      evictIfFull();
+    },
+
+    listThreads(listOpts) {
+      let summaries: ThreadSummary[] = [];
+      for (const [contextId, t] of threads) {
+        if (listOpts?.peer && !t.peers.has(listOpts.peer)) continue;
+        summaries.push({
+          contextId,
+          peers: [...t.peers].sort(),
+          lastMessageAt: t.lastActivity,
+          messageCount: t.messages.length,
+        });
+      }
+      summaries.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+      if (listOpts?.limit !== undefined) {
+        summaries = summaries.slice(0, listOpts.limit);
+      }
+      return summaries;
+    },
+
+    history(contextId, historyOpts) {
+      const t = threads.get(contextId);
+      if (!t) return [];
+      const all = t.messages;
+      if (historyOpts?.limit !== undefined) {
+        return all.slice(-historyOpts.limit);
+      }
+      return [...all];
+    },
+  };
+}

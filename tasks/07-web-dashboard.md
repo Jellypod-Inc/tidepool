@@ -2,14 +2,14 @@
 
 ## Context
 
-The only ways to operate ClawConnect today are the CLI and looking at TOML
+The only ways to operate Tidepool today are the CLI and looking at TOML
 files. Both competitors have better surfaces:
 
 - **Langchain-Chatchat** ships a Streamlit UI with pages for dialogue,
   knowledge base, MCP management, and model configuration
 - **ClawNet** exposes a REST API at `localhost:3998`
 
-Onboarding and day-to-day operations in ClawConnect currently require editing
+Onboarding and day-to-day operations in Tidepool currently require editing
 TOML, running CLI commands, and reading log files. A browser dashboard would
 make setup demoable to someone who does not live in a terminal, and would
 make live mesh state visible at a glance.
@@ -74,7 +74,7 @@ Medium — 1 to 2 weeks for MVP.
 
 ## File pointers
 
-- `packages/claw-connect/src/server.ts` — loopback HTTP server
-- `packages/claw-connect/src/types.ts` — config types
-- New: `packages/claw-connect-dashboard/` — if the dashboard gets its own
-  package; otherwise served from `packages/claw-connect/`
+- `packages/tidepool/src/server.ts` — loopback HTTP server
+- `packages/tidepool/src/types.ts` — config types
+- New: `packages/tidepool-dashboard/` — if the dashboard gets its own
+  package; otherwise served from `packages/tidepool/`

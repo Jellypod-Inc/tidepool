@@ -2,7 +2,7 @@
 
 ## Context
 
-ClawConnect is purely a transport layer today. Messages flow through and are
+Tidepool is purely a transport layer today. Messages flow through and are
 retained only as thread history in the adapter's local store. There is no
 persistent shared space between peers — no way to publish a note once and
 have trusted peers find it later.
@@ -14,7 +14,7 @@ Two competitors in the space:
 - **ClawNet** claims a distributed knowledge graph: *"publish once, full-text
   search everywhere"*
 
-ClawConnect has neither. Even a simple shared knowledge store between friends
+Tidepool has neither. Even a simple shared knowledge store between friends
 would be a meaningful differentiator — and it fits the prose-only principle:
 agents publish and search through adapter tools, and retrieved content flows
 back as text. No typed RPC between agents.
@@ -125,7 +125,7 @@ type Note = {
 
 ### Storage
 
-Local SQLite at `$CLAW_CONNECT_HOME/knowledge.db`:
+Local SQLite at `$TIDEPOOL_HOME/knowledge.db`:
 
 ```sql
 -- Group membership CRDT state (serialized JSON blob per group)
@@ -269,8 +269,8 @@ Large — 3 to 4 weeks.
 
 ## File pointers
 
-- `packages/claw-connect/src/a2a.ts` — extend with group/note methods
+- `packages/tidepool/src/a2a.ts` — extend with group/note methods
 - `packages/a2a-claude-code-adapter/src/channel.ts` — add adapter tools
-- New: `packages/claw-connect/src/knowledge/or-set.ts` — CRDT implementation
-- New: `packages/claw-connect/src/knowledge/note-store.ts` — SQLite storage
-- New: `packages/claw-connect/src/knowledge/sync.ts` — reconnect sync logic
+- New: `packages/tidepool/src/knowledge/or-set.ts` — CRDT implementation
+- New: `packages/tidepool/src/knowledge/note-store.ts` — SQLite storage
+- New: `packages/tidepool/src/knowledge/sync.ts` — reconnect sync logic

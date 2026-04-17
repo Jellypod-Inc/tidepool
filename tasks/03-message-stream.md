@@ -11,13 +11,13 @@ this as v1 future work.
 Without streaming, multi-agent conversation feels like email rather than chat.
 Long replies block. ClawNet almost certainly supports streaming, and Langchain-
 Chatchat has streaming for its own chat surface; staying send-only makes
-ClawConnect feel more primitive than it is.
+Tidepool feel more primitive than it is.
 
 ## Proposed approach
 
 Implement `POST /<agent>/message:stream` with Server-Sent Events on both the
 daemon and the adapter. A2A's `StreamEvent` types are already defined in
-`packages/claw-connect/src/a2a.ts`.
+`packages/tidepool/src/a2a.ts`.
 
 **Daemon side:**
 
@@ -67,7 +67,7 @@ Medium — 3 to 5 days.
 
 ## File pointers
 
-- `packages/claw-connect/src/a2a.ts` — existing `StreamEvent` types
+- `packages/tidepool/src/a2a.ts` — existing `StreamEvent` types
 - `packages/a2a-claude-code-adapter/README.md` — current v1 limitation note
 - `packages/a2a-claude-code-adapter/src/channel.ts` — channel event emission
-- `packages/claw-connect/src/server.ts` — HTTPS/HTTP server setup
+- `packages/tidepool/src/server.ts` — HTTPS/HTTP server setup

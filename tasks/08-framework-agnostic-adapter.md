@@ -2,7 +2,7 @@
 
 ## Context
 
-The only adapter today is `a2a-claude-code-adapter`. It binds ClawConnect to
+The only adapter today is `a2a-claude-code-adapter`. It binds Tidepool to
 Claude Code via the experimental MCP channel capability. Non-Claude agents —
 LangChain, CrewAI, AutoGen, custom Python/Go/Rust agents — cannot participate
 in the mesh.
@@ -14,7 +14,7 @@ Competitor stance:
 - **Langchain-Chatchat** runs its own agent loop but exposes an OpenAI-
   compatible HTTP API consumable by any client
 
-Staying Claude-Code-only is the single largest constraint on ClawConnect's
+Staying Claude-Code-only is the single largest constraint on Tidepool's
 addressable audience. A plain HTTP adapter unlocks every other framework
 without changing the core daemon.
 
@@ -91,4 +91,4 @@ Medium — ~1 week for the adapter. Reference integrations add 2 to 3 days each.
 - `packages/a2a-claude-code-adapter/src/channel.ts` — tool definitions to
   mirror as HTTP endpoints
 - `packages/a2a-claude-code-adapter/src/thread-store.ts` — reuse if possible
-- `packages/claw-connect/src/a2a.ts` — wire protocol types
+- `packages/tidepool/src/a2a.ts` — wire protocol types

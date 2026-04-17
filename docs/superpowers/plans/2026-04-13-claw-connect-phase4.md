@@ -1,14 +1,14 @@
-# Claw Connect Phase 4: Discovery
+# Tidepool Phase 4: Discovery
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Agents can find each other without knowing endpoints in advance. Full discovery → handshake → communication flow works end to end.
 
-**Architecture:** Discovery is pluggable. Multiple providers run simultaneously and return a common `DiscoveredAgent` shape. Results are deduplicated by endpoint URL and cached in memory with a configurable TTL. Three built-in providers: mDNS/DNS-SD (local network), cloud directory (REST API), and static config (reads from server.toml). The CLI gets a `search` command that queries all enabled providers and feeds results into `claw-connect connect` from Phase 2.
+**Architecture:** Discovery is pluggable. Multiple providers run simultaneously and return a common `DiscoveredAgent` shape. Results are deduplicated by endpoint URL and cached in memory with a configurable TTL. Three built-in providers: mDNS/DNS-SD (local network), cloud directory (REST API), and static config (reads from server.toml). The CLI gets a `search` command that queries all enabled providers and feeds results into `tidepool connect` from Phase 2.
 
 **Tech Stack (new deps):** `bonjour-service` (mDNS/DNS-SD), no new deps for cloud directory (uses existing Express)
 
-**Spec:** `docs/superpowers/specs/2026-04-13-claw-connect-revised-design.md`
+**Spec:** `docs/superpowers/specs/2026-04-13-tidepool-revised-design.md`
 
 **Depends on:** Phases 1-3 (identity, friends/handshake, rate limiting)
 
@@ -17,7 +17,7 @@
 ## File Structure
 
 ```
-claw-connect/
+tidepool/
 ├── src/
 │   ├── discovery/
 │   │   ├── types.ts                  # DiscoveredAgent, DiscoveryProvider interfaces
@@ -48,12 +48,12 @@ claw-connect/
 ### Task 1: Discovery Types and Interfaces
 
 **Files:**
-- Create: `claw-connect/src/discovery/types.ts`
-- Update: `claw-connect/src/types.ts`
+- Create: `tidepool/src/discovery/types.ts`
+- Update: `tidepool/src/types.ts`
 
 - [ ] **Step 1: Create discovery types**
 
-Create `claw-connect/src/discovery/types.ts`:
+Create `tidepool/src/discovery/types.ts`:
 
 ```typescript
 export interface DiscoveredAgent {
@@ -75,7 +75,7 @@ export interface DiscoveryProvider {
 
 - [ ] **Step 2: Update src/types.ts to add discovery config types**
 
-Add to `claw-connect/src/types.ts`:
+Add to `tidepool/src/types.ts`:
 
 ```typescript
 export interface StaticPeer {
@@ -120,14 +120,14 @@ export interface ServerConfig {
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors (the new `DiscoveryConfig` shape is a superset of the old inline type).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add claw-connect/src/discovery/types.ts claw-connect/src/types.ts
-git commit -m "feat(claw-connect): discovery interfaces and config types"
+git add tidepool/src/discovery/types.ts tidepool/src/types.ts
+git commit -m "feat(tidepool): discovery interfaces and config types"
 ```
 
 ---
@@ -135,12 +135,12 @@ git commit -m "feat(claw-connect): discovery interfaces and config types"
 ### Task 2: Discovery Cache
 
 **Files:**
-- Create: `claw-connect/src/discovery/cache.ts`
-- Create: `claw-connect/test/discovery/cache.test.ts`
+- Create: `tidepool/src/discovery/cache.ts`
+- Create: `tidepool/test/discovery/cache.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/discovery/cache.test.ts`:
+Create `tidepool/test/discovery/cache.test.ts`:
 
 ```typescript
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -235,12 +235,12 @@ describe("DiscoveryCache", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/cache.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/cache.test.ts`
 Expected: FAIL — `Cannot find module '../../src/discovery/cache.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/discovery/cache.ts`:
+Create `tidepool/src/discovery/cache.ts`:
 
 ```typescript
 import type { DiscoveredAgent } from "./types.js";
@@ -299,14 +299,14 @@ export class DiscoveryCache {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/cache.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/cache.test.ts`
 Expected: 6 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/discovery/cache.ts claw-connect/test/discovery/cache.test.ts
-git commit -m "feat(claw-connect): TTL-based in-memory discovery cache"
+git add tidepool/src/discovery/cache.ts tidepool/test/discovery/cache.test.ts
+git commit -m "feat(tidepool): TTL-based in-memory discovery cache"
 ```
 
 ---
@@ -314,13 +314,13 @@ git commit -m "feat(claw-connect): TTL-based in-memory discovery cache"
 ### Task 3: Static Config Provider
 
 **Files:**
-- Create: `claw-connect/src/discovery/static-provider.ts`
-- Create: `claw-connect/test/discovery/static-provider.test.ts`
-- Create: `claw-connect/fixtures/server-with-discovery.toml`
+- Create: `tidepool/src/discovery/static-provider.ts`
+- Create: `tidepool/test/discovery/static-provider.test.ts`
+- Create: `tidepool/fixtures/server-with-discovery.toml`
 
 - [ ] **Step 1: Create test fixture**
 
-Create `claw-connect/fixtures/server-with-discovery.toml`:
+Create `tidepool/fixtures/server-with-discovery.toml`:
 
 ```toml
 [server]
@@ -361,7 +361,7 @@ description = "Carol's ML specialist"
 
 - [ ] **Step 2: Write the failing test**
 
-Create `claw-connect/test/discovery/static-provider.test.ts`:
+Create `tidepool/test/discovery/static-provider.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -456,12 +456,12 @@ describe("StaticProvider", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/static-provider.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/static-provider.test.ts`
 Expected: FAIL — `Cannot find module '../../src/discovery/static-provider.js'`
 
 - [ ] **Step 4: Write the implementation**
 
-Create `claw-connect/src/discovery/static-provider.ts`:
+Create `tidepool/src/discovery/static-provider.ts`:
 
 ```typescript
 import type { DiscoveredAgent, DiscoveryProvider } from "./types.js";
@@ -529,14 +529,14 @@ export class StaticProvider implements DiscoveryProvider {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/static-provider.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/static-provider.test.ts`
 Expected: 8 tests PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add claw-connect/src/discovery/static-provider.ts claw-connect/test/discovery/static-provider.test.ts claw-connect/fixtures/server-with-discovery.toml
-git commit -m "feat(claw-connect): static discovery provider reads peers from server.toml"
+git add tidepool/src/discovery/static-provider.ts tidepool/test/discovery/static-provider.test.ts tidepool/fixtures/server-with-discovery.toml
+git commit -m "feat(tidepool): static discovery provider reads peers from server.toml"
 ```
 
 ---
@@ -544,12 +544,12 @@ git commit -m "feat(claw-connect): static discovery provider reads peers from se
 ### Task 4: Discovery Registry (Multi-Provider Composition)
 
 **Files:**
-- Create: `claw-connect/src/discovery/registry.ts`
-- Create: `claw-connect/test/discovery/registry.test.ts`
+- Create: `tidepool/src/discovery/registry.ts`
+- Create: `tidepool/test/discovery/registry.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/discovery/registry.test.ts`:
+Create `tidepool/test/discovery/registry.test.ts`:
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";
@@ -710,12 +710,12 @@ describe("DiscoveryRegistry", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/registry.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/registry.test.ts`
 Expected: FAIL — `Cannot find module '../../src/discovery/registry.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/discovery/registry.ts`:
+Create `tidepool/src/discovery/registry.ts`:
 
 ```typescript
 import type { DiscoveredAgent, DiscoveryProvider } from "./types.js";
@@ -781,14 +781,14 @@ export class DiscoveryRegistry {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/registry.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/registry.test.ts`
 Expected: 8 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/discovery/registry.ts claw-connect/test/discovery/registry.test.ts
-git commit -m "feat(claw-connect): discovery registry with multi-provider composition and caching"
+git add tidepool/src/discovery/registry.ts tidepool/test/discovery/registry.test.ts
+git commit -m "feat(tidepool): discovery registry with multi-provider composition and caching"
 ```
 
 ---
@@ -796,16 +796,16 @@ git commit -m "feat(claw-connect): discovery registry with multi-provider compos
 ### Task 5: mDNS/DNS-SD Provider
 
 **Files:**
-- Create: `claw-connect/src/discovery/mdns-provider.ts`
-- Create: `claw-connect/test/discovery/mdns-provider.test.ts`
+- Create: `tidepool/src/discovery/mdns-provider.ts`
+- Create: `tidepool/test/discovery/mdns-provider.test.ts`
 
 - [ ] **Step 1: Install bonjour-service**
 
-Run: `cd claw-connect && pnpm add bonjour-service`
+Run: `cd tidepool && pnpm add bonjour-service`
 
 - [ ] **Step 2: Write the failing test**
 
-Create `claw-connect/test/discovery/mdns-provider.test.ts`:
+Create `tidepool/test/discovery/mdns-provider.test.ts`:
 
 ```typescript
 import { describe, it, expect, afterEach } from "vitest";
@@ -942,12 +942,12 @@ describe("MdnsProvider", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/mdns-provider.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/mdns-provider.test.ts`
 Expected: FAIL — `Cannot find module '../../src/discovery/mdns-provider.js'`
 
 - [ ] **Step 4: Write the implementation**
 
-Create `claw-connect/src/discovery/mdns-provider.ts`:
+Create `tidepool/src/discovery/mdns-provider.ts`:
 
 ```typescript
 import Bonjour, { type Service } from "bonjour-service";
@@ -1059,14 +1059,14 @@ export class MdnsProvider implements DiscoveryProvider {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/mdns-provider.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/mdns-provider.test.ts`
 Expected: 5 tests PASS. Note: mDNS tests run on the local machine's multicast interface. They may take a few seconds due to mDNS propagation delays.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add claw-connect/src/discovery/mdns-provider.ts claw-connect/test/discovery/mdns-provider.test.ts claw-connect/package.json claw-connect/pnpm-lock.yaml
-git commit -m "feat(claw-connect): mDNS/DNS-SD discovery provider using bonjour-service"
+git add tidepool/src/discovery/mdns-provider.ts tidepool/test/discovery/mdns-provider.test.ts tidepool/package.json tidepool/pnpm-lock.yaml
+git commit -m "feat(tidepool): mDNS/DNS-SD discovery provider using bonjour-service"
 ```
 
 ---
@@ -1074,14 +1074,14 @@ git commit -m "feat(claw-connect): mDNS/DNS-SD discovery provider using bonjour-
 ### Task 6: Cloud Directory Server
 
 **Files:**
-- Create: `claw-connect/src/directory-server.ts`
-- Create: `claw-connect/test/directory-server.test.ts`
+- Create: `tidepool/src/directory-server.ts`
+- Create: `tidepool/test/directory-server.test.ts`
 
 The cloud directory is a standalone Express REST API. For v1, it runs as a simple in-memory server. It authenticates registration and heartbeat requests via mTLS — only the cert holder can update their entry.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/directory-server.test.ts`:
+Create `tidepool/test/directory-server.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from "vitest";
@@ -1340,12 +1340,12 @@ describe("Cloud Directory Server", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/directory-server.test.ts`
+Run: `cd tidepool && pnpm test -- test/directory-server.test.ts`
 Expected: FAIL — `Cannot find module '../src/directory-server.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/directory-server.ts`:
+Create `tidepool/src/directory-server.ts`:
 
 ```typescript
 import express from "express";
@@ -1561,14 +1561,14 @@ function toPublic(entry: DirectoryEntry): {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/directory-server.test.ts`
+Run: `cd tidepool && pnpm test -- test/directory-server.test.ts`
 Expected: 9 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/directory-server.ts claw-connect/test/directory-server.test.ts
-git commit -m "feat(claw-connect): cloud directory REST API with cert-auth and heartbeat"
+git add tidepool/src/directory-server.ts tidepool/test/directory-server.test.ts
+git commit -m "feat(tidepool): cloud directory REST API with cert-auth and heartbeat"
 ```
 
 ---
@@ -1576,14 +1576,14 @@ git commit -m "feat(claw-connect): cloud directory REST API with cert-auth and h
 ### Task 7: Cloud Directory Provider (Client)
 
 **Files:**
-- Create: `claw-connect/src/discovery/directory-provider.ts`
-- Create: `claw-connect/test/discovery/directory-provider.test.ts`
+- Create: `tidepool/src/discovery/directory-provider.ts`
+- Create: `tidepool/test/discovery/directory-provider.test.ts`
 
 This provider is the client side — it talks to the cloud directory REST API from Task 6.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/discovery/directory-provider.test.ts`:
+Create `tidepool/test/discovery/directory-provider.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
@@ -1738,12 +1738,12 @@ describe("DirectoryProvider", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/directory-provider.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/directory-provider.test.ts`
 Expected: FAIL — `Cannot find module '../../src/discovery/directory-provider.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/discovery/directory-provider.ts`:
+Create `tidepool/src/discovery/directory-provider.ts`:
 
 ```typescript
 import type { DiscoveredAgent, DiscoveryProvider } from "./types.js";
@@ -1836,14 +1836,14 @@ export class DirectoryProvider implements DiscoveryProvider {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/discovery/directory-provider.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery/directory-provider.test.ts`
 Expected: 7 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/discovery/directory-provider.ts claw-connect/test/discovery/directory-provider.test.ts
-git commit -m "feat(claw-connect): cloud directory discovery provider (REST client)"
+git add tidepool/src/discovery/directory-provider.ts tidepool/test/discovery/directory-provider.test.ts
+git commit -m "feat(tidepool): cloud directory discovery provider (REST client)"
 ```
 
 ---
@@ -1851,14 +1851,14 @@ git commit -m "feat(claw-connect): cloud directory discovery provider (REST clie
 ### Task 8: CLI Search Command
 
 **Files:**
-- Update: `claw-connect/bin/cli.ts`
-- Update: `claw-connect/src/config.ts` (parse new discovery config fields)
+- Update: `tidepool/bin/cli.ts`
+- Update: `tidepool/src/config.ts` (parse new discovery config fields)
 
 - [ ] **Step 1: Update config.ts to parse discovery sub-sections**
 
 Add parsing for the new `discovery.mdns`, `discovery.directory`, and `discovery.static.peers` sections. In the `loadServerConfig` function, update the discovery parsing block:
 
-Replace the existing discovery parsing in `claw-connect/src/config.ts`:
+Replace the existing discovery parsing in `tidepool/src/config.ts`:
 
 ```typescript
 // Old:
@@ -1904,7 +1904,7 @@ discovery: {
 
 - [ ] **Step 2: Add the search command to CLI**
 
-Add the following to `claw-connect/bin/cli.ts`, before `program.parse()`:
+Add the following to `tidepool/bin/cli.ts`, before `program.parse()`:
 
 ```typescript
 import { StaticProvider } from "../src/discovery/static-provider.js";
@@ -1925,7 +1925,7 @@ program
     const serverTomlPath = path.join(configDir, "server.toml");
 
     if (!fs.existsSync(serverTomlPath)) {
-      console.error("Not initialized. Run 'claw-connect init' first.");
+      console.error("Not initialized. Run 'tidepool init' first.");
       process.exit(1);
     }
 
@@ -1989,7 +1989,7 @@ program
       }
 
       console.log("To connect to an agent:");
-      console.log("  claw-connect connect <agent-card-url>");
+      console.log("  tidepool connect <agent-card-url>");
     }
 
     // Cleanup mDNS providers
@@ -2005,7 +2005,7 @@ program
 
 Run:
 ```bash
-cd claw-connect
+cd tidepool
 
 # Init with discovery config
 npx tsx bin/cli.ts init --dir /tmp/cc-discovery-test
@@ -2039,7 +2039,7 @@ Found 1 agent(s):
     Agent Card: https://demo.example.com:9900/demo/.well-known/agent-card.json
 
 To connect to an agent:
-  claw-connect connect <agent-card-url>
+  tidepool connect <agent-card-url>
 ```
 
 Run mDNS-only search:
@@ -2058,8 +2058,8 @@ No agents found.
 
 ```bash
 rm -rf /tmp/cc-discovery-test
-git add claw-connect/bin/cli.ts claw-connect/src/config.ts
-git commit -m "feat(claw-connect): CLI search command with multi-provider discovery"
+git add tidepool/bin/cli.ts tidepool/src/config.ts
+git commit -m "feat(tidepool): CLI search command with multi-provider discovery"
 ```
 
 ---
@@ -2067,13 +2067,13 @@ git commit -m "feat(claw-connect): CLI search command with multi-provider discov
 ### Task 9: Discovery End-to-End Test
 
 **Files:**
-- Create: `claw-connect/test/discovery-e2e.test.ts`
+- Create: `tidepool/test/discovery-e2e.test.ts`
 
 This test validates the full flow: discovery finds an agent, the result feeds into a connection request (using Phase 2's `connect` flow), and communication works end to end.
 
 - [ ] **Step 1: Write the e2e test**
 
-Create `claw-connect/test/discovery-e2e.test.ts`:
+Create `tidepool/test/discovery-e2e.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -2242,19 +2242,19 @@ describe("discovery e2e: find agent → get details → ready to connect", () =>
 
 - [ ] **Step 2: Run the e2e test**
 
-Run: `cd claw-connect && pnpm test -- test/discovery-e2e.test.ts`
+Run: `cd tidepool && pnpm test -- test/discovery-e2e.test.ts`
 Expected: 6 tests PASS.
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests across all files PASS (existing Phase 1-3 tests + new discovery tests).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add claw-connect/test/discovery-e2e.test.ts
-git commit -m "test(claw-connect): discovery e2e — static, directory, dedup, agent card fetch"
+git add tidepool/test/discovery-e2e.test.ts
+git commit -m "test(tidepool): discovery e2e — static, directory, dedup, agent card fetch"
 ```
 
 ---
@@ -2263,18 +2263,18 @@ git commit -m "test(claw-connect): discovery e2e — static, directory, dedup, a
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests PASS.
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors.
 
 - [ ] **Step 3: Manual smoke test — full discovery flow**
 
 ```bash
-cd claw-connect
+cd tidepool
 
 # Setup
 npx tsx bin/cli.ts init --dir /tmp/cc-phase4
@@ -2326,7 +2326,7 @@ Found 2 agent(s):
     Agent Card: https://ml.example.com:9900/ml/.well-known/agent-card.json
 
 To connect to an agent:
-  claw-connect connect <agent-card-url>
+  tidepool connect <agent-card-url>
 ```
 
 - [ ] **Step 4: Cleanup**
@@ -2338,6 +2338,6 @@ rm -rf /tmp/cc-phase4
 - [ ] **Step 5: Final commit**
 
 ```bash
-git add -A claw-connect/
-git commit -m "feat(claw-connect): Phase 4 complete — pluggable discovery with static, mDNS, and cloud directory providers"
+git add -A tidepool/
+git commit -m "feat(tidepool): Phase 4 complete — pluggable discovery with static, mDNS, and cloud directory providers"
 ```

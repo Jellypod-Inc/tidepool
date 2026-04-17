@@ -2,7 +2,7 @@
 
 ## Context
 
-ClawConnect peers listen on `:9900` for inbound mTLS connections. This works
+Tidepool peers listen on `:9900` for inbound mTLS connections. This works
 when peers have direct IP reachability — same LAN, or both on public IPs.
 But most real peers are behind NATs or firewalls: home routers, corporate
 networks, cloud VPCs. A remote peer cannot connect to your daemon if your
@@ -29,7 +29,7 @@ machine on the Tailnet via a WireGuard tunnel.
 # NAT traversal handled by Tailscale (STUN hole-punch + DERP relay fallback)
 ```
 
-ClawConnect doesn't need to know Tailscale exists. mTLS runs on top of the
+Tidepool doesn't need to know Tailscale exists. mTLS runs on top of the
 WireGuard tunnel (double encryption — harmless).
 
 **Pros:**
@@ -42,7 +42,7 @@ WireGuard tunnel (double encryption — harmless).
 - Both peers must have Tailscale installed and join the same Tailnet.
 - Onboarding friction: "install this other product first" is a hurdle.
 - Dependency on Tailscale's infrastructure and account system.
-- Tailnet membership is a trust boundary ClawConnect doesn't control.
+- Tailnet membership is a trust boundary Tidepool doesn't control.
 
 **Effort:** Zero code. Documentation only.
 
@@ -65,7 +65,7 @@ tailscale funnel 9900
 
 **Cons:**
 - Tailscale terminates TLS at their edge. mTLS client certificate auth may
-  not pass through — needs testing. If it doesn't, ClawConnect loses its
+  not pass through — needs testing. If it doesn't, Tidepool loses its
   primary authentication mechanism.
 - Your endpoint is a Tailscale-controlled hostname.
 - Funnel has bandwidth limits on the free tier.
@@ -102,7 +102,7 @@ mTLS passes through cleanly — the proxy just forwards TCP bytes.
 
 ## Option 4: Built-in relay server (lightweight, first-class)
 
-Build a simple relay server that ClawConnect peers can route through when
+Build a simple relay server that Tidepool peers can route through when
 direct connection fails. The relay is a thin TCP or WebSocket proxy — it
 forwards encrypted mTLS bytes without terminating TLS or seeing plaintext.
 
@@ -118,7 +118,7 @@ Both peers connect outbound to the relay (outbound TCP works through NATs).
 The relay pairs them by peer ID and forwards bytes bidirectionally.
 
 **Pros:**
-- First-class ClawConnect feature — no external tools required.
+- First-class Tidepool feature — no external tools required.
 - mTLS is end-to-end; the relay sees only ciphertext.
 - Simple to implement (~200-300 lines for a TCP relay).
 - Could be self-hosted by anyone, or we run a public one.
@@ -173,7 +173,7 @@ identity key (same key used for `did:dht` in Task 04).
 
 ```
 ┌─────────────────────────────────┐
-│       claw-connect daemon       │
+│       tidepool daemon       │
 │                                 │
 │  WireGuard Manager              │
 │   - one tunnel per active peer  │
@@ -188,7 +188,7 @@ identity key (same key used for `did:dht` in Task 04).
 └─────────────────────────────────┘
 ```
 
-**Identity unification:** Ed25519 keypair generated at `claw-connect init`
+**Identity unification:** Ed25519 keypair generated at `tidepool init`
 serves as:
 - `did:dht` identity (signing)
 - DHT record signing key
@@ -279,8 +279,8 @@ The options aren't mutually exclusive. A phased approach:
 - Tailscale Funnel tested: confirm whether mTLS client certs pass through
 
 ### Phase 1: Built-in relay server
-- New package `packages/claw-connect-relay/` or new command
-  `claw-connect relay serve`
+- New package `packages/tidepool-relay/` or new command
+  `tidepool relay serve`
 - Relay forwards TCP/WebSocket bytes without terminating TLS
 - Peers connect to relay with their peer ID; relay pairs and forwards
 - Config in `server.toml`:
@@ -327,9 +327,9 @@ The options aren't mutually exclusive. A phased approach:
 
 ## File pointers
 
-- `packages/claw-connect/src/identity.ts` — current keypair/cert generation
-- `packages/claw-connect/src/server.ts` — current mTLS server
-- `packages/claw-connect/src/outbound-tls.ts` — current fingerprint pinning
-- `packages/claw-connect/src/middleware.ts` — current friend auth
-- `packages/claw-connect/THREATS.md` — NAT traversal gap
+- `packages/tidepool/src/identity.ts` — current keypair/cert generation
+- `packages/tidepool/src/server.ts` — current mTLS server
+- `packages/tidepool/src/outbound-tls.ts` — current fingerprint pinning
+- `packages/tidepool/src/middleware.ts` — current friend auth
+- `packages/tidepool/THREATS.md` — NAT traversal gap
 - Task 04 (`04-dht-identity-and-discovery.md`) — shares Ed25519 keypair story

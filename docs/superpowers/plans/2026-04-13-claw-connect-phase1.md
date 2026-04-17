@@ -1,21 +1,21 @@
-# Claw Connect Phase 1: Single-Machine Proof of Concept
+# Tidepool Phase 1: Single-Machine Proof of Concept
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Two agents on one machine talk to each other through two Claw Connect servers, proving the transparent A2A proxy model works end to end.
+**Goal:** Two agents on one machine talk to each other through two Tidepool servers, proving the transparent A2A proxy model works end to end.
 
-**Architecture:** Claw Connect is a transparent A2A proxy — A2A in, A2A out. Each server has a public interface (mTLS, for remote peers) and a local interface (HTTP, for local agents). The server routes inbound requests to registered agents by tenant, and outbound requests to remote agents by mapping local handles to remote endpoints. Friends are hardcoded in this phase (handshake comes in Phase 2).
+**Architecture:** Tidepool is a transparent A2A proxy — A2A in, A2A out. Each server has a public interface (mTLS, for remote peers) and a local interface (HTTP, for local agents). The server routes inbound requests to registered agents by tenant, and outbound requests to remote agents by mapping local handles to remote endpoints. Friends are hardcoded in this phase (handshake comes in Phase 2).
 
 **Tech Stack:** Node.js, TypeScript, Express, `@a2a-js/sdk`, `node-forge` (cert generation), `@iarna/toml` (config), `commander` (CLI), `vitest` (testing)
 
-**Spec:** `docs/superpowers/specs/2026-04-13-claw-connect-revised-design.md`
+**Spec:** `docs/superpowers/specs/2026-04-13-tidepool-revised-design.md`
 
 ---
 
 ## File Structure
 
 ```
-claw-connect/
+tidepool/
 ├── package.json
 ├── tsconfig.json
 ├── vitest.config.ts
@@ -46,21 +46,21 @@ claw-connect/
 ### Task 1: Project Scaffolding
 
 **Files:**
-- Create: `claw-connect/package.json`
-- Create: `claw-connect/tsconfig.json`
-- Create: `claw-connect/vitest.config.ts`
-- Create: `claw-connect/src/types.ts`
+- Create: `tidepool/package.json`
+- Create: `tidepool/tsconfig.json`
+- Create: `tidepool/vitest.config.ts`
+- Create: `tidepool/src/types.ts`
 
 - [ ] **Step 1: Create package.json**
 
 ```json
 {
-  "name": "claw-connect",
+  "name": "tidepool",
   "version": "0.0.1",
   "type": "module",
   "private": true,
   "bin": {
-    "claw-connect": "./dist/bin/cli.js"
+    "tidepool": "./dist/bin/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -175,19 +175,19 @@ export interface AgentIdentity {
 
 - [ ] **Step 5: Install dependencies**
 
-Run: `cd claw-connect && pnpm install`
+Run: `cd tidepool && pnpm install`
 Expected: Dependencies installed, `node_modules/` created, `pnpm-lock.yaml` created.
 
 - [ ] **Step 6: Verify setup**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors (types.ts compiles cleanly).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add claw-connect/package.json claw-connect/tsconfig.json claw-connect/vitest.config.ts claw-connect/src/types.ts claw-connect/pnpm-lock.yaml
-git commit -m "feat(claw-connect): scaffold project with types, deps, and test config"
+git add tidepool/package.json tidepool/tsconfig.json tidepool/vitest.config.ts tidepool/src/types.ts tidepool/pnpm-lock.yaml
+git commit -m "feat(tidepool): scaffold project with types, deps, and test config"
 ```
 
 ---
@@ -195,12 +195,12 @@ git commit -m "feat(claw-connect): scaffold project with types, deps, and test c
 ### Task 2: Certificate Generation
 
 **Files:**
-- Create: `claw-connect/src/identity.ts`
-- Create: `claw-connect/test/identity.test.ts`
+- Create: `tidepool/src/identity.ts`
+- Create: `tidepool/test/identity.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/identity.test.ts`:
+Create `tidepool/test/identity.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -264,12 +264,12 @@ describe("getFingerprint", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/identity.test.ts`
+Run: `cd tidepool && pnpm test -- test/identity.test.ts`
 Expected: FAIL — `Cannot find module '../src/identity.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/identity.ts`:
+Create `tidepool/src/identity.ts`:
 
 ```typescript
 import forge from "node-forge";
@@ -336,14 +336,14 @@ export function getFingerprint(certPem: string): string {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/identity.test.ts`
+Run: `cd tidepool && pnpm test -- test/identity.test.ts`
 Expected: 2 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/identity.ts claw-connect/test/identity.test.ts
-git commit -m "feat(claw-connect): cert generation and fingerprint utilities"
+git add tidepool/src/identity.ts tidepool/test/identity.test.ts
+git commit -m "feat(tidepool): cert generation and fingerprint utilities"
 ```
 
 ---
@@ -351,14 +351,14 @@ git commit -m "feat(claw-connect): cert generation and fingerprint utilities"
 ### Task 3: Config Loading
 
 **Files:**
-- Create: `claw-connect/src/config.ts`
-- Create: `claw-connect/test/config.test.ts`
-- Create: `claw-connect/fixtures/server.toml`
-- Create: `claw-connect/fixtures/friends.toml`
+- Create: `tidepool/src/config.ts`
+- Create: `tidepool/test/config.test.ts`
+- Create: `tidepool/fixtures/server.toml`
+- Create: `tidepool/fixtures/friends.toml`
 
 - [ ] **Step 1: Create test fixtures**
 
-Create `claw-connect/fixtures/server.toml`:
+Create `tidepool/fixtures/server.toml`:
 
 ```toml
 [server]
@@ -385,7 +385,7 @@ providers = ["static"]
 cacheTtlSeconds = 300
 ```
 
-Create `claw-connect/fixtures/friends.toml`:
+Create `tidepool/fixtures/friends.toml`:
 
 ```toml
 [friends.alice-agent]
@@ -398,7 +398,7 @@ agents = ["rust-expert"]
 
 - [ ] **Step 2: Write the failing test**
 
-Create `claw-connect/test/config.test.ts`:
+Create `tidepool/test/config.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -451,12 +451,12 @@ describe("loadFriendsConfig", () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/config.test.ts`
+Run: `cd tidepool && pnpm test -- test/config.test.ts`
 Expected: FAIL — `Cannot find module '../src/config.js'`
 
 - [ ] **Step 4: Write the implementation**
 
-Create `claw-connect/src/config.ts`:
+Create `tidepool/src/config.ts`:
 
 ```typescript
 import fs from "fs";
@@ -533,14 +533,14 @@ export function loadFriendsConfig(filePath: string): FriendsConfig {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/config.test.ts`
+Run: `cd tidepool && pnpm test -- test/config.test.ts`
 Expected: 4 tests PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add claw-connect/src/config.ts claw-connect/test/config.test.ts claw-connect/fixtures/
-git commit -m "feat(claw-connect): config loading for server.toml and friends.toml"
+git add tidepool/src/config.ts tidepool/test/config.test.ts tidepool/fixtures/
+git commit -m "feat(tidepool): config loading for server.toml and friends.toml"
 ```
 
 ---
@@ -548,12 +548,12 @@ git commit -m "feat(claw-connect): config loading for server.toml and friends.to
 ### Task 4: Middleware Pipeline
 
 **Files:**
-- Create: `claw-connect/src/middleware.ts`
-- Create: `claw-connect/test/middleware.test.ts`
+- Create: `tidepool/src/middleware.ts`
+- Create: `tidepool/test/middleware.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/middleware.test.ts`:
+Create `tidepool/test/middleware.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -633,12 +633,12 @@ describe("resolveTenant", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/middleware.test.ts`
+Run: `cd tidepool && pnpm test -- test/middleware.test.ts`
 Expected: FAIL — `Cannot find module '../src/middleware.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/middleware.ts`:
+Create `tidepool/src/middleware.ts`:
 
 ```typescript
 import type {
@@ -680,14 +680,14 @@ export function resolveTenant(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/middleware.test.ts`
+Run: `cd tidepool && pnpm test -- test/middleware.test.ts`
 Expected: 5 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/middleware.ts claw-connect/test/middleware.test.ts
-git commit -m "feat(claw-connect): middleware for friend check, scope, and tenant resolution"
+git add tidepool/src/middleware.ts tidepool/test/middleware.test.ts
+git commit -m "feat(tidepool): middleware for friend check, scope, and tenant resolution"
 ```
 
 ---
@@ -695,12 +695,12 @@ git commit -m "feat(claw-connect): middleware for friend check, scope, and tenan
 ### Task 5: Agent Card Synthesis
 
 **Files:**
-- Create: `claw-connect/src/agent-card.ts`
-- Create: `claw-connect/test/agent-card.test.ts`
+- Create: `tidepool/src/agent-card.ts`
+- Create: `tidepool/test/agent-card.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/agent-card.test.ts`:
+Create `tidepool/test/agent-card.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -755,12 +755,12 @@ describe("buildRemoteAgentCard", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/agent-card.test.ts`
+Run: `cd tidepool && pnpm test -- test/agent-card.test.ts`
 Expected: FAIL — `Cannot find module '../src/agent-card.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/agent-card.ts`:
+Create `tidepool/src/agent-card.ts`:
 
 ```typescript
 import type { RemoteAgent } from "./types.js";
@@ -863,14 +863,14 @@ export function buildRemoteAgentCard(opts: BuildRemoteOpts): AgentCard {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/agent-card.test.ts`
+Run: `cd tidepool && pnpm test -- test/agent-card.test.ts`
 Expected: 2 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/agent-card.ts claw-connect/test/agent-card.test.ts
-git commit -m "feat(claw-connect): Agent Card synthesis for local and remote agents"
+git add tidepool/src/agent-card.ts tidepool/test/agent-card.test.ts
+git commit -m "feat(tidepool): Agent Card synthesis for local and remote agents"
 ```
 
 ---
@@ -878,12 +878,12 @@ git commit -m "feat(claw-connect): Agent Card synthesis for local and remote age
 ### Task 6: A2A Proxy Logic
 
 **Files:**
-- Create: `claw-connect/src/proxy.ts`
-- Create: `claw-connect/test/proxy.test.ts`
+- Create: `tidepool/src/proxy.ts`
+- Create: `tidepool/test/proxy.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/proxy.test.ts`:
+Create `tidepool/test/proxy.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -936,12 +936,12 @@ describe("buildOutboundUrl", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/proxy.test.ts`
+Run: `cd tidepool && pnpm test -- test/proxy.test.ts`
 Expected: FAIL — `Cannot find module '../src/proxy.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/proxy.ts`:
+Create `tidepool/src/proxy.ts`:
 
 ```typescript
 import type { RemoteAgent } from "./types.js";
@@ -966,14 +966,14 @@ export function buildOutboundUrl(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/proxy.test.ts`
+Run: `cd tidepool && pnpm test -- test/proxy.test.ts`
 Expected: 3 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/proxy.ts claw-connect/test/proxy.test.ts
-git commit -m "feat(claw-connect): proxy URL mapping and tenant resolution"
+git add tidepool/src/proxy.ts tidepool/test/proxy.test.ts
+git commit -m "feat(tidepool): proxy URL mapping and tenant resolution"
 ```
 
 ---
@@ -981,13 +981,13 @@ git commit -m "feat(claw-connect): proxy URL mapping and tenant resolution"
 ### Task 7: Express Server (Public + Local Interfaces)
 
 **Files:**
-- Create: `claw-connect/src/server.ts`
+- Create: `tidepool/src/server.ts`
 
 This task wires everything together into the Express server with both interfaces. No unit test for this file — it's integration-level and will be tested in the e2e test (Task 8).
 
 - [ ] **Step 1: Write the server**
 
-Create `claw-connect/src/server.ts`:
+Create `tidepool/src/server.ts`:
 
 ```typescript
 import express from "express";
@@ -1055,7 +1055,7 @@ function buildTlsOptions(configDir: string, agentNames: string[]) {
   // In a more complete implementation, you might use SNI to pick certs.
   const firstAgent = agentNames[0];
   if (!firstAgent) {
-    throw new Error("No agents registered. Run 'claw-connect register' first.");
+    throw new Error("No agents registered. Run 'tidepool register' first.");
   }
 
   const certPath = `${configDir}/agents/${firstAgent}/identity.crt`;
@@ -1189,8 +1189,8 @@ function createLocalApp(
     ];
 
     res.json({
-      name: "claw-connect",
-      description: `Claw Connect proxy. Available agents: ${allAgents.join(", ")}`,
+      name: "tidepool",
+      description: `Tidepool proxy. Available agents: ${allAgents.join(", ")}`,
       url: `http://127.0.0.1:${config.server.localPort}`,
       version: "1.0.0",
       skills: allAgents.map((name) => ({
@@ -1280,8 +1280,8 @@ function createLocalApp(
     // Load the local agent's cert for mTLS
     // For Phase 1, use the first registered agent's cert
     const firstAgent = Object.keys(config.agents)[0];
-    const certPath = `${process.env.CC_CONFIG_DIR ?? "~/.claw-connect"}/agents/${firstAgent}/identity.crt`;
-    const keyPath = `${process.env.CC_CONFIG_DIR ?? "~/.claw-connect"}/agents/${firstAgent}/identity.key`;
+    const certPath = `${process.env.CC_CONFIG_DIR ?? "~/.tidepool"}/agents/${firstAgent}/identity.crt`;
+    const keyPath = `${process.env.CC_CONFIG_DIR ?? "~/.tidepool"}/agents/${firstAgent}/identity.key`;
 
     try {
       const response = await fetch(targetUrl, {
@@ -1322,14 +1322,14 @@ function createLocalApp(
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors (or minor ones to fix — address any that appear).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add claw-connect/src/server.ts
-git commit -m "feat(claw-connect): Express server with public mTLS and local HTTP interfaces"
+git add tidepool/src/server.ts
+git commit -m "feat(tidepool): Express server with public mTLS and local HTTP interfaces"
 ```
 
 ---
@@ -1337,11 +1337,11 @@ git commit -m "feat(claw-connect): Express server with public mTLS and local HTT
 ### Task 8: CLI Commands (init, register, start)
 
 **Files:**
-- Create: `claw-connect/bin/cli.ts`
+- Create: `tidepool/bin/cli.ts`
 
 - [ ] **Step 1: Write the CLI**
 
-Create `claw-connect/bin/cli.ts`:
+Create `tidepool/bin/cli.ts`:
 
 ```typescript
 import { Command } from "commander";
@@ -1354,13 +1354,13 @@ import { startServer } from "../src/server.js";
 
 const DEFAULT_CONFIG_DIR = path.join(
   process.env.HOME ?? "~",
-  ".claw-connect",
+  ".tidepool",
 );
 
 const program = new Command();
 
 program
-  .name("claw-connect")
+  .name("tidepool")
   .description("Transparent A2A proxy with identity and trust")
   .version("0.0.1");
 
@@ -1406,10 +1406,10 @@ program
       TOML.stringify({ friends: {} } as any),
     );
 
-    console.log(`Initialized Claw Connect at ${configDir}`);
+    console.log(`Initialized Tidepool at ${configDir}`);
     console.log(`  server.toml created`);
     console.log(`  friends.toml created`);
-    console.log(`\nNext: claw-connect register --name <agent-name> --description "<desc>" --endpoint <url>`);
+    console.log(`\nNext: tidepool register --name <agent-name> --description "<desc>" --endpoint <url>`);
   });
 
 program
@@ -1479,7 +1479,7 @@ program
   .action((opts) => {
     const serverTomlPath = path.join(opts.dir, "server.toml");
     if (!fs.existsSync(serverTomlPath)) {
-      console.error("Not initialized. Run 'claw-connect init' first.");
+      console.error("Not initialized. Run 'tidepool init' first.");
       process.exit(1);
     }
 
@@ -1499,13 +1499,13 @@ program
 
 program
   .command("start")
-  .description("Start the Claw Connect server")
+  .description("Start the Tidepool server")
   .option("--dir <path>", "Config directory", DEFAULT_CONFIG_DIR)
   .action(async (opts) => {
     const configDir = opts.dir;
     process.env.CC_CONFIG_DIR = configDir;
 
-    console.log("Starting Claw Connect...");
+    console.log("Starting Tidepool...");
     await startServer({ configDir });
   });
 
@@ -1516,7 +1516,7 @@ program.parse();
 
 Run:
 ```bash
-cd claw-connect
+cd tidepool
 npx tsx bin/cli.ts init --dir /tmp/cc-test
 npx tsx bin/cli.ts register --name test-agent --description "Test agent" --endpoint http://localhost:18800 --dir /tmp/cc-test
 npx tsx bin/cli.ts agents --dir /tmp/cc-test
@@ -1524,7 +1524,7 @@ npx tsx bin/cli.ts agents --dir /tmp/cc-test
 
 Expected:
 ```
-Initialized Claw Connect at /tmp/cc-test
+Initialized Tidepool at /tmp/cc-test
 Generated identity for "test-agent"
   Fingerprint: sha256:...
 Registered agent "test-agent" → http://localhost:18800
@@ -1543,8 +1543,8 @@ cat /tmp/cc-test/server.toml | grep test-agent
 
 ```bash
 rm -rf /tmp/cc-test
-git add claw-connect/bin/cli.ts
-git commit -m "feat(claw-connect): CLI with init, register, agents, and start commands"
+git add tidepool/bin/cli.ts
+git commit -m "feat(tidepool): CLI with init, register, agents, and start commands"
 ```
 
 ---
@@ -1552,13 +1552,13 @@ git commit -m "feat(claw-connect): CLI with init, register, agents, and start co
 ### Task 9: End-to-End Test
 
 **Files:**
-- Create: `claw-connect/test/e2e.test.ts`
+- Create: `tidepool/test/e2e.test.ts`
 
-This is the big validation — two Claw Connect servers on one machine, each with a registered agent, hardcoded as friends, proving the full proxy flow works.
+This is the big validation — two Tidepool servers on one machine, each with a registered agent, hardcoded as friends, proving the full proxy flow works.
 
 - [ ] **Step 1: Write the e2e test**
 
-Create `claw-connect/test/e2e.test.ts`:
+Create `tidepool/test/e2e.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -1599,7 +1599,7 @@ function createMockAgent(port: number, name: string): http.Server {
   return app.listen(port, "127.0.0.1");
 }
 
-describe("e2e: two Claw Connect servers", () => {
+describe("e2e: two Tidepool servers", () => {
   let tmpDir: string;
   let aliceConfigDir: string;
   let bobConfigDir: string;
@@ -1693,7 +1693,7 @@ describe("e2e: two Claw Connect servers", () => {
     aliceMockAgent = createMockAgent(28800, "alice-dev");
     bobMockAgent = createMockAgent(38800, "rust-expert");
 
-    // --- Start Claw Connect servers ---
+    // --- Start Tidepool servers ---
     aliceServer = await startServer({
       configDir: aliceConfigDir,
       remoteAgents: [
@@ -1727,8 +1727,8 @@ describe("e2e: two Claw Connect servers", () => {
     fs.rmSync(tmpDir, { recursive: true });
   });
 
-  it("Alice's agent can ask Bob's agent through both Claw Connect servers", async () => {
-    // Alice's local agent sends A2A to Alice's Claw Connect local interface,
+  it("Alice's agent can ask Bob's agent through both Tidepool servers", async () => {
+    // Alice's local agent sends A2A to Alice's Tidepool local interface,
     // addressing "bobs-rust" (the local handle for Bob's rust-expert)
     const response = await fetch(
       "http://127.0.0.1:19901/bobs-rust/message:send",
@@ -1754,7 +1754,7 @@ describe("e2e: two Claw Connect servers", () => {
     );
   });
 
-  it("Bob's agent can ask Alice's agent through both Claw Connect servers", async () => {
+  it("Bob's agent can ask Alice's agent through both Tidepool servers", async () => {
     const response = await fetch(
       "http://127.0.0.1:29901/alices-dev/message:send",
       {
@@ -1779,13 +1779,13 @@ describe("e2e: two Claw Connect servers", () => {
     );
   });
 
-  it("Alice's Claw Connect serves Agent Cards on local interface", async () => {
+  it("Alice's Tidepool serves Agent Cards on local interface", async () => {
     const response = await fetch(
       "http://127.0.0.1:19901/.well-known/agent-card.json",
     );
     const card = await response.json();
 
-    expect(card.name).toBe("claw-connect");
+    expect(card.name).toBe("tidepool");
     // Should list both local and remote agents
     const skillIds = card.skills.map((s: any) => s.id);
     expect(skillIds).toContain("alice-dev");
@@ -1822,13 +1822,13 @@ describe("e2e: two Claw Connect servers", () => {
 
 Run:
 ```bash
-cd claw-connect && pnpm add undici && pnpm add -D @types/node
+cd tidepool && pnpm add undici && pnpm add -D @types/node
 ```
 
 - [ ] **Step 3: Run the e2e test**
 
-Run: `cd claw-connect && pnpm test -- test/e2e.test.ts`
-Expected: 4 tests PASS. The key test is the first one — Alice's agent talks to Bob's agent through two Claw Connect proxies and gets a response.
+Run: `cd tidepool && pnpm test -- test/e2e.test.ts`
+Expected: 4 tests PASS. The key test is the first one — Alice's agent talks to Bob's agent through two Tidepool proxies and gets a response.
 
 If there are failures, debug them. Common issues:
 - Port conflicts — ensure the test ports (19900, 19901, 28800, 29900, 29901, 38800) are free
@@ -1837,19 +1837,19 @@ If there are failures, debug them. Common issues:
 
 - [ ] **Step 4: Fix any issues and re-run until passing**
 
-Address any failures from step 3. Re-run: `cd claw-connect && pnpm test -- test/e2e.test.ts`
+Address any failures from step 3. Re-run: `cd tidepool && pnpm test -- test/e2e.test.ts`
 Expected: All tests PASS.
 
 - [ ] **Step 5: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests across all files PASS (identity, config, middleware, proxy, agent-card, e2e).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add claw-connect/test/e2e.test.ts claw-connect/package.json claw-connect/pnpm-lock.yaml
-git commit -m "test(claw-connect): e2e test — two servers, two agents, full proxy flow"
+git add tidepool/test/e2e.test.ts tidepool/package.json tidepool/pnpm-lock.yaml
+git commit -m "test(tidepool): e2e test — two servers, two agents, full proxy flow"
 ```
 
 ---
@@ -1858,18 +1858,18 @@ git commit -m "test(claw-connect): e2e test — two servers, two agents, full pr
 
 - [ ] **Step 1: Run full test suite one more time**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests PASS.
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors.
 
 - [ ] **Step 3: Manual smoke test with CLI**
 
 ```bash
-cd claw-connect
+cd tidepool
 
 # Init two configs
 npx tsx bin/cli.ts init --dir /tmp/cc-alice
@@ -1895,6 +1895,6 @@ rm -rf /tmp/cc-alice /tmp/cc-bob
 - [ ] **Step 5: Final commit with any fixes**
 
 ```bash
-git add -A claw-connect/
-git commit -m "feat(claw-connect): Phase 1 complete — transparent A2A proxy proof of concept"
+git add -A tidepool/
+git commit -m "feat(tidepool): Phase 1 complete — transparent A2A proxy proof of concept"
 ```

@@ -1,4 +1,4 @@
-# Claw Connect Phase 3: Rate Limiting and Error Handling
+# Tidepool Phase 3: Rate Limiting and Error Handling
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** Same as Phase 1 — Node.js, TypeScript, Express, vitest. No new dependencies.
 
-**Spec:** `docs/superpowers/specs/2026-04-13-claw-connect-revised-design.md`
+**Spec:** `docs/superpowers/specs/2026-04-13-tidepool-revised-design.md`
 
 **Depends on:** Phase 1 (server, middleware, proxy, types) and Phase 2 (friends, handshake)
 
@@ -17,7 +17,7 @@
 ## File Structure
 
 ```
-claw-connect/
+tidepool/
 ├── src/
 │   ├── rate-limiter.ts           # NEW — Token bucket implementation
 │   ├── errors.ts                 # NEW — A2A error response builders
@@ -38,12 +38,12 @@ claw-connect/
 ### Task 1: Token Bucket Rate Limiter
 
 **Files:**
-- Create: `claw-connect/src/rate-limiter.ts`
-- Create: `claw-connect/test/rate-limiter.test.ts`
+- Create: `tidepool/src/rate-limiter.ts`
+- Create: `tidepool/test/rate-limiter.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/rate-limiter.test.ts`:
+Create `tidepool/test/rate-limiter.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -160,12 +160,12 @@ describe("TokenBucket", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/rate-limiter.test.ts`
+Run: `cd tidepool && pnpm test -- test/rate-limiter.test.ts`
 Expected: FAIL — `Cannot find module '../src/rate-limiter.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/rate-limiter.ts`:
+Create `tidepool/src/rate-limiter.ts`:
 
 ```typescript
 export interface RateLimitConfig {
@@ -258,14 +258,14 @@ export class TokenBucket {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/rate-limiter.test.ts`
+Run: `cd tidepool && pnpm test -- test/rate-limiter.test.ts`
 Expected: All tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/rate-limiter.ts claw-connect/test/rate-limiter.test.ts
-git commit -m "feat(claw-connect): token bucket rate limiter with continuous refill"
+git add tidepool/src/rate-limiter.ts tidepool/test/rate-limiter.test.ts
+git commit -m "feat(tidepool): token bucket rate limiter with continuous refill"
 ```
 
 ---
@@ -273,12 +273,12 @@ git commit -m "feat(claw-connect): token bucket rate limiter with continuous ref
 ### Task 2: A2A Error Response Builders
 
 **Files:**
-- Create: `claw-connect/src/errors.ts`
-- Create: `claw-connect/test/errors.test.ts`
+- Create: `tidepool/src/errors.ts`
+- Create: `tidepool/test/errors.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `claw-connect/test/errors.test.ts`:
+Create `tidepool/test/errors.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -347,12 +347,12 @@ describe("agentTimeoutResponse", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/errors.test.ts`
+Run: `cd tidepool && pnpm test -- test/errors.test.ts`
 Expected: FAIL — `Cannot find module '../src/errors.js'`
 
 - [ ] **Step 3: Write the implementation**
 
-Create `claw-connect/src/errors.ts`:
+Create `tidepool/src/errors.ts`:
 
 ```typescript
 import { v4 as uuidv4 } from "uuid";
@@ -458,14 +458,14 @@ export function agentTimeoutResponse(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/errors.test.ts`
+Run: `cd tidepool && pnpm test -- test/errors.test.ts`
 Expected: All tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/errors.ts claw-connect/test/errors.test.ts
-git commit -m "feat(claw-connect): A2A error response builders for all failure modes"
+git add tidepool/src/errors.ts tidepool/test/errors.test.ts
+git commit -m "feat(tidepool): A2A error response builders for all failure modes"
 ```
 
 ---
@@ -473,14 +473,14 @@ git commit -m "feat(claw-connect): A2A error response builders for all failure m
 ### Task 3: Add timeoutSeconds to Types and Config
 
 **Files:**
-- Modify: `claw-connect/src/types.ts`
-- Modify: `claw-connect/src/config.ts`
-- Modify: `claw-connect/fixtures/server.toml`
-- Modify: `claw-connect/test/config.test.ts`
+- Modify: `tidepool/src/types.ts`
+- Modify: `tidepool/src/config.ts`
+- Modify: `tidepool/fixtures/server.toml`
+- Modify: `tidepool/test/config.test.ts`
 
 - [ ] **Step 1: Update types.ts — add timeoutSeconds to AgentConfig**
 
-Edit `claw-connect/src/types.ts` — change the `AgentConfig` interface:
+Edit `tidepool/src/types.ts` — change the `AgentConfig` interface:
 
 ```typescript
 // BEFORE:
@@ -501,7 +501,7 @@ export interface AgentConfig {
 
 - [ ] **Step 2: Update fixtures/server.toml — add timeoutSeconds**
 
-Edit `claw-connect/fixtures/server.toml`:
+Edit `tidepool/fixtures/server.toml`:
 
 ```toml
 [server]
@@ -532,7 +532,7 @@ cacheTtlSeconds = 300
 
 - [ ] **Step 3: Update config.ts — parse timeoutSeconds with default**
 
-Edit `claw-connect/src/config.ts` — in the `loadServerConfig` function, update the agents mapping:
+Edit `tidepool/src/config.ts` — in the `loadServerConfig` function, update the agents mapping:
 
 ```typescript
 // BEFORE:
@@ -563,7 +563,7 @@ agents: Object.fromEntries(
 
 - [ ] **Step 4: Update config.test.ts — verify timeoutSeconds**
 
-Edit `claw-connect/test/config.test.ts` — add assertions to the existing `loadServerConfig` test:
+Edit `tidepool/test/config.test.ts` — add assertions to the existing `loadServerConfig` test:
 
 ```typescript
 // ADD inside the "loads and parses server.toml" test, after the existing assertions:
@@ -573,15 +573,15 @@ Edit `claw-connect/test/config.test.ts` — add assertions to the existing `load
 
 - [ ] **Step 5: Run tests to verify**
 
-Run: `cd claw-connect && pnpm test -- test/config.test.ts`
+Run: `cd tidepool && pnpm test -- test/config.test.ts`
 Expected: All tests PASS.
 
 - [ ] **Step 6: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: May fail if other files reference `AgentConfig` without providing `timeoutSeconds`. Fix any type errors by adding the field where `AgentConfig` objects are constructed (test fixtures, e2e setup, etc.). Every place that constructs an `AgentConfig` inline needs `timeoutSeconds`:
 
-In `claw-connect/test/middleware.test.ts`, update the agent config:
+In `tidepool/test/middleware.test.ts`, update the agent config:
 
 ```typescript
 // BEFORE:
@@ -600,7 +600,7 @@ In `claw-connect/test/middleware.test.ts`, update the agent config:
 },
 ```
 
-In `claw-connect/test/e2e.test.ts`, update both Alice's and Bob's agent configs:
+In `tidepool/test/e2e.test.ts`, update both Alice's and Bob's agent configs:
 
 ```typescript
 // BEFORE (Alice):
@@ -634,7 +634,7 @@ In `claw-connect/test/e2e.test.ts`, update both Alice's and Bob's agent configs:
 },
 ```
 
-In `claw-connect/bin/cli.ts`, update the register command where it writes agent config:
+In `tidepool/bin/cli.ts`, update the register command where it writes agent config:
 
 ```typescript
 // BEFORE:
@@ -655,14 +655,14 @@ In `claw-connect/bin/cli.ts`, update the register command where it writes agent 
 
 - [ ] **Step 7: Re-run typecheck and full test suite**
 
-Run: `cd claw-connect && pnpm typecheck && pnpm test`
+Run: `cd tidepool && pnpm typecheck && pnpm test`
 Expected: No type errors. All tests PASS.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add claw-connect/src/types.ts claw-connect/src/config.ts claw-connect/fixtures/server.toml claw-connect/test/config.test.ts claw-connect/test/middleware.test.ts claw-connect/test/e2e.test.ts claw-connect/bin/cli.ts
-git commit -m "feat(claw-connect): add timeoutSeconds to AgentConfig with 30s default"
+git add tidepool/src/types.ts tidepool/src/config.ts tidepool/fixtures/server.toml tidepool/test/config.test.ts tidepool/test/middleware.test.ts tidepool/test/e2e.test.ts tidepool/bin/cli.ts
+git commit -m "feat(tidepool): add timeoutSeconds to AgentConfig with 30s default"
 ```
 
 ---
@@ -670,12 +670,12 @@ git commit -m "feat(claw-connect): add timeoutSeconds to AgentConfig with 30s de
 ### Task 4: Wire Rate Limiters into Middleware
 
 **Files:**
-- Modify: `claw-connect/src/middleware.ts`
-- Modify: `claw-connect/test/middleware.test.ts`
+- Modify: `tidepool/src/middleware.ts`
+- Modify: `tidepool/test/middleware.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `claw-connect/test/middleware.test.ts`:
+Add to `tidepool/test/middleware.test.ts`:
 
 ```typescript
 import {
@@ -713,12 +713,12 @@ describe("createRateLimitChecker", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd claw-connect && pnpm test -- test/middleware.test.ts`
+Run: `cd tidepool && pnpm test -- test/middleware.test.ts`
 Expected: FAIL — `createRateLimitChecker` is not exported from middleware.
 
 - [ ] **Step 3: Update middleware.ts — add rate limit checker**
 
-Edit `claw-connect/src/middleware.ts` — add the import and new function:
+Edit `tidepool/src/middleware.ts` — add the import and new function:
 
 ```typescript
 // ADD at the top:
@@ -743,14 +743,14 @@ export function createRateLimitChecker(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd claw-connect && pnpm test -- test/middleware.test.ts`
+Run: `cd tidepool && pnpm test -- test/middleware.test.ts`
 Expected: All tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add claw-connect/src/middleware.ts claw-connect/test/middleware.test.ts
-git commit -m "feat(claw-connect): rate limit checker in middleware pipeline"
+git add tidepool/src/middleware.ts tidepool/test/middleware.test.ts
+git commit -m "feat(tidepool): rate limit checker in middleware pipeline"
 ```
 
 ---
@@ -758,7 +758,7 @@ git commit -m "feat(claw-connect): rate limit checker in middleware pipeline"
 ### Task 5: Wire Everything into server.ts
 
 **Files:**
-- Modify: `claw-connect/src/server.ts`
+- Modify: `tidepool/src/server.ts`
 
 This task modifies the `createPublicApp` function to implement the full middleware pipeline from the spec:
 
@@ -775,7 +775,7 @@ Inbound A2A request over mTLS
 
 - [ ] **Step 1: Update imports in server.ts**
 
-Edit `claw-connect/src/server.ts` — add imports at the top:
+Edit `tidepool/src/server.ts` — add imports at the top:
 
 ```typescript
 // ADD these imports:
@@ -793,7 +793,7 @@ import {
 
 - [ ] **Step 2: Add helper to send A2A error responses**
 
-Add this helper function in `claw-connect/src/server.ts`, before `createPublicApp`:
+Add this helper function in `tidepool/src/server.ts`, before `createPublicApp`:
 
 ```typescript
 function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
@@ -806,7 +806,7 @@ function sendA2AError(res: express.Response, error: A2AErrorResponse): void {
 
 - [ ] **Step 3: Initialize rate limiter buckets in startServer**
 
-Edit `claw-connect/src/server.ts` — in the `startServer` function, after loading config and before creating the apps, add rate limiter initialization:
+Edit `tidepool/src/server.ts` — in the `startServer` function, after loading config and before creating the apps, add rate limiter initialization:
 
 ```typescript
 // ADD after: const remoteAgents = opts.remoteAgents ?? [];
@@ -830,7 +830,7 @@ for (const [name, agentConfig] of Object.entries(serverConfig.agents)) {
 
 - [ ] **Step 4: Update createPublicApp signature to accept rate limiter state**
 
-Edit `claw-connect/src/server.ts`:
+Edit `tidepool/src/server.ts`:
 
 ```typescript
 // BEFORE:
@@ -868,7 +868,7 @@ const publicApp = createPublicApp(
 
 - [ ] **Step 5: Rewrite the public A2A proxy route with the full middleware pipeline**
 
-Edit `claw-connect/src/server.ts` — replace the existing `app.post("/:tenant/*", ...)` handler inside `createPublicApp` with:
+Edit `tidepool/src/server.ts` — replace the existing `app.post("/:tenant/*", ...)` handler inside `createPublicApp` with:
 
 ```typescript
   // A2A proxy endpoint per tenant — full middleware pipeline
@@ -974,14 +974,14 @@ Edit `claw-connect/src/server.ts` — replace the existing `app.post("/:tenant/*
 
 - [ ] **Step 6: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors. If there are issues, fix them before continuing.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add claw-connect/src/server.ts
-git commit -m "feat(claw-connect): full middleware pipeline with rate limits, A2A errors, and timeout"
+git add tidepool/src/server.ts
+git commit -m "feat(tidepool): full middleware pipeline with rate limits, A2A errors, and timeout"
 ```
 
 ---
@@ -989,11 +989,11 @@ git commit -m "feat(claw-connect): full middleware pipeline with rate limits, A2
 ### Task 6: End-to-End Rate Limit and Timeout Tests
 
 **Files:**
-- Create: `claw-connect/test/e2e-rate-limit.test.ts`
+- Create: `tidepool/test/e2e-rate-limit.test.ts`
 
 - [ ] **Step 1: Write the e2e tests**
 
-Create `claw-connect/test/e2e-rate-limit.test.ts`:
+Create `tidepool/test/e2e-rate-limit.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -1356,7 +1356,7 @@ describe("e2e: rate limiting and timeout", () => {
 
 - [ ] **Step 2: Run the e2e test**
 
-Run: `cd claw-connect && pnpm test -- test/e2e-rate-limit.test.ts`
+Run: `cd tidepool && pnpm test -- test/e2e-rate-limit.test.ts`
 Expected: All tests PASS.
 
 If there are failures, common issues:
@@ -1366,14 +1366,14 @@ If there are failures, common issues:
 
 - [ ] **Step 3: Run the full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests PASS (existing Phase 1 tests + new Phase 3 tests).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add claw-connect/test/e2e-rate-limit.test.ts
-git commit -m "test(claw-connect): e2e tests for rate limits, timeout, and A2A error responses"
+git add tidepool/test/e2e-rate-limit.test.ts
+git commit -m "test(tidepool): e2e tests for rate limits, timeout, and A2A error responses"
 ```
 
 ---
@@ -1382,17 +1382,17 @@ git commit -m "test(claw-connect): e2e tests for rate limits, timeout, and A2A e
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd claw-connect && pnpm test`
+Run: `cd tidepool && pnpm test`
 Expected: All tests PASS.
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd claw-connect && pnpm typecheck`
+Run: `cd tidepool && pnpm typecheck`
 Expected: No errors.
 
 - [ ] **Step 3: Verify the middleware pipeline matches the spec**
 
-Review `claw-connect/src/server.ts` and confirm the `createPublicApp` handler follows this exact order:
+Review `tidepool/src/server.ts` and confirm the `createPublicApp` handler follows this exact order:
 
 1. Server rate limit check → 429 with Retry-After
 2. Extract peer cert → TASK_STATE_REJECTED if missing
@@ -1405,6 +1405,6 @@ Review `claw-connect/src/server.ts` and confirm the `createPublicApp` handler fo
 - [ ] **Step 4: Commit any final fixes**
 
 ```bash
-git add -A claw-connect/
-git commit -m "feat(claw-connect): Phase 3 complete — rate limiting, timeout, and A2A error handling"
+git add -A tidepool/
+git commit -m "feat(tidepool): Phase 3 complete — rate limiting, timeout, and A2A error handling"
 ```

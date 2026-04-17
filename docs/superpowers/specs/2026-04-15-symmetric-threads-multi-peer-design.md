@@ -5,7 +5,7 @@
 
 ## Background
 
-A Claude agent road-tested the current claw-connect + a2a-claude-code-adapter system and surfaced two must-fix issues plus several nice-to-haves:
+A Claude agent road-tested the current tidepool + a2a-claude-code-adapter system and surfaced two must-fix issues plus several nice-to-haves:
 
 1. **Asymmetric reply** — only the non-initiator can reply on a given task_id; continuing a conversation requires choreographing who opens what.
 2. **Inbound events lack peer identity** — channel events don't say who sent them; multi-peer routing is impossible.
@@ -18,12 +18,12 @@ This spec redesigns the system to fix (1) and (2) cleanly, ships (nice-to-have) 
 - **Group messaging / multicast** — not in A2A spec; deferred to its own spec when concrete need surfaces.
 - **Peer presence / `peer_status`** — would require a custom A2A extension; deferred.
 - **Cross-session persistence of thread history** — adapter is per-session; thread history dies with the Claude Code session by design.
-- **Backwards compatibility with the current `claw_connect_reply` / sync-await flow** — we're cleanly breaking it.
+- **Backwards compatibility with the current `tidepool_reply` / sync-await flow** — we're cleanly breaking it.
 
 ## Guiding principles
 
 1. **Wire is pure A2A.** No custom extensions. We use only `messageId`, `contextId`, `metadata`, `parts`, and standard `message:send`. If A2A evolves, peers negotiate via Agent Card; we ride along.
-2. **claw-connect server stays agent-agnostic.** It is a NAT-style relay + identity injector. It knows nothing about Claude Code, channels, threads, or any agent UX. Adapters connect agent-specific functionality.
+2. **tidepool server stays agent-agnostic.** It is a NAT-style relay + identity injector. It knows nothing about Claude Code, channels, threads, or any agent UX. Adapters connect agent-specific functionality.
 3. **Adapters are per-agent.** Each agent runtime (Claude Code today; possibly Codex, a CLI bot, or third-party A2A clients tomorrow) has its own adapter. Adapters need not implement the same features. Nothing on the wire requires any specific adapter feature.
 4. **Full interoperability.** A peer that doesn't implement `list_threads` or `thread_history` is still a fully-participating peer. It just loses those local UX features.
 5. **Ephemeral state.** No disk persistence. The adapter is per-session; the server is per-process; the wire is stateless. Lifetimes match the user's mental model.
@@ -39,14 +39,14 @@ Pure protocol. Each `message:send` carries:
 |---|---|
 | `message.messageId` | Sender-minted UUID. Dedup + logs. |
 | `message.contextId` | First message in a thread mints; all subsequent messages in the thread reuse. The thread identifier. |
-| `message.metadata.from` | **Set by the receiving claw-connect.** The recipient's local handle for the sender. Sender-supplied values are ignored/overwritten. |
+| `message.metadata.from` | **Set by the receiving tidepool.** The recipient's local handle for the sender. Sender-supplied values are ignored/overwritten. |
 | `message.parts` | Content (text only initially; A2A's `parts` model leaves room for richer types later). |
 
 Each `message:send` returns a `Task` in state `completed` with no reply message — pure ack. Replies travel as fresh `message:send` calls in the other direction, reusing `contextId`. No task continuation; no streaming.
 
 A2A's `tasks:list`, `tasks:get`, etc. are **not required** by this design. Adapters maintain their own local state.
 
-### Layer 2 — claw-connect server (NAT-style relay)
+### Layer 2 — tidepool server (NAT-style relay)
 
 Stateless. Routes `message:send` between local agents and remote peers. Its only new responsibility is **identity injection**:
 
@@ -90,7 +90,7 @@ Maps A2A ↔ Claude Code channels. Per-session, in-memory, ephemeral.
 Every inbound channel event has this exact shape:
 
 ```
-<channel source="claw-connect" peer="bob" context_id="C-uuid" task_id="T-uuid" message_id="M-uuid">
+<channel source="tidepool" peer="bob" context_id="C-uuid" task_id="T-uuid" message_id="M-uuid">
 text content here
 </channel>
 ```
@@ -99,7 +99,7 @@ Attributes (all required):
 
 | Attribute | Source | Purpose |
 |---|---|---|
-| `source` | Auto, from MCP server name | Always `"claw-connect"`. |
+| `source` | Auto, from MCP server name | Always `"tidepool"`. |
 | `peer` | `metadata.from` (server-injected) | Local handle of the sender. |
 | `context_id` | `message.contextId` | Thread identifier. Pass back as `thread` to continue. |
 | `task_id` | Adapter-minted per inbound | Per-message handle. Informational. |
@@ -127,11 +127,11 @@ Five tools. One outbound primitive. No prefix on names (Claude Code already name
 
 **INSTRUCTIONS string** (sent to Claude at MCP server registration):
 
-> This MCP server connects you to peer agents over the claw-connect network. Inbound messages arrive as `<channel source="claw-connect" peer="..." context_id="..." task_id="..." message_id="...">` events. To respond, call `send` with `thread=<context_id>` from the tag — there is no separate reply tool. To start a new conversation, call `send` without `thread`. Use `list_peers` before sending; never guess handles. Use `list_threads` when interleaving multiple peers, and `thread_history` to re-load context after a gap.
+> This MCP server connects you to peer agents over the tidepool network. Inbound messages arrive as `<channel source="tidepool" peer="..." context_id="..." task_id="..." message_id="...">` events. To respond, call `send` with `thread=<context_id>` from the tag — there is no separate reply tool. To start a new conversation, call `send` without `thread`. Use `list_peers` before sending; never guess handles. Use `list_threads` when interleaving multiple peers, and `thread_history` to re-load context after a gap.
 
 **Removed from current surface:**
-- `claw_connect_reply` — there is no reply primitive. `send` covers all outbound.
-- `claw_connect_*` prefix on all tool names — Claude Code namespaces automatically.
+- `tidepool_reply` — there is no reply primitive. `send` covers all outbound.
+- `tidepool_*` prefix on all tool names — Claude Code namespaces automatically.
 
 ## Error handling
 
@@ -149,17 +149,17 @@ Four layers mirroring the architecture.
 
 1. **Adapter unit tests** (vitest, no network): channel event mapping, outbound build, in-memory store semantics + eviction, MCP tool dispatch, error result shapes.
 2. **Adapter integration** (vitest, real HTTP, mock relay): symmetric round-trip with `context_id` reuse; either-side initiation; structured error returns on relay failure.
-3. **claw-connect server** (vitest): `X-Agent` validation; mTLS path with `X-Sender-Agent` and remote→local handle translation via `remotes.toml`; body pass-through except `metadata.from`.
+3. **tidepool server** (vitest): `X-Agent` validation; mTLS path with `X-Sender-Agent` and remote→local handle translation via `remotes.toml`; body pass-through except `metadata.from`.
 4. **End-to-end** (real daemon + adapter subprocesses): three-peer interleaving with correct `peer` attribution; thread continuation; `list_threads` accuracy; structured error on dead peer; ephemeral-store contract (empty after restart).
 
-Removed tests: `claw_connect_reply` flow, `PendingRegistry` timeout, sync request-response correlation.
+Removed tests: `tidepool_reply` flow, `PendingRegistry` timeout, sync request-response correlation.
 
 ## Migration
 
 Breaking changes to the public surface:
-- `claw_connect_reply` tool removed.
-- `claw_connect_send` semantics changed (returns ack, no longer awaits reply via channel event).
-- All MCP tool names lose `claw_connect_` prefix.
+- `tidepool_reply` tool removed.
+- `tidepool_send` semantics changed (returns ack, no longer awaits reply via channel event).
+- All MCP tool names lose `tidepool_` prefix.
 - Channel tag gains `peer`, `context_id`, `message_id` attributes.
 
 Internal removals:
@@ -173,7 +173,7 @@ Wire-level (A2A) changes are zero — we're using only spec primitives.
 
 ## What this design intentionally leaves open
 
-- **Group messaging.** Future spec. Will likely use `contextId` shared across N peers, with claw-connect fan-out.
+- **Group messaging.** Future spec. Will likely use `contextId` shared across N peers, with tidepool fan-out.
 - **Peer presence / status.** Future spec, custom A2A extension.
 - **Richer message parts** (file/data parts). Adapter currently text-only; richer parts are additive.
 - **Cross-session thread persistence.** If a real need surfaces, the in-memory store can grow a JSONL-backed mode. For now, ephemeral matches the session boundary.

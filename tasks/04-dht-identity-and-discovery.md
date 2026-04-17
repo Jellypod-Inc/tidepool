@@ -6,7 +6,7 @@ so they belong together.
 
 ## Context
 
-ClawConnect has two related gaps:
+Tidepool has two related gaps:
 
 1. **Identity is a raw fingerprint with no rotation.** If a key leaks, the
    operator must regenerate and manually re-friend everyone. There is no
@@ -66,7 +66,7 @@ have a cached copy locally, so existing friendships still work.
 
 ```
 ┌─────────────────────────────────────┐
-│          claw-connect daemon        │
+│          tidepool daemon        │
 │                                     │
 │  ┌───────────┐   ┌───────────────┐  │
 │  │ DHT Client│   │ DID Manager   │  │
@@ -117,7 +117,7 @@ This is a breaking change to the identity model. Migration path:
 
 ### Phase 1: dual mode
 
-- `claw-connect init` generates an Ed25519 keypair AND creates a `did:dht`
+- `tidepool init` generates an Ed25519 keypair AND creates a `did:dht`
   identifier. The old X.509 cert is still generated for backward compat.
 - `friends.toml` accepts both formats:
   ```toml
@@ -133,13 +133,13 @@ This is a breaking change to the identity model. Migration path:
 
 - Deprecate raw fingerprint config
 - All new friendships use DIDs
-- `claw-connect friend add` accepts a DID string
+- `tidepool friend add` accepts a DID string
 - Friending UX: share your DID (a single string) instead of fingerprint +
   endpoint separately
 
 ### Phase 3: key rotation
 
-- `claw-connect identity rotate` generates a new keypair, updates the DID
+- `tidepool identity rotate` generates a new keypair, updates the DID
   document, re-publishes to DHT
 - Friends re-resolve the DID on next connect and get the new key
 - No out-of-band coordination needed
@@ -149,10 +149,10 @@ This is a breaking change to the identity model. Migration path:
 
 Separate from identity, but sharing the same DHT client.
 
-- Peer announces a signed record at `H("clawconnect:" + handle)` containing:
+- Peer announces a signed record at `H("tidepool:" + handle)` containing:
   `{did, endpoint, agents: [{name, description}], timestamp}`
-- Lookups: `claw-connect discovery find <handle>` or
-  `claw-connect discovery find --did <did>`
+- Lookups: `tidepool discovery find <handle>` or
+  `tidepool discovery find --did <did>`
 - Results are candidates only — finding a peer does not friend them. First
   contact goes through the existing connection-request handshake.
 - Opt-in via `server.toml`:
@@ -178,7 +178,7 @@ is the underlying identity; handles remain the user-facing addressing layer.
 ## Acceptance criteria
 
 ### Identity (Phase 1 + 2)
-- `claw-connect init` generates Ed25519 keypair and publishes `did:dht`
+- `tidepool init` generates Ed25519 keypair and publishes `did:dht`
 - `friends.toml` accepts `did = "did:dht:..."` for friend entries
 - mTLS handshake resolves DID → current public key and verifies peer cert
 - DID document is re-published to DHT every 12 hours while daemon runs
@@ -186,7 +186,7 @@ is the underlying identity; handles remain the user-facing addressing layer.
 - Existing fingerprint-based friends continue to work (backward compat)
 
 ### Key rotation (Phase 3)
-- `claw-connect identity rotate` updates DID document with new key
+- `tidepool identity rotate` updates DID document with new key
 - Friends re-resolve and accept the new key without manual intervention
 - Rotation is logged to audit log (task 02)
 - A rotation signed with the wrong key is rejected
@@ -195,7 +195,7 @@ is the underlying identity; handles remain the user-facing addressing layer.
 - `[discovery.dht]` registers as a discovery provider
 - Disabled by default
 - Announcements are signed; lookups verify signatures
-- `claw-connect discovery find <handle>` returns matching peers
+- `tidepool discovery find <handle>` returns matching peers
 - A discovered peer still requires friending before messages flow
 - Integration test: two peers find each other via DHT and complete handshake
 
@@ -234,13 +234,13 @@ Large — 4 to 5 weeks total across all phases.
 
 ## File pointers
 
-- `packages/claw-connect/src/identity.ts` — current X.509 identity generation
+- `packages/tidepool/src/identity.ts` — current X.509 identity generation
   (will be extended/replaced)
-- `packages/claw-connect/src/outbound-tls.ts` — fingerprint pinning (will
+- `packages/tidepool/src/outbound-tls.ts` — fingerprint pinning (will
   add DID resolution path)
-- `packages/claw-connect/src/middleware.ts` — friend validation
-- `packages/claw-connect/src/discovery/registry.ts` — discovery provider
+- `packages/tidepool/src/middleware.ts` — friend validation
+- `packages/tidepool/src/discovery/registry.ts` — discovery provider
   interface
-- `packages/claw-connect/THREATS.md` — rotation/revocation gap documentation
-- New: `packages/claw-connect/src/dht/` — DHT client wrapper, DID manager,
+- `packages/tidepool/THREATS.md` — rotation/revocation gap documentation
+- New: `packages/tidepool/src/dht/` — DHT client wrapper, DID manager,
   discovery provider

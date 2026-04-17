@@ -1,4 +1,4 @@
-# Claw Connect: Revised Design Spec
+# Tidepool: Revised Design Spec
 
 A transparent A2A proxy that adds identity, trust, and access control to agent-to-agent communication.
 
@@ -6,14 +6,14 @@ A transparent A2A proxy that adds identity, trust, and access control to agent-t
 
 ## Scope
 
-Claw Connect is responsible for four things:
+Tidepool is responsible for four things:
 
 1. **Identity** — generating and managing mTLS certs per agent
 2. **Connection** — friend requests, approval, revocation
 3. **Communication** — proxying A2A messages between local agents and remote agents
 4. **Discovery** — finding agents via mDNS, cloud directory, or static config
 
-Claw Connect is NOT responsible for:
+Tidepool is NOT responsible for:
 
 - What an agent does with a request (file access, model choice, tools) — that's the agent's concern
 - Message persistence — there is none
@@ -22,9 +22,9 @@ Claw Connect is NOT responsible for:
 
 ### Core Principle: Transparent A2A Proxy
 
-Claw Connect is A2A in, A2A out. It never transforms payloads. Both the local interface (agents on localhost) and the public interface (remote peers over mTLS) speak standard A2A. Agents don't know Claw Connect exists — they just see A2A peers.
+Tidepool is A2A in, A2A out. It never transforms payloads. Both the local interface (agents on localhost) and the public interface (remote peers over mTLS) speak standard A2A. Agents don't know Tidepool exists — they just see A2A peers.
 
-Any A2A-compatible agent can register with Claw Connect, not just OpenClaw. If A2A evolves (new message types, streaming modes, task states), they pass through automatically.
+Any A2A-compatible agent can register with Tidepool, not just OpenClaw. If A2A evolves (new message types, streaming modes, task states), they pass through automatically.
 
 ---
 
@@ -32,7 +32,7 @@ Any A2A-compatible agent can register with Claw Connect, not just OpenClaw. If A
 
 **Agents are the entities. Servers are infrastructure.**
 
-- Multiple agents register with one Claw Connect server
+- Multiple agents register with one Tidepool server
 - Peers address agents directly using A2A's `tenant` field — they don't address servers
 - Each agent has its own identity (cert + fingerprint), Agent Card, and description
 - Discovery returns agents, not servers
@@ -40,7 +40,7 @@ Any A2A-compatible agent can register with Claw Connect, not just OpenClaw. If A
 
 ### How Tenant Routing Works
 
-A2A v1.0 natively supports multi-tenant servers. Every request can include a `tenant` parameter, and URLs support `/{tenant}/message:send`. Claw Connect uses this directly:
+A2A v1.0 natively supports multi-tenant servers. Every request can include a `tenant` parameter, and URLs support `/{tenant}/message:send`. Tidepool uses this directly:
 
 ```
 POST https://bob.example.com:9900/rust-expert/message:send
@@ -63,7 +63,7 @@ On the network, agents are identified by cert fingerprint. Handles are local nic
 
 ### Certificate Lifecycle
 
-- Generated during `claw-connect register` — self-signed, no expiry in v1
+- Generated during `tidepool register` — self-signed, no expiry in v1
 - Private key never leaves the machine
 - If compromised: regenerate cert, re-establish friendships manually
 - Key rotation protocol is a v2 concern
@@ -77,7 +77,7 @@ On the network, agents are identified by cert fingerprint. Handles are local nic
 ### Storage
 
 ```
-~/.claw-connect/
+~/.tidepool/
 ├── server.toml              # Server config (port, global rate limit)
 ├── friends.toml             # Server-level friends list
 └── agents/
@@ -184,30 +184,30 @@ Local agent                         Remote agent
     │                                    ▲
     │ A2A (localhost)                    │ A2A (localhost)
     ▼                                    │
-Local Claw Connect ──── mTLS ────► Remote Claw Connect
+Local Tidepool ──── mTLS ────► Remote Tidepool
                     A2A (internet)
 ```
 
-Every arrow is standard A2A. Claw Connect is invisible to both agents.
+Every arrow is standard A2A. Tidepool is invisible to both agents.
 
 ### Outbound (your agent asking a remote peer)
 
-1. Your local agent fetches Agent Cards from Claw Connect's local interface
+1. Your local agent fetches Agent Cards from Tidepool's local interface
 2. Sees "bobs-rust" as an available remote agent with description and skills
 3. Sends standard A2A `SendMessage` to `http://localhost:9900/bobs-rust/message:send`
-4. Claw Connect maps the local handle "bobs-rust" to the remote endpoint and tenant: `https://bob.example.com:9900/rust-expert/message:send`
+4. Tidepool maps the local handle "bobs-rust" to the remote endpoint and tenant: `https://bob.example.com:9900/rust-expert/message:send`
 5. Attaches the local agent's mTLS cert
 6. Forwards the A2A request unchanged (only the URL changes — local handle → remote tenant)
 7. Response flows back as A2A through the same path
 
-**Handle mapping:** On the local interface, Claw Connect uses your local handles as A2A tenants. On the public interface, it uses the registered agent names as tenants. Claw Connect maintains the mapping between local handles and remote endpoint+tenant pairs.
+**Handle mapping:** On the local interface, Tidepool uses your local handles as A2A tenants. On the public interface, it uses the registered agent names as tenants. Tidepool maintains the mapping between local handles and remote endpoint+tenant pairs.
 
 ### Inbound (a remote peer asking your agent)
 
 1. A2A request arrives over mTLS on the public interface
 2. Middleware pipeline: server rate limit → friend check → agent lookup → agent rate limit → scope check
 3. Forward A2A to agent's `local_endpoint`
-4. Agent processes the request (using its own model, tools, files — Claw Connect doesn't know or care)
+4. Agent processes the request (using its own model, tools, files — Tidepool doesn't know or care)
 5. Response flows back as A2A
 
 ### What Gets Stored After an Exchange
@@ -216,13 +216,13 @@ Nothing. The exchange is ephemeral. The only durable state is `server.toml`, `fr
 
 ### Streaming
 
-`SendStreamingMessage` returns an SSE stream. Claw Connect proxies the stream transparently:
+`SendStreamingMessage` returns an SSE stream. Tidepool proxies the stream transparently:
 
 ```
 Local agent → SSE → Local CC → SSE over mTLS → Remote CC → SSE → Remote agent
 ```
 
-Claw Connect doesn't buffer, transform, or add to stream chunks. If the stream breaks (network drop, timeout), both ends are closed. If `timeout_seconds` passes with no data, the server sends `TASK_STATE_FAILED` and closes the stream.
+Tidepool doesn't buffer, transform, or add to stream chunks. If the stream breaks (network drop, timeout), both ends are closed. If `timeout_seconds` passes with no data, the server sends `TASK_STATE_FAILED` and closes the stream.
 
 ---
 
@@ -260,7 +260,7 @@ and seem like legitimate agents, not spam.
 
 ### Wire Format
 
-Connection requests use standard A2A with a Claw Connect extension.
+Connection requests use standard A2A with a Tidepool extension.
 
 **Request:**
 
@@ -270,9 +270,9 @@ Connection requests use standard A2A with a Claw Connect extension.
     "messageId": "uuid",
     "role": "ROLE_USER",
     "parts": [{"kind": "text", "text": "CONNECTION_REQUEST"}],
-    "extensions": ["https://clawconnect.dev/ext/connection/v1"],
+    "extensions": ["https://tidepool.dev/ext/connection/v1"],
     "metadata": {
-      "https://clawconnect.dev/ext/connection/v1": {
+      "https://tidepool.dev/ext/connection/v1": {
         "type": "request",
         "reason": "Learning Rust error handling patterns",
         "agent_card_url": "https://alice.example.com:9900/alice-dev/.well-known/agent-card.json"
@@ -294,7 +294,7 @@ The requesting agent's cert fingerprint is extracted from the mTLS handshake, no
     "artifactId": "connection-result",
     "parts": [{"kind": "text", "text": "Connection accepted"}],
     "metadata": {
-      "https://clawconnect.dev/ext/connection/v1": {
+      "https://tidepool.dev/ext/connection/v1": {
         "type": "accepted"
       }
     }
@@ -312,7 +312,7 @@ The requesting agent's cert fingerprint is extracted from the mTLS handshake, no
     "artifactId": "connection-result",
     "parts": [{"kind": "text", "text": "Connection denied"}],
     "metadata": {
-      "https://clawconnect.dev/ext/connection/v1": {
+      "https://tidepool.dev/ext/connection/v1": {
         "type": "denied",
         "reason": "Not accepting connections at this time"
       }
@@ -375,7 +375,7 @@ enabled = true
 ```toml
 [discovery.directory]
 enabled = true
-url = "https://directory.clawconnect.dev"
+url = "https://directory.tidepool.dev"
 ```
 
 Registration requires the agent's mTLS cert. The directory stores the cert fingerprint alongside the entry. Only the cert holder can update or remove their registration. Prevents impersonation.
@@ -426,55 +426,55 @@ Discovery: "Found rust-expert at https://bob.example.com:9900"
 
 ```bash
 # Server setup
-claw-connect init                              # Create ~/.claw-connect/, generate server.toml
-claw-connect start                             # Start the server
-claw-connect status                            # Show server status, registered agents, friend count
+tidepool init                              # Create ~/.tidepool/, generate server.toml
+tidepool start                             # Start the server
+tidepool status                            # Show server status, registered agents, friend count
 
 # Register agents
-claw-connect register \
+tidepool register \
   --name "rust-expert" \
   --description "Expert in Rust and systems programming" \
   --endpoint "http://localhost:18800"
 # This single command:
 #   1. Generates a cert + private key for the agent
 #   2. Creates the Agent Card
-#   3. Registers the agent with the Claw Connect server
+#   3. Registers the agent with the Tidepool server
 #   4. Optionally publishes to the cloud directory
 
-claw-connect unregister rust-expert
-claw-connect agents                            # List registered agents
+tidepool unregister rust-expert
+tidepool agents                            # List registered agents
 
 # Friends
-claw-connect friends                           # List all friends
-claw-connect friends add \
+tidepool friends                           # List all friends
+tidepool friends add \
   --handle "alice-agent" \
   --fingerprint "sha256:a3f8..."               # Manual add, access to all agents
-claw-connect friends add \
+tidepool friends add \
   --handle "carols-ml" \
   --fingerprint "sha256:9c1d..." \
   --agents rust-expert                         # Scoped to specific agent
-claw-connect friends remove alice-agent
+tidepool friends remove alice-agent
 
 # Discovery
-claw-connect search "rust systems programming"
-claw-connect search --local                    # mDNS only
+tidepool search "rust systems programming"
+tidepool search --local                    # mDNS only
 
 # Connection requests (from discovery results or direct URL)
-claw-connect connect <agent-card-url>          # Send connection request to a discovered agent
-claw-connect connect --url https://bob.example.com:9900/rust-expert  # Direct URL
-claw-connect requests                          # View pending inbound requests (mode=deny)
+tidepool connect <agent-card-url>          # Send connection request to a discovered agent
+tidepool connect --url https://bob.example.com:9900/rust-expert  # Direct URL
+tidepool requests                          # View pending inbound requests (mode=deny)
 
 # Testing
-claw-connect ping <handle>                     # Check if reachable
+tidepool ping <handle>                     # Check if reachable
 ```
 
 ---
 
 ## Relationship to A2A v1.0
 
-Claw Connect is built entirely on A2A v1.0 standards:
+Tidepool is built entirely on A2A v1.0 standards:
 
-| A2A concept | How Claw Connect uses it |
+| A2A concept | How Tidepool uses it |
 |-------------|-------------------------|
 | Agent Card | Each registered agent has one. Remote agents are synthesized as Agent Cards on the local interface. |
 | Tenant | Maps to registered agents. `/{tenant}/message:send` routes to the right agent. |
@@ -482,9 +482,9 @@ Claw Connect is built entirely on A2A v1.0 standards:
 | SendStreamingMessage | SSE streams proxied transparently. |
 | Task states | `TASK_STATE_REJECTED` for denied connection requests. `TASK_STATE_FAILED` for timeouts. |
 | MutualTlsSecurityScheme | Declared in Agent Card security schemes. Cert fingerprint is the identity. |
-| Extensions | `https://clawconnect.dev/ext/connection/v1` for connection handshake messages. |
+| Extensions | `https://tidepool.dev/ext/connection/v1` for connection handshake messages. |
 
-The only Claw Connect-specific addition to A2A is the connection handshake extension. Everything else is standard A2A.
+The only Tidepool-specific addition to A2A is the connection handshake extension. Everything else is standard A2A.
 
 ---
 
@@ -492,10 +492,10 @@ The only Claw Connect-specific addition to A2A is the connection handshake exten
 
 ### Phase 1: Single-machine proof of concept
 
-**Goal:** Two agents on one machine talk through two Claw Connect servers.
+**Goal:** Two agents on one machine talk through two Tidepool servers.
 
-- Build the Claw Connect server (Express + A2A SDK)
-- `claw-connect init` and `claw-connect register`
+- Build the Tidepool server (Express + A2A SDK)
+- `tidepool init` and `tidepool register`
 - mTLS on the public interface
 - Hardcode friends (skip handshake)
 - Local interface serves Agent Cards for remote agents
@@ -511,9 +511,9 @@ The only Claw Connect-specific addition to A2A is the connection handshake exten
 - `friends.toml` with fingerprint verification
 - Connection handshake (CONNECTION_REQUEST extension)
 - Three modes: `accept`, `deny`, `auto`
-- `claw-connect friends add/remove/list`
-- `claw-connect connect`
-- `claw-connect requests`
+- `tidepool friends add/remove/list`
+- `tidepool connect`
+- `tidepool requests`
 
 **Validates:** trust model works. Unknown agents are rejected. Friends get through.
 
@@ -538,8 +538,8 @@ The only Claw Connect-specific addition to A2A is the connection handshake exten
 - mDNS / DNS-SD provider
 - Cloud directory provider (Convex-backed, cert-authenticated)
 - Static config provider
-- `claw-connect search`
-- Discovery results feed into `claw-connect connect`
+- `tidepool search`
+- Discovery results feed into `tidepool connect`
 
 **Validates:** full discovery → handshake → communication flow end to end.
 
@@ -548,8 +548,8 @@ The only Claw Connect-specific addition to A2A is the connection handshake exten
 **Goal:** Long-running requests stream properly, CLI is complete.
 
 - SSE stream passthrough for `SendStreamingMessage`
-- `claw-connect status` dashboard
-- `claw-connect ping`
+- `tidepool status` dashboard
+- `tidepool ping`
 - Rich Agent Card synthesis on local interface
 
 **Validates:** production-ready for real use.
@@ -569,7 +569,7 @@ The only Claw Connect-specific addition to A2A is the connection handshake exten
 
 | Decision | Alternative | Why |
 |----------|------------|-----|
-| Transparent A2A proxy | Custom protocol or translation layer | Both interfaces are pure A2A. Protocol evolves without Claw Connect changes. Any A2A agent works, not just OpenClaw. |
+| Transparent A2A proxy | Custom protocol or translation layer | Both interfaces are pure A2A. Protocol evolves without Tidepool changes. Any A2A agent works, not just OpenClaw. |
 | Agents are entities, servers are infrastructure | Server-centric model | Peers address agents, not servers. Multiple agents register with one server. Matches how people think about it. |
 | A2A tenant for multi-agent routing | Custom URL paths or payload fields | Tenant is A2A's native multi-agent mechanism. Standard, no extensions needed. |
 | Cert fingerprint as identity | Handles, URLs, API keys | Cryptographic, unforgeable, unique. Handles are local nicknames. |

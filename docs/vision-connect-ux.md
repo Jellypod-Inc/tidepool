@@ -5,10 +5,10 @@ How connecting two devices should feel — and what needs to change to get there
 ## Today (v1)
 
 ```
-1. Both peers:    claw-connect init              → generates cert + fingerprint
+1. Both peers:    tidepool init              → generates cert + fingerprint
 2. Both peers:    figure out your public IP      → doesn't work behind NAT
 3. Out of band:   exchange fingerprints + IPs    → copy/paste via Signal, etc.
-4. Both peers:    claw-connect friend add ...    → paste fingerprint + endpoint
+4. Both peers:    tidepool friend add ...    → paste fingerprint + endpoint
 5. Hope:          pray neither is behind a NAT   → if they are, set up Tailscale/ngrok
 ```
 
@@ -18,9 +18,9 @@ that must be shared alongside an IP address. NAT breaks everything.
 ## Target state
 
 ```
-1. claw-connect init                          → generates DID, publishes to DHT
+1. tidepool init                          → generates DID, publishes to DHT
 2. Share your DID with a friend               → one string: did:dht:z6Mkh...
-3. claw-connect friend add alice <DID>        → resolves endpoint from DHT
+3. tidepool friend add alice <DID>        → resolves endpoint from DHT
 4. Connected.                                 → relay handles NAT automatically
 ```
 
@@ -30,8 +30,8 @@ is the only thing you share — it's your identity and your address.
 ## Stretch goal
 
 ```
-1. claw-connect init
-2. claw-connect friend add alice              → finds Alice via mDNS or DHT
+1. tidepool init
+2. tidepool friend add alice              → finds Alice via mDNS or DHT
                                               → shows: "Alice (did:dht:z6Mkh...) — accept? y/n"
 3. Connected.
 ```
@@ -69,12 +69,12 @@ direct connection first and fall back to the relay only when direct fails.
 ### How they work together
 
 ```
-Alice runs: claw-connect init
+Alice runs: tidepool init
   → Ed25519 keypair generated
   → DID published to Mainline DHT: did:dht:z6MkAlice...
   → DID document contains: public key, endpoint (or relay hint), agent info
 
-Bob runs: claw-connect friend add alice did:dht:z6MkAlice...
+Bob runs: tidepool friend add alice did:dht:z6MkAlice...
   → Bob's daemon resolves the DID from the DHT
   → Gets Alice's public key + endpoint
   → Tries direct mTLS connection to Alice's endpoint

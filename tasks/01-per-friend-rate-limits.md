@@ -58,6 +58,6 @@ Small — ~0.5 day.
 
 ## File pointers
 
-- `packages/claw-connect/src/middleware.ts` — current rate-limit middleware
-- `packages/claw-connect/src/types.ts` — `FriendConfig`, `AgentConfig` types
-- `packages/claw-connect/THREATS.md` — Threat 4
+- `packages/tidepool/src/middleware.ts` — current rate-limit middleware
+- `packages/tidepool/src/types.ts` — `FriendConfig`, `AgentConfig` types
+- `packages/tidepool/THREATS.md` — Threat 4

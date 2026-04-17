@@ -1,8 +1,8 @@
-# `claw-connect claude-code:start` Implementation Plan
+# `tidepool claude-code:start` Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** One-command setup that runs Claude Code with A2A wiring. `claw-connect claude-code:start` does init/register/mcp-json/daemonize/exec-claude. `--debug` runs serve in the foreground and prints second-terminal instructions. `claw-connect stop` and extended `status` manage the daemon.
+**Goal:** One-command setup that runs Claude Code with A2A wiring. `tidepool claude-code:start` does init/register/mcp-json/daemonize/exec-claude. `--debug` runs serve in the foreground and prints second-terminal instructions. `tidepool stop` and extended `status` manage the daemon.
 
 **Architecture:** Thin orchestrator (`cli/claude-code-start.ts`) composed from focused helpers (`name-resolver`, `free-port`, `mcp-json`, `serve-daemon`). Daemon uses `child_process.spawn` with `detached: true` + PID file + append-mode log. Re-entry reads `.mcp.json` for the agent name.
 
@@ -15,26 +15,26 @@
 ## File Structure
 
 **Create (source):**
-- `packages/claw-connect/src/cli/name-resolver.ts`
-- `packages/claw-connect/src/cli/free-port.ts`
-- `packages/claw-connect/src/cli/mcp-json.ts`
-- `packages/claw-connect/src/cli/serve-daemon.ts`
-- `packages/claw-connect/src/cli/stop.ts`
-- `packages/claw-connect/src/cli/claude-code-start.ts`
+- `packages/tidepool/src/cli/name-resolver.ts`
+- `packages/tidepool/src/cli/free-port.ts`
+- `packages/tidepool/src/cli/mcp-json.ts`
+- `packages/tidepool/src/cli/serve-daemon.ts`
+- `packages/tidepool/src/cli/stop.ts`
+- `packages/tidepool/src/cli/claude-code-start.ts`
 
 **Create (tests):**
-- `packages/claw-connect/test/cli/name-resolver.test.ts`
-- `packages/claw-connect/test/cli/free-port.test.ts`
-- `packages/claw-connect/test/cli/mcp-json.test.ts`
-- `packages/claw-connect/test/cli/serve-daemon.test.ts`
-- `packages/claw-connect/test/cli/stop.test.ts`
-- `packages/claw-connect/test/cli/claude-code-start-e2e.test.ts`
+- `packages/tidepool/test/cli/name-resolver.test.ts`
+- `packages/tidepool/test/cli/free-port.test.ts`
+- `packages/tidepool/test/cli/mcp-json.test.ts`
+- `packages/tidepool/test/cli/serve-daemon.test.ts`
+- `packages/tidepool/test/cli/stop.test.ts`
+- `packages/tidepool/test/cli/claude-code-start-e2e.test.ts`
 
 **Modify:**
-- `packages/claw-connect/package.json` — add `unique-names-generator` dep.
-- `packages/claw-connect/src/bin/cli.ts` — wire up new commands + extended help text.
-- `packages/claw-connect/src/cli/status.ts` — append daemon state to output.
-- `packages/claw-connect/test/cli/status.test.ts` — cover daemon-up and daemon-down cases.
+- `packages/tidepool/package.json` — add `unique-names-generator` dep.
+- `packages/tidepool/src/bin/cli.ts` — wire up new commands + extended help text.
+- `packages/tidepool/src/cli/status.ts` — append daemon state to output.
+- `packages/tidepool/test/cli/status.test.ts` — cover daemon-up and daemon-down cases.
 - `packages/a2a-claude-code-adapter/README.md` — lead with `claude-code:start`, demote manual flow.
 
 **Dependency graph between tasks:**
@@ -58,15 +58,15 @@ T1–T6 are independent of each other — could even parallelize.
 ## Task 1: Agent name resolver
 
 **Files:**
-- Create: `packages/claw-connect/src/cli/name-resolver.ts`
-- Test: `packages/claw-connect/test/cli/name-resolver.test.ts`
-- Modify: `packages/claw-connect/package.json` (add `unique-names-generator`)
+- Create: `packages/tidepool/src/cli/name-resolver.ts`
+- Test: `packages/tidepool/test/cli/name-resolver.test.ts`
+- Modify: `packages/tidepool/package.json` (add `unique-names-generator`)
 
 - [ ] **Step 1: Add dependency**
 
 ```bash
-cd /Users/piersonmarks/src/tries/2026-04-13-clawconnect
-pnpm --filter claw-connect add unique-names-generator@^4
+cd /Users/piersonmarks/src/tries/2026-04-13-tidepool
+pnpm --filter tidepool add unique-names-generator@^4
 ```
 
 Expected: package.json updated, lockfile regenerated.
@@ -74,7 +74,7 @@ Expected: package.json updated, lockfile regenerated.
 - [ ] **Step 2: Write the failing test**
 
 ```typescript
-// packages/claw-connect/test/cli/name-resolver.test.ts
+// packages/tidepool/test/cli/name-resolver.test.ts
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import os from "os";
@@ -169,13 +169,13 @@ describe("resolveAgentName", () => {
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `pnpm --filter claw-connect test -- cli/name-resolver`
+Run: `pnpm --filter tidepool test -- cli/name-resolver`
 Expected: FAIL — module does not exist.
 
 - [ ] **Step 4: Implement**
 
 ```typescript
-// packages/claw-connect/src/cli/name-resolver.ts
+// packages/tidepool/src/cli/name-resolver.ts
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -236,14 +236,14 @@ function readAgentFromMcpJson(filePath: string): string | null {
 
 - [ ] **Step 5: Run tests to verify pass**
 
-Run: `pnpm --filter claw-connect test -- cli/name-resolver`
+Run: `pnpm --filter tidepool test -- cli/name-resolver`
 Expected: PASS (6 tests).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/piersonmarks/src/tries/2026-04-13-clawconnect
-git add packages/claw-connect/package.json packages/claw-connect/src/cli/name-resolver.ts packages/claw-connect/test/cli/name-resolver.test.ts pnpm-lock.yaml && git commit -m "feat(claw-connect): agent name resolver with animal fallback"
+cd /Users/piersonmarks/src/tries/2026-04-13-tidepool
+git add packages/tidepool/package.json packages/tidepool/src/cli/name-resolver.ts packages/tidepool/test/cli/name-resolver.test.ts pnpm-lock.yaml && git commit -m "feat(tidepool): agent name resolver with animal fallback"
 ```
 
 ---
@@ -251,13 +251,13 @@ git add packages/claw-connect/package.json packages/claw-connect/src/cli/name-re
 ## Task 2: Free loopback port picker
 
 **Files:**
-- Create: `packages/claw-connect/src/cli/free-port.ts`
-- Test: `packages/claw-connect/test/cli/free-port.test.ts`
+- Create: `packages/tidepool/src/cli/free-port.ts`
+- Test: `packages/tidepool/test/cli/free-port.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// packages/claw-connect/test/cli/free-port.test.ts
+// packages/tidepool/test/cli/free-port.test.ts
 import { describe, it, expect } from "vitest";
 import net from "net";
 import { pickFreeLoopbackPort } from "../../src/cli/free-port.js";
@@ -284,13 +284,13 @@ describe("pickFreeLoopbackPort", () => {
 
 - [ ] **Step 2: Run tests to verify fail**
 
-Run: `pnpm --filter claw-connect test -- cli/free-port`
+Run: `pnpm --filter tidepool test -- cli/free-port`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement**
 
 ```typescript
-// packages/claw-connect/src/cli/free-port.ts
+// packages/tidepool/src/cli/free-port.ts
 import net from "net";
 
 export function pickFreeLoopbackPort(): Promise<number> {
@@ -313,13 +313,13 @@ export function pickFreeLoopbackPort(): Promise<number> {
 
 - [ ] **Step 4: Run tests to verify pass**
 
-Run: `pnpm --filter claw-connect test -- cli/free-port`
+Run: `pnpm --filter tidepool test -- cli/free-port`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/claw-connect/src/cli/free-port.ts packages/claw-connect/test/cli/free-port.test.ts && git commit -m "feat(claw-connect): pick free loopback port helper"
+git add packages/tidepool/src/cli/free-port.ts packages/tidepool/test/cli/free-port.test.ts && git commit -m "feat(tidepool): pick free loopback port helper"
 ```
 
 ---
@@ -327,13 +327,13 @@ git add packages/claw-connect/src/cli/free-port.ts packages/claw-connect/test/cl
 ## Task 3: `.mcp.json` merger
 
 **Files:**
-- Create: `packages/claw-connect/src/cli/mcp-json.ts`
-- Test: `packages/claw-connect/test/cli/mcp-json.test.ts`
+- Create: `packages/tidepool/src/cli/mcp-json.ts`
+- Test: `packages/tidepool/test/cli/mcp-json.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// packages/claw-connect/test/cli/mcp-json.test.ts
+// packages/tidepool/test/cli/mcp-json.test.ts
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import os from "os";
@@ -416,13 +416,13 @@ describe("ensureMcpJsonEntry", () => {
 
 - [ ] **Step 2: Run test to verify fail**
 
-Run: `pnpm --filter claw-connect test -- cli/mcp-json`
+Run: `pnpm --filter tidepool test -- cli/mcp-json`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement**
 
 ```typescript
-// packages/claw-connect/src/cli/mcp-json.ts
+// packages/tidepool/src/cli/mcp-json.ts
 import fs from "fs";
 import path from "path";
 
@@ -494,13 +494,13 @@ function extractAgent(args: unknown[] | undefined): string | null {
 
 - [ ] **Step 4: Run test to verify pass**
 
-Run: `pnpm --filter claw-connect test -- cli/mcp-json`
+Run: `pnpm --filter tidepool test -- cli/mcp-json`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/claw-connect/src/cli/mcp-json.ts packages/claw-connect/test/cli/mcp-json.test.ts && git commit -m "feat(claw-connect): merge .mcp.json a2a entry"
+git add packages/tidepool/src/cli/mcp-json.ts packages/tidepool/test/cli/mcp-json.test.ts && git commit -m "feat(tidepool): merge .mcp.json a2a entry"
 ```
 
 ---
@@ -508,8 +508,8 @@ git add packages/claw-connect/src/cli/mcp-json.ts packages/claw-connect/test/cli
 ## Task 4: Serve daemon supervisor
 
 **Files:**
-- Create: `packages/claw-connect/src/cli/serve-daemon.ts`
-- Test: `packages/claw-connect/test/cli/serve-daemon.test.ts`
+- Create: `packages/tidepool/src/cli/serve-daemon.ts`
+- Test: `packages/tidepool/test/cli/serve-daemon.test.ts`
 
 Design notes:
 - `isServeRunning(configDir, opts?)` checks PID file liveness + HTTP readiness probe. Mockable via an optional `probe` function for unit tests.
@@ -519,7 +519,7 @@ Design notes:
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// packages/claw-connect/test/cli/serve-daemon.test.ts
+// packages/tidepool/test/cli/serve-daemon.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "fs";
 import os from "os";
@@ -661,13 +661,13 @@ describe("spawnServeDaemon", () => {
 
 - [ ] **Step 2: Run tests to verify fail**
 
-Run: `pnpm --filter claw-connect test -- cli/serve-daemon`
+Run: `pnpm --filter tidepool test -- cli/serve-daemon`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement**
 
 ```typescript
-// packages/claw-connect/src/cli/serve-daemon.ts
+// packages/tidepool/src/cli/serve-daemon.ts
 import fs from "fs";
 import path from "path";
 import { spawn as nodeSpawn } from "child_process";
@@ -744,10 +744,10 @@ export async function spawnServeDaemon(opts: SpawnServeDaemonOpts): Promise<{ pi
   const logFd = fs.openSync(logPath, "a");
 
   const spawner = opts.spawner ?? nodeSpawn;
-  const child = spawner("claw-connect", ["serve"], {
+  const child = spawner("tidepool", ["serve"], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
-    env: { ...process.env, CLAW_CONNECT_HOME: opts.configDir },
+    env: { ...process.env, TIDEPOOL_HOME: opts.configDir },
   });
   fs.closeSync(logFd);
 
@@ -774,7 +774,7 @@ export async function spawnServeDaemon(opts: SpawnServeDaemonOpts): Promise<{ pi
     }
     if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath);
     throw new Error(
-      `Claw Connect did not become ready within ${timeoutMs}ms. Check logs at ${logPath}, or rerun with --debug to see output.`,
+      `Tidepool did not become ready within ${timeoutMs}ms. Check logs at ${logPath}, or rerun with --debug to see output.`,
     );
   }
 
@@ -828,13 +828,13 @@ function pad2(n: number): string {
 
 - [ ] **Step 4: Run tests to verify pass**
 
-Run: `pnpm --filter claw-connect test -- cli/serve-daemon`
+Run: `pnpm --filter tidepool test -- cli/serve-daemon`
 Expected: PASS (5 tests). Some may take up to 500ms due to timeouts.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/claw-connect/src/cli/serve-daemon.ts packages/claw-connect/test/cli/serve-daemon.test.ts && git commit -m "feat(claw-connect): serve daemon supervisor (PID file + log)"
+git add packages/tidepool/src/cli/serve-daemon.ts packages/tidepool/test/cli/serve-daemon.test.ts && git commit -m "feat(tidepool): serve daemon supervisor (PID file + log)"
 ```
 
 ---
@@ -842,13 +842,13 @@ git add packages/claw-connect/src/cli/serve-daemon.ts packages/claw-connect/test
 ## Task 5: `stop` command
 
 **Files:**
-- Create: `packages/claw-connect/src/cli/stop.ts`
-- Test: `packages/claw-connect/test/cli/stop.test.ts`
+- Create: `packages/tidepool/src/cli/stop.ts`
+- Test: `packages/tidepool/test/cli/stop.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-// packages/claw-connect/test/cli/stop.test.ts
+// packages/tidepool/test/cli/stop.test.ts
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import os from "os";
@@ -893,13 +893,13 @@ describe("runStop", () => {
 
 - [ ] **Step 2: Run tests to verify fail**
 
-Run: `pnpm --filter claw-connect test -- cli/stop`
+Run: `pnpm --filter tidepool test -- cli/stop`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement**
 
 ```typescript
-// packages/claw-connect/src/cli/stop.ts
+// packages/tidepool/src/cli/stop.ts
 import fs from "fs";
 import path from "path";
 import { PID_FILENAME } from "./serve-daemon.js";
@@ -960,13 +960,13 @@ function sleep(ms: number): Promise<void> {
 
 - [ ] **Step 4: Run tests to verify pass**
 
-Run: `pnpm --filter claw-connect test -- cli/stop`
+Run: `pnpm --filter tidepool test -- cli/stop`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/claw-connect/src/cli/stop.ts packages/claw-connect/test/cli/stop.test.ts && git commit -m "feat(claw-connect): add claw-connect stop command helper"
+git add packages/tidepool/src/cli/stop.ts packages/tidepool/test/cli/stop.test.ts && git commit -m "feat(tidepool): add tidepool stop command helper"
 ```
 
 ---
@@ -974,16 +974,16 @@ git add packages/claw-connect/src/cli/stop.ts packages/claw-connect/test/cli/sto
 ## Task 6: Extend `status` with daemon state
 
 **Files:**
-- Modify: `packages/claw-connect/src/cli/status.ts`
-- Modify: `packages/claw-connect/test/cli-status.test.ts` (or add `test/cli/status.test.ts` if separate)
+- Modify: `packages/tidepool/src/cli/status.ts`
+- Modify: `packages/tidepool/test/cli-status.test.ts` (or add `test/cli/status.test.ts` if separate)
 
 - [ ] **Step 1: Read the current status module**
 
-Before changing anything, open `packages/claw-connect/src/cli/status.ts` and observe the current output shape. The function `runStatus` is presumably returning a formatted string.
+Before changing anything, open `packages/tidepool/src/cli/status.ts` and observe the current output shape. The function `runStatus` is presumably returning a formatted string.
 
 - [ ] **Step 2: Add a failing test that expects daemon info**
 
-If existing tests live at `packages/claw-connect/test/cli-status.test.ts`, add a new `describe` block to that file:
+If existing tests live at `packages/tidepool/test/cli-status.test.ts`, add a new `describe` block to that file:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -1018,12 +1018,12 @@ describe("runStatus — daemon section", () => {
 
 - [ ] **Step 3: Run test to verify fail**
 
-Run: `pnpm --filter claw-connect test -- cli-status`
+Run: `pnpm --filter tidepool test -- cli-status`
 Expected: FAIL — daemon section missing from output.
 
 - [ ] **Step 4: Extend `runStatus`**
 
-Open `packages/claw-connect/src/cli/status.ts`. Add an import:
+Open `packages/tidepool/src/cli/status.ts`. Add an import:
 
 ```typescript
 import { isServeRunning } from "./serve-daemon.js";
@@ -1044,13 +1044,13 @@ Adjust variable names to match whatever the existing function uses (e.g., if the
 
 - [ ] **Step 5: Run test to verify pass**
 
-Run: `pnpm --filter claw-connect test -- cli-status`
+Run: `pnpm --filter tidepool test -- cli-status`
 Expected: PASS. The original status tests must also still pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/claw-connect/src/cli/status.ts packages/claw-connect/test/cli-status.test.ts && git commit -m "feat(claw-connect): status shows daemon state"
+git add packages/tidepool/src/cli/status.ts packages/tidepool/test/cli-status.test.ts && git commit -m "feat(tidepool): status shows daemon state"
 ```
 
 ---
@@ -1058,15 +1058,15 @@ git add packages/claw-connect/src/cli/status.ts packages/claw-connect/test/cli-s
 ## Task 7: `claude-code-start` orchestrator
 
 **Files:**
-- Create: `packages/claw-connect/src/cli/claude-code-start.ts`
-- Test: `packages/claw-connect/test/cli/claude-code-start-e2e.test.ts`
+- Create: `packages/tidepool/src/cli/claude-code-start.ts`
+- Test: `packages/tidepool/test/cli/claude-code-start-e2e.test.ts`
 
 The orchestrator composes all prior helpers. It takes DI for the spawner and for `exec`-ing claude so the test can assert behavior without actually launching Claude Code.
 
 - [ ] **Step 1: Write the failing integration test**
 
 ```typescript
-// packages/claw-connect/test/cli/claude-code-start-e2e.test.ts
+// packages/tidepool/test/cli/claude-code-start-e2e.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "fs";
 import os from "os";
@@ -1102,7 +1102,7 @@ describe("runClaudeCodeStart — fresh repo (default)", () => {
     // Pre-pick a free local port to avoid collisions across tests
     const LOCAL_PORT = 52100;
     // We'll start a stub that responds to the readiness probe so the daemon
-    // check passes without actually spawning claw-connect serve.
+    // check passes without actually spawning tidepool serve.
     const stub = await startStub(LOCAL_PORT);
     servers.push(stub);
 
@@ -1216,13 +1216,13 @@ describe("runClaudeCodeStart — --debug", () => {
 
 - [ ] **Step 2: Run test to verify fail**
 
-Run: `pnpm --filter claw-connect test -- claude-code-start`
+Run: `pnpm --filter tidepool test -- claude-code-start`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement the orchestrator**
 
 ```typescript
-// packages/claw-connect/src/cli/claude-code-start.ts
+// packages/tidepool/src/cli/claude-code-start.ts
 import path from "path";
 import { spawn as nodeSpawn } from "child_process";
 import type { ChildProcess, SpawnOptions } from "child_process";
@@ -1322,9 +1322,9 @@ export async function runClaudeCodeStart(opts: RunClaudeCodeStartOpts): Promise<
 
 async function defaultDebugServeRunner(configDir: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = nodeSpawn("claw-connect", ["serve"], {
+    const child = nodeSpawn("tidepool", ["serve"], {
       stdio: "inherit",
-      env: { ...process.env, CLAW_CONNECT_HOME: configDir },
+      env: { ...process.env, TIDEPOOL_HOME: configDir },
     });
     child.once("error", reject);
     child.once("exit", () => resolve());
@@ -1354,13 +1354,13 @@ const defaultClaudeExecutor: ClaudeExec = (cmd, args, options) => {
 
 - [ ] **Step 4: Run test to verify pass**
 
-Run: `pnpm --filter claw-connect test -- claude-code-start`
+Run: `pnpm --filter tidepool test -- claude-code-start`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/claw-connect/src/cli/claude-code-start.ts packages/claw-connect/test/cli/claude-code-start-e2e.test.ts && git commit -m "feat(claw-connect): claude-code:start orchestrator"
+git add packages/tidepool/src/cli/claude-code-start.ts packages/tidepool/test/cli/claude-code-start-e2e.test.ts && git commit -m "feat(tidepool): claude-code:start orchestrator"
 ```
 
 ---
@@ -1368,11 +1368,11 @@ git add packages/claw-connect/src/cli/claude-code-start.ts packages/claw-connect
 ## Task 8: Wire commands into the CLI
 
 **Files:**
-- Modify: `packages/claw-connect/src/bin/cli.ts`
+- Modify: `packages/tidepool/src/bin/cli.ts`
 
 - [ ] **Step 1: Register the new commands**
 
-In `packages/claw-connect/src/bin/cli.ts`, add three imports near the top next to the other `runX` imports:
+In `packages/tidepool/src/bin/cli.ts`, add three imports near the top next to the other `runX` imports:
 
 ```typescript
 import { runClaudeCodeStart } from "../cli/claude-code-start.js";
@@ -1385,7 +1385,7 @@ Then, BEFORE the `program.parseAsync(process.argv)` call at the bottom, register
 program
   .command("claude-code:start [agent]")
   .description("Start a Claude Code session wired up via A2A")
-  .option("--debug", "Run claw-connect serve in the foreground; don't exec claude")
+  .option("--debug", "Run tidepool serve in the foreground; don't exec claude")
   .action(async (agent: string | undefined, cmdOpts) => {
     const configDir = resolveConfigDir(program.opts());
     await runClaudeCodeStart({
@@ -1398,12 +1398,12 @@ program
 
 program
   .command("stop")
-  .description("Stop the background claw-connect daemon")
+  .description("Stop the background tidepool daemon")
   .action(async () => {
     const configDir = resolveConfigDir(program.opts());
     const result = await runStop({ configDir });
     if (result.action === "not-running") {
-      ok("Claw Connect is not running.");
+      ok("Tidepool is not running.");
     } else if (result.forced) {
       ok(`Force-killed (SIGKILL) PID ${result.pid}.`);
     } else {
@@ -1418,38 +1418,38 @@ Also update the `addHelpText` block near the top of the file to include the new 
 program.addHelpText(
   "after",
   `\nExamples:\n` +
-    `  $ claw-connect claude-code:start\n` +
-    `  $ claw-connect claude-code:start my-agent --debug\n` +
-    `  $ claw-connect stop\n` +
-    `  $ claw-connect init\n` +
-    `  $ claw-connect register alice-dev --local-endpoint http://127.0.0.1:28800\n` +
-    `  $ claw-connect whoami\n` +
-    `  $ claw-connect friend add bob sha256:...\n` +
-    `  $ claw-connect remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
-    `  $ claw-connect serve\n`,
+    `  $ tidepool claude-code:start\n` +
+    `  $ tidepool claude-code:start my-agent --debug\n` +
+    `  $ tidepool stop\n` +
+    `  $ tidepool init\n` +
+    `  $ tidepool register alice-dev --local-endpoint http://127.0.0.1:28800\n` +
+    `  $ tidepool whoami\n` +
+    `  $ tidepool friend add bob sha256:...\n` +
+    `  $ tidepool remote add bobs-rust https://peer:29900 rust-expert sha256:...\n` +
+    `  $ tidepool serve\n`,
 );
 ```
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm --filter claw-connect typecheck`
+Run: `pnpm --filter tidepool typecheck`
 Expected: PASS.
 
 - [ ] **Step 3: Smoke the new commands**
 
 ```bash
-pnpm --filter claw-connect build
-export CLAW_CONNECT_HOME=$(mktemp -d)
-node packages/claw-connect/dist/bin/cli.js --help | grep claude-code
+pnpm --filter tidepool build
+export TIDEPOOL_HOME=$(mktemp -d)
+node packages/tidepool/dist/bin/cli.js --help | grep claude-code
 # Expected: shows the new line including claude-code:start.
-node packages/claw-connect/dist/bin/cli.js stop
-# Expected: "Claw Connect is not running."
+node packages/tidepool/dist/bin/cli.js stop
+# Expected: "Tidepool is not running."
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/claw-connect/src/bin/cli.ts && git commit -m "feat(claw-connect): wire claude-code:start and stop into CLI"
+git add packages/tidepool/src/bin/cli.ts && git commit -m "feat(tidepool): wire claude-code:start and stop into CLI"
 ```
 
 ---
@@ -1469,22 +1469,22 @@ Open `packages/a2a-claude-code-adapter/README.md`. Replace Steps 2 through 5 of 
 From any project directory:
 
 ```bash
-claw-connect claude-code:start
+tidepool claude-code:start
 ```
 
 What this does, in order:
 
-1. Sets up a Claw Connect "home" at `~/.config/claw-connect` (first run only).
+1. Sets up a Tidepool "home" at `~/.config/tidepool` (first run only).
 2. Generates a friendly name for this agent (e.g. `donkey`) if you don't provide one.
 3. Picks a free local port and registers the agent.
 4. Writes or merges `.mcp.json` in the current directory so Claude Code loads the adapter.
-5. Starts `claw-connect serve` in the background.
+5. Starts `tidepool serve` in the background.
 6. Launches Claude Code with the correct flag.
 
 Pass a name if you want a specific one:
 
 ```bash
-claw-connect claude-code:start bob
+tidepool claude-code:start bob
 ```
 
 Run it again in the same project directory — it's idempotent. It reads the existing `.mcp.json`, reuses the name and port, and drops you straight into Claude Code.
@@ -1493,9 +1493,9 @@ Run it again in the same project directory — it's idempotent. It reads the exi
 
 | | |
 |---|---|
-| `claw-connect stop` | Stop the background server |
-| `claw-connect status` | See if the server is running and where logs are |
-| `claw-connect claude-code:start --debug` | Run the server in the foreground and print the `cd <dir> && claude …` command to paste into a second terminal |
+| `tidepool stop` | Stop the background server |
+| `tidepool status` | See if the server is running and where logs are |
+| `tidepool claude-code:start --debug` | Run the server in the foreground and print the `cd <dir> && claude …` command to paste into a second terminal |
 ```
 
 Keep Step 1 (install) and Step 3 onward (what to do once inside Claude Code; troubleshooting; flags; scope) but renumber. Leave the "Sending to someone else's machine" and "Flags" and "Scope" sections unchanged.
@@ -1530,9 +1530,9 @@ Expected: PASS. Count should be the prior 239 plus the new tests from Tasks 1–
 - [ ] **Step 4: Real-world smoke**
 
 ```bash
-export CLAW_CONNECT_HOME=$(mktemp -d)
+export TIDEPOOL_HOME=$(mktemp -d)
 cd /tmp && mkdir cc-smoke && cd cc-smoke
-node /Users/piersonmarks/src/tries/2026-04-13-clawconnect/packages/claw-connect/dist/bin/cli.js claude-code:start smoke-agent --debug &
+node /Users/piersonmarks/src/tries/2026-04-13-tidepool/packages/tidepool/dist/bin/cli.js claude-code:start smoke-agent --debug &
 SMOKE_PID=$!
 sleep 2
 # Verify .mcp.json written
@@ -1540,7 +1540,7 @@ cat .mcp.json
 # Kill the foreground server
 kill $SMOKE_PID 2>/dev/null
 # Confirm home contents
-ls "$CLAW_CONNECT_HOME"
+ls "$TIDEPOOL_HOME"
 # Expected: identity.crt, identity.key, server.toml (with [agents.smoke-agent]), friends.toml, remotes.toml
 # NOT expected: serve.pid, logs/ (those only appear in non-debug mode)
 ```

@@ -1,10 +1,66 @@
 {
-  "name": "clawconnect-monorepo",
-  "private": true,
+  "name": "@jellypod/tidepool",
+  "version": "0.0.1",
+  "description": "Peer-to-peer protocol for AI agent communication. No central server. No gatekeepers.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "tidepool": "./dist/bin/cli.js"
+  },
+  "exports": {
+    "./identity": "./dist/identity.js",
+    "./server": "./dist/server.js",
+    "./a2a": "./dist/a2a.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "fixtures",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "tidepool",
+    "a2a",
+    "agent-to-agent",
+    "peer-to-peer",
+    "mtls",
+    "cli",
+    "agent"
+  ],
   "scripts": {
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
-    "smoke": "pnpm --filter claw-connect smoke"
+    "build": "tsc && node scripts/fix-shebang.mjs && pnpm --filter './adapters/*' build",
+    "build:daemon": "tsc && node scripts/fix-shebang.mjs",
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run",
+    "test:all": "vitest run && pnpm --filter './adapters/*' test",
+    "typecheck": "tsc --noEmit && pnpm --filter './adapters/*' typecheck",
+    "smoke": "tsx scripts/smoke.ts",
+    "prepublishOnly": "pnpm build:daemon"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.69",
+    "@iarna/toml": "^2.2.5",
+    "ai": "^6.0.159",
+    "bonjour-service": "^1.3.0",
+    "commander": "^14.0.0",
+    "express": "^5.1.0",
+    "node-forge": "^1.3.1",
+    "undici": "^7.0.0",
+    "unique-names-generator": "^4.7.1",
+    "uuid": "^11.1.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/node-forge": "^1.3.11",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.1"
   }
 }

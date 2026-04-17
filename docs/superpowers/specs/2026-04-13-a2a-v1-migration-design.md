@@ -5,9 +5,9 @@
 
 ## Context
 
-Claw Connect's thesis is clear: **A2A is the language agents speak. Claw Connect is the network — discovery, identity, trust, routing — that lets independent agents actually find and reach each other without a shared CA.** Today's primary target is a peer-to-peer laptop mesh (developers running ≥1 agents, ad-hoc trust); future target is an internet-scale marketplace.
+Tidepool's thesis is clear: **A2A is the language agents speak. Tidepool is the network — discovery, identity, trust, routing — that lets independent agents actually find and reach each other without a shared CA.** Today's primary target is a peer-to-peer laptop mesh (developers running ≥1 agents, ad-hoc trust); future target is an internet-scale marketplace.
 
-That positioning means Claw Connect owns a network layer on top of A2A. The wire-shape work (message, task, streaming event, agent card) is A2A's concern, and we'd rather defer to the spec or an SDK than hand-roll it.
+That positioning means Tidepool owns a network layer on top of A2A. The wire-shape work (message, task, streaming event, agent card) is A2A's concern, and we'd rather defer to the spec or an SDK than hand-roll it.
 
 **The constraint driving this design:** we must use A2A **v1.0** (the stable spec as of 2026-03-12). The official TS SDK `a2a-js` is still on v0.3.13 with no visible v1.0 work. An unofficial Rust SDK (`agntcy/a2a-rs`) exists and claims v1.0 but ships a non-spec-compliant proto-JSON enum dialect and single-vendor governance — rejected.
 
@@ -15,7 +15,7 @@ That positioning means Claw Connect owns a network layer on top of A2A. The wire
 
 ## Decision
 
-Stay in TypeScript. Hand-roll a **thin, v1.0-spec-compliant A2A wire module** at `src/a2a.ts`. Keep everything that makes Claw Connect *Claw Connect* (friends, discovery, handshake, pinning, tenancy, policy) untouched. When `a2a-js` ships v1.0, swap the contents of `a2a.ts` for SDK re-exports — callers unchanged.
+Stay in TypeScript. Hand-roll a **thin, v1.0-spec-compliant A2A wire module** at `src/a2a.ts`. Keep everything that makes Tidepool *Tidepool* (friends, discovery, handshake, pinning, tenancy, policy) untouched. When `a2a-js` ships v1.0, swap the contents of `a2a.ts` for SDK re-exports — callers unchanged.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ One new file, `src/a2a.ts`, is the sole home for A2A protocol v1.0 concerns and 
 - A terminality helper: `isTerminalState(state) → boolean`, encapsulating the v1.0 rule that `{completed, failed, canceled, rejected}` ends a task (the `final` field was removed in v1.0).
 
 **`a2a.ts` does NOT own:**
-- Any Claw Connect concept: friends, discovery, handshake, tenancy, routing, pinning, rate limits.
+- Any Tidepool concept: friends, discovery, handshake, tenancy, routing, pinning, rate limits.
 - Express routing or server wiring.
 - Configuration loading.
 
@@ -39,7 +39,7 @@ One new file, `src/a2a.ts`, is the sole home for A2A protocol v1.0 concerns and 
 
 ### Slimming `types.ts` and `schemas.ts`
 
-- `types.ts` keeps only Claw-Connect-specific types (`ServerConfig`, `FriendsConfig`, `FriendEntry`, `RemoteAgent`, `AgentIdentity`, `ConnectionRequestConfig`, `ConnectionRequest`, `PendingRequests`, `DiscoveryConfig`, `StaticPeer`, `AgentConfig`). A2A types are deleted.
+- `types.ts` keeps only Tidepool-specific types (`ServerConfig`, `FriendsConfig`, `FriendEntry`, `RemoteAgent`, `AgentIdentity`, `ConnectionRequestConfig`, `ConnectionRequest`, `PendingRequests`, `DiscoveryConfig`, `StaticPeer`, `AgentConfig`). A2A types are deleted.
 - `schemas.ts` keeps only config schemas (`ServerConfigSchema`, `FriendsConfigSchema`). Wire-shape schemas move to `a2a.ts` and are updated to v1.0.
 
 ## v1.0 Wire Types (contents of `a2a.ts`)
@@ -183,7 +183,7 @@ Every type above has a matching zod schema exported from `a2a.ts` (`MessageSchem
 
 ## CONNECTION_REQUEST extension (v1.0 carriage)
 
-Our extension URI (`https://clawconnect.dev/ext/connection/v1`) and semantics are unchanged. The *carriage* updates to v1.0:
+Our extension URI (`https://tidepool.dev/ext/connection/v1`) and semantics are unchanged. The *carriage* updates to v1.0:
 
 ### 1. Declare in Agent Card
 
@@ -194,8 +194,8 @@ capabilities: {
   streaming: true,
   pushNotifications: false,
   extensions: [{
-    uri: "https://clawconnect.dev/ext/connection/v1",
-    description: "Claw Connect peer friending handshake",
+    uri: "https://tidepool.dev/ext/connection/v1",
+    description: "Tidepool peer friending handshake",
     required: false,
   }],
 }
@@ -207,7 +207,7 @@ Per v1.0, clients MAY announce used extensions via the `X-A2A-Extensions` header
 
 ### 3. Emit `X-A2A-Extensions` on outbound handshake response
 
-When the handshake code path runs, the HTTP response carries `X-A2A-Extensions: https://clawconnect.dev/ext/connection/v1` so peers can confirm we activated their extension.
+When the handshake code path runs, the HTTP response carries `X-A2A-Extensions: https://tidepool.dev/ext/connection/v1` so peers can confirm we activated their extension.
 
 ### 4. Response body
 
@@ -225,7 +225,7 @@ Our inline-detect-then-delegate flow is the right fit for a proxy architecture. 
 **Edited:**
 | File | Change |
 |------|--------|
-| `src/types.ts` | Delete A2A types; keep Claw-Connect-only types. |
+| `src/types.ts` | Delete A2A types; keep Tidepool-only types. |
 | `src/schemas.ts` | Delete wire-shape schemas; keep config schemas. |
 | `src/streaming.ts` | `buildFailedEvent` moves to `a2a.ts` as `buildFailedStatusEvent`. Drop `final: true`. Lowercase enums. |
 | `src/errors.ts` | `"TASK_STATE_FAILED"` → `"failed"`; `"TASK_STATE_REJECTED"` → `"rejected"`. |
@@ -296,7 +296,7 @@ Three layers:
 - No new features — CONNECTION_REQUEST semantics unchanged; only carriage is updated.
 - No CLI/bin changes.
 - No new A2A surfaces (`tasks/get`, `tasks/list`, push notifications, auth-extended card). Add when needed.
-- No refactor of Claw Connect concerns (friends, discovery, handshake, pinning, proxy, rate-limiter, policy). They're the value add and stay as-is.
+- No refactor of Tidepool concerns (friends, discovery, handshake, pinning, proxy, rate-limiter, policy). They're the value add and stay as-is.
 
 ## Simplicity and DRY
 

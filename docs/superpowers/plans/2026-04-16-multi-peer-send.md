@@ -4,7 +4,7 @@
 
 **Goal:** Let an agent send one message to multiple peers in a single `send` call, sharing one `context_id` and carrying a `participants` list in `message.metadata`, so multi-party conversations become a protocol-level convention rather than a manual relay pattern.
 
-**Architecture:** Adapter-only change. The claw-connect daemon stays dumb: it already preserves caller-supplied `message.metadata` via `injectMetadataFrom`, and it already accepts one message per POST to `/:tenant/message:send`. The adapter fans out N POSTs under one minted `contextId`, stamping every outbound with `message.metadata.participants = [self, ...peers]`. On the receive side, the adapter reads `participants` from the inbound message's metadata, unions them into the thread-store, and surfaces them as a `participants` attribute on the `<channel source="claw-connect">` event so Claude can choose to reply-all, reply-to-one, or branch off.
+**Architecture:** Adapter-only change. The tidepool daemon stays dumb: it already preserves caller-supplied `message.metadata` via `injectMetadataFrom`, and it already accepts one message per POST to `/:tenant/message:send`. The adapter fans out N POSTs under one minted `contextId`, stamping every outbound with `message.metadata.participants = [self, ...peers]`. On the receive side, the adapter reads `participants` from the inbound message's metadata, unions them into the thread-store, and surfaces them as a `participants` attribute on the `<channel source="tidepool">` event so Claude can choose to reply-all, reply-to-one, or branch off.
 
 **Clean break — no back-compat.** Nothing has shipped. The `send` MCP tool signature changes from `{peer, text, thread?}` to `{peers: string[], text, thread?}`. The `thread-store` record's `peer: string` field becomes `peers: Set<string>`. `list_threads` output becomes `peers: string[]`. `sendOutbound` drops its responsibility for minting `contextId` — the caller (channel.ts) now owns that so fan-out shares one id.
 
@@ -31,7 +31,7 @@
 | `test/three-agent.test.ts` (NEW) | End-to-end three-agent fan-out. | Alice sends to [bob, carol]; verify shared contextId, participants delivered, reply-all works. |
 | `README.md` | User-facing docs. | New "Multi-peer conversations" section describing the convention. |
 
-**Unchanged:** `packages/claw-connect/*` (daemon side — `injectMetadataFrom` already preserves `metadata.participants`). `src/version.ts`, `src/config.ts`, `src/bin/*`.
+**Unchanged:** `packages/tidepool/*` (daemon side — `injectMetadataFrom` already preserves `metadata.participants`). `src/version.ts`, `src/config.ts`, `src/bin/*`.
 
 ---
 
@@ -39,8 +39,8 @@
 
 These are facts the implementation depends on. Confirm they haven't drifted before Task 1:
 
-1. `packages/claw-connect/src/identity-injection.ts:16` spreads existing metadata: `message.metadata = { ...existingMetadata, from: handle };`. This means `participants` set by the sender survives the daemon hop. **If this changed, stop and re-plan.**
-2. `packages/claw-connect/src/a2a.ts:187-197` — `MessageSchema` uses `.loose()` on the outer Message and `z.record(z.string(), z.unknown()).optional()` on metadata. Extra metadata keys pass validation. **If this tightened to strict, stop and re-plan.**
+1. `packages/tidepool/src/identity-injection.ts:16` spreads existing metadata: `message.metadata = { ...existingMetadata, from: handle };`. This means `participants` set by the sender survives the daemon hop. **If this changed, stop and re-plan.**
+2. `packages/tidepool/src/a2a.ts:187-197` — `MessageSchema` uses `.loose()` on the outer Message and `z.record(z.string(), z.unknown()).optional()` on metadata. Extra metadata keys pass validation. **If this tightened to strict, stop and re-plan.**
 3. `packages/a2a-claude-code-adapter/test/integration.test.ts:33-39` — mock relay reconstructs body with `metadata: { ...existing, from: sender }`. This matches real daemon behavior. Tests should keep passing under the new code.
 
 ---
@@ -266,7 +266,7 @@ export function createThreadStore(opts: ThreadStoreOpts): ThreadStore {
       if (!hasLoggedEviction) {
         hasLoggedEviction = true;
         process.stderr.write(
-          `[claw-connect-adapter] thread store at maxThreads=${opts.maxThreads} — evicting oldest by last_activity. Further evictions are silent.\n`,
+          `[tidepool-adapter] thread store at maxThreads=${opts.maxThreads} — evicting oldest by last_activity. Further evictions are silent.\n`,
         );
       }
     }
@@ -332,7 +332,7 @@ Expected: all 11 tests PASS.
 - [ ] **Step 5: Commit.**
 
 ```bash
-cd /Users/piersonmarks/src/tries/2026-04-13-clawconnect
+cd /Users/piersonmarks/src/tries/2026-04-13-tidepool
 git add packages/a2a-claude-code-adapter/src/thread-store.ts packages/a2a-claude-code-adapter/test/thread-store.test.ts
 git commit -m "feat(adapter): thread-store peers as a set
 
@@ -393,7 +393,7 @@ function isConnectionRefused(err: unknown): boolean {
 }
 
 /**
- * POST one message to one peer via the claw-connect daemon's local proxy.
+ * POST one message to one peer via the tidepool daemon's local proxy.
  *
  * The caller (channel.ts) owns contextId minting so a fan-out to N peers
  * shares one id. When `participants` is supplied (length >= 2 by convention),
@@ -444,14 +444,14 @@ export async function sendOutbound(args: {
     if (isConnectionRefused(err)) {
       throw new SendError(
         "daemon-down",
-        "the claw-connect daemon isn't running",
-        "Ask the user to run `claw-connect claude-code:start` (or `claw-connect serve &`) and retry.",
+        "the tidepool daemon isn't running",
+        "Ask the user to run `tidepool claude-code:start` (or `tidepool serve &`) and retry.",
       );
     }
     throw new SendError(
       "other",
       err instanceof Error ? err.message : String(err),
-      "Ask the user to check `claw-connect status` and the daemon log at ~/.config/claw-connect/logs/.",
+      "Ask the user to check `tidepool status` and the daemon log at ~/.config/tidepool/logs/.",
     );
   }
 
@@ -474,7 +474,7 @@ export async function sendOutbound(args: {
     throw new SendError(
       "other",
       `HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
-      "Ask the user to check `claw-connect status` and the daemon log.",
+      "Ask the user to check `tidepool status` and the daemon log.",
     );
   }
 
@@ -730,7 +730,7 @@ export async function startHttp(opts: StartHttpOpts) {
       });
     } catch (err) {
       process.stderr.write(
-        `[claw-connect-adapter] onInbound threw: ${String(err)}\n`,
+        `[tidepool-adapter] onInbound threw: ${String(err)}\n`,
       );
     }
 
@@ -844,8 +844,8 @@ const ThreadHistoryArgsSchema = z.object({
 });
 
 const INSTRUCTIONS =
-  "This MCP server connects you to peer agents over the claw-connect network. " +
-  "Inbound messages arrive as <channel source=\"claw-connect\" peer=\"...\" " +
+  "This MCP server connects you to peer agents over the tidepool network. " +
+  "Inbound messages arrive as <channel source=\"tidepool\" peer=\"...\" " +
   "participants=\"...\" context_id=\"...\" task_id=\"...\" message_id=\"...\"> " +
   "events. `peer` is the sender of that particular message; `participants` is " +
   "the full list of agents (including you) in the thread as the sender sees " +
@@ -860,7 +860,7 @@ const INSTRUCTIONS =
   "multiple peers, and `thread_history` to re-load context after a gap.";
 
 export function createChannel(opts: CreateChannelOpts) {
-  const serverName = opts.serverName ?? "claw-connect";
+  const serverName = opts.serverName ?? "tidepool";
   const server = new Server(
     { name: serverName, version: ADAPTER_VERSION },
     {
@@ -877,7 +877,7 @@ export function createChannel(opts: CreateChannelOpts) {
       {
         name: "send",
         description:
-          "Send one message to one or more peers. Returns `{context_id, results: [{peer, message_id?, error?}]}` — a peer's reply (if any) arrives later as a separate <channel source=\"claw-connect\"> event with the same context_id. Pass `thread=<context_id>` to continue an existing conversation; omit to start a new one. Multi-peer sends share one context_id and stamp a participants list onto every outbound so receivers know who else is in the thread — recipients are free to reply-all, reply-to-one, or branch to a new thread. Always call `list_peers` before guessing handles.",
+          "Send one message to one or more peers. Returns `{context_id, results: [{peer, message_id?, error?}]}` — a peer's reply (if any) arrives later as a separate <channel source=\"tidepool\"> event with the same context_id. Pass `thread=<context_id>` to continue an existing conversation; omit to start a new one. Multi-peer sends share one context_id and stamp a participants list onto every outbound so receivers know who else is in the thread — recipients are free to reply-all, reply-to-one, or branch to a new thread. Always call `list_peers` before guessing handles.",
         inputSchema: {
           type: "object",
           properties: {
@@ -900,7 +900,7 @@ export function createChannel(opts: CreateChannelOpts) {
       },
       {
         name: "whoami",
-        description: "Return this agent's own handle on the claw-connect network.",
+        description: "Return this agent's own handle on the tidepool network.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
       },
       {
@@ -1476,7 +1476,7 @@ describe("channel tool dispatch — other tools", () => {
   it("unknown tool throws", async () => {
     const { ch } = setup();
     await expect(
-      ch.handleToolCall({ name: "claw_connect_reply", arguments: {} }),
+      ch.handleToolCall({ name: "tidepool_reply", arguments: {} }),
     ).rejects.toThrow(/unknown tool/);
   });
 });
@@ -1568,7 +1568,7 @@ export async function start(opts: StartOpts) {
   const emitInbound = (info: InboundInfo): void => {
     channel.notifyInbound(info).catch((err) => {
       process.stderr.write(
-        `[claw-connect-adapter] notifyInbound failed: ${String(err)}\n`,
+        `[tidepool-adapter] notifyInbound failed: ${String(err)}\n`,
       );
     });
   };
@@ -1974,7 +1974,7 @@ Open `packages/a2a-claude-code-adapter/README.md` and:
 On the receiving side, inbound events look like:
 
 ```
-<channel source="claw-connect" peer="wolverine" participants="wolverine alice bobby"
+<channel source="tidepool" peer="wolverine" participants="wolverine alice bobby"
          context_id="..." task_id="..." message_id="...">
 three-way kickoff
 </channel>
@@ -2025,7 +2025,7 @@ Expected: 0 errors.
 
 - [ ] **Step 2: Typecheck the daemon (unchanged, but confirm nothing broke).**
 
-Run: `pnpm --filter claw-connect typecheck`
+Run: `pnpm --filter tidepool typecheck`
 Expected: 0 errors.
 
 - [ ] **Step 3: Run the adapter test suite.**
@@ -2035,7 +2035,7 @@ Expected: all tests PASS (existing + new three-agent suite).
 
 - [ ] **Step 4: Run the daemon test suite (regression check).**
 
-Run: `pnpm --filter claw-connect test`
+Run: `pnpm --filter tidepool test`
 Expected: all ~270 tests PASS — the daemon is unchanged, but `injectMetadataFrom` is exercised by passthrough tests and should handle the new `participants` metadata key transparently. If any daemon test fails, stop and investigate — something about the `.loose()` metadata handling we assumed has drifted.
 
 - [ ] **Step 5: Build both packages.**
@@ -2047,16 +2047,16 @@ Expected: 0 errors.
 
 ```bash
 # In terminal 1:
-cd /tmp && mkdir -p clawconnect-smoke-a && cd clawconnect-smoke-a
-claw-connect claude-code:start --debug  # foreground
+cd /tmp && mkdir -p tidepool-smoke-a && cd tidepool-smoke-a
+tidepool claude-code:start --debug  # foreground
 # (this takes over the terminal)
 
 # In terminal 2 (new window):
-cd /tmp && mkdir -p clawconnect-smoke-b && cd clawconnect-smoke-b
+cd /tmp && mkdir -p tidepool-smoke-b && cd tidepool-smoke-b
 # print the ".mcp.json" + claude invocation from terminal 1's output and paste.
 
 # In terminal 3:
-cd /tmp && mkdir -p clawconnect-smoke-c && cd clawconnect-smoke-c
+cd /tmp && mkdir -p tidepool-smoke-c && cd tidepool-smoke-c
 # same — another Claude session.
 
 # In terminal 2 (first Claude session): ask Claude to `send` with peers=[<terminal-3-handle>] — confirm terminal 3 receives the <channel> block. Then ask Claude to send with peers=[<terminal-3-handle>, <one-more>] — confirm both receive, same context_id, same participants list.

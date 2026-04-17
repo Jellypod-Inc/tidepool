@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Wire zod-schema validation gates at Claw Connect's two A2A boundaries — inbound request bodies in `src/server.ts` and upstream SSE events in `src/streaming.ts::proxySSEStream` — behind a `validation.mode` config knob that starts in `"warn"` (log + pass through) and can be flipped to `"enforce"` (reject on fail).
+**Goal:** Wire zod-schema validation gates at Tidepool's two A2A boundaries — inbound request bodies in `src/server.ts` and upstream SSE events in `src/streaming.ts::proxySSEStream` — behind a `validation.mode` config knob that starts in `"warn"` (log + pass through) and can be flipped to `"enforce"` (reject on fail).
 
 **Architecture:** Add a single small helper `validateWire(schema, data, { mode, onWarn, context })` that both seams call. In `"warn"` mode, failures are logged with a structured one-line message to `console.warn` and the raw data passes through unchanged. In `"enforce"` mode, failures return a sentinel that lets the caller reject the request (HTTP 400) or terminate the stream (emit `buildFailedStatusEvent` + end). Config lives on `ServerConfig.validation` and defaults to `"warn"` to keep rollout safe.
 
@@ -10,7 +10,7 @@
 
 **Spec reference:** `docs/superpowers/specs/2026-04-13-a2a-v1-migration-design.md` §"Data flow and validation" — this plan implements what the migration plan explicitly deferred in its §"Explicitly deferred" note.
 
-**Starting state:** 181/181 tests passing, typecheck clean, latest commit `54a0278 fix(handshake): validate and time-bound peer agent card fetch`. All work happens in `/Users/piersonmarks/src/tries/2026-04-13-clawconnect/claw-connect/`. All `pnpm` commands run from that directory.
+**Starting state:** 181/181 tests passing, typecheck clean, latest commit `54a0278 fix(handshake): validate and time-bound peer agent card fetch`. All work happens in `/Users/piersonmarks/src/tries/2026-04-13-tidepool/tidepool/`. All `pnpm` commands run from that directory.
 
 ---
 
