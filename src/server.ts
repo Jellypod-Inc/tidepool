@@ -481,18 +481,10 @@ function createLocalApp(
   // the parameterized route matching /dashboard/* paths.
   mountDashboard(app, holder, configDir, messageLog, startedAt);
 
-  const mounted = mountSessionEndpoint(app, {
+  mountSessionEndpoint(app, {
     registry: sessionRegistry,
     port,
-    friendsSnapshot: () => {
-      const friends = holder.friends();
-      return Object.keys(friends.friends)
-        .sort()
-        .map((handle) => ({ handle, did: null as string | null }));
-    },
   });
-  // mounted.notifyFriendsChanged could be wired to config-holder in a later task
-  void mounted;
 
   // Tidepool extensions (origin guard is now global, no per-route guard needed).
   app.get("/.well-known/tidepool/peers", (_req, res) => {
