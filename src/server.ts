@@ -24,6 +24,7 @@ import {
 } from "./agent-card.js";
 import { handleConnectionRequest } from "./handshake.js";
 import { addFriend, writeFriendsConfig } from "./friends.js";
+import { projectHandles } from "./peers/resolve.js";
 import { TokenBucket, parseRateLimit } from "./rate-limiter.js";
 import {
   rateLimitResponse,
@@ -530,15 +531,29 @@ function createLocalApp(
     const selfRaw = req.query.self;
     const self = typeof selfRaw === "string" ? selfRaw : undefined;
 
-    const handles = new Set<string>();
-    for (const handle of Object.keys(holder.friends().friends)) handles.add(handle);
-    for (const session of sessionRegistry.list()) handles.add(session.name);
-    if (self) handles.delete(self);
+    // Local agents = server.toml agent keys ∪ live session names (minus self)
+    const localAgentSet = new Set<string>();
+    for (const name of Object.keys(holder.server().agents)) {
+      if (name !== self) localAgentSet.add(name);
+    }
+    for (const sess of sessionRegistry.list()) {
+      if (sess.name !== self) localAgentSet.add(sess.name);
+    }
+    const localAgents = Array.from(localAgentSet);
 
-    const peers = Array.from(handles)
-      .sort()
-      .map((handle) => ({ handle, did: null as string | null }));
-    res.json(peers);
+    // Project peers.toml agents + local agents into minimally-unambiguous handles
+    const peersCfg = holder.peers();
+    const projected = projectHandles(peersCfg, localAgents);
+
+    // Preserve legacy behavior: include friends that aren't in peers.toml yet
+    const legacyFriends = Object.keys(holder.friends().friends);
+    const peerHandles = new Set(Object.keys(peersCfg.peers));
+    for (const friend of legacyFriends) {
+      if (friend !== self && !peerHandles.has(friend)) projected.push(friend);
+    }
+
+    const unique = Array.from(new Set(projected)).sort();
+    res.json(unique.map((handle) => ({ handle, did: null as string | null })));
   });
 
   // Root Agent Card listing all available agents (local + remote)
