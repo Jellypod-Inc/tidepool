@@ -1,0 +1,36 @@
+src/session/endpoint.ts
+  3b3e52d822895f52 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "51ad20bc390c61a3fe37a2614cfc7fc5513a8e3f",
+  "prompts": {
+    "3b3e52d822895f52": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c2662761-d6fd-4442-be4c-60d55227aa77",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1564,
+      "overriden_lines": 0
+    }
+  }
+}
