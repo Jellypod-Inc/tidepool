@@ -1,0 +1,50 @@
+test/e2e.test.ts
+  655ea5a9b26de87d 14,38-41,50-51,54-57,80-119,123,148,170,176,182,189,195,198-199,215,243,271,283,305,308,339,341,362,372
+test/agent-card.test.ts
+  655ea5a9b26de87d 75,77,88-90,98,105,111,118,147,149,178-179,213,216,260,263
+test/cli/serve-daemon.test.ts
+  655ea5a9b26de87d 18,23-25,58,85
+test/streaming-e2e.test.ts
+  655ea5a9b26de87d 13-21,71-73,76,92-94,130,132-133,145-146,151,153,175-176,189,238,240-241,253-254,259,261,283-284,297,328,354-356,363,365-366,378-379,384,386,409-410,423,457,475-477,484,486-487,499-500,505,507,530-531,544
+test/local-loopback-e2e.test.ts
+  655ea5a9b26de87d 19,24-26,46,52,54,71,96-97,144,146,164-165,189,246,248,269,282,302-303,393,395,410,423-424,431-432,465,472-473,475,479
+test/peers-endpoint.test.ts
+  655ea5a9b26de87d 12,17,19
+test/e2e-rate-limit.test.ts
+  655ea5a9b26de87d 14,33-36,39,47-50,110,115-116,140-145,150,152,195-197,199-200,215,228,234,241,255,277,289
+src/schemas.ts
+  655ea5a9b26de87d 60,62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "33aef7803294380be7d234885f755e88001a985f",
+  "prompts": {
+    "655ea5a9b26de87d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0b483778-b88c-41a6-a2d0-f5ebbffe4f1c",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 303,
+      "total_deletions": 227,
+      "accepted_lines": 472,
+      "overriden_lines": 0
+    },
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2556,
+      "overriden_lines": 0
+    }
+  }
+}
