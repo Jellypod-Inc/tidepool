@@ -54,7 +54,11 @@ export async function sendOutbound(args: {
   const messageId = randomUUID();
   const host = deps.host ?? "127.0.0.1";
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const url = `http://${host}:${deps.localPort}/${encodeURIComponent(peer)}/message:send`;
+  const segments = peer.split("/").map(encodeURIComponent);
+  if (segments.length < 1 || segments.length > 2 || segments.some((s) => !s)) {
+    throw new SendError("other", `invalid peer handle: ${peer}`, "handle must be 'name' or 'peer/name'");
+  }
+  const url = `http://${host}:${deps.localPort}/${segments.join("/")}/message:send`;
 
   const message: {
     messageId: string;

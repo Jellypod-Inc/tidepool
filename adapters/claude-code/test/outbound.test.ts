@@ -284,4 +284,62 @@ describe("sendOutbound — A2A-native headers", () => {
       kind: "peer-not-registered",
     });
   });
+
+  it("POSTs to /peer/agent/message:send for scoped handles", async () => {
+    let receivedUrl = "";
+    const fakeFetch = (async (url: string) => {
+      receivedUrl = url;
+      return new Response(
+        JSON.stringify({ messageId: "ok", contextId: "ctx-1", role: "agent", parts: [] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const { sendOutbound } = await import("../src/outbound.js");
+    await sendOutbound({
+      peer: "bob/writer",
+      contextId: "ctx-1",
+      text: "hi",
+      self: "quail",
+      deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
+    });
+    expect(new URL(receivedUrl).pathname).toBe("/bob/writer/message:send");
+  });
+
+  it("POSTs to /<bare>/message:send for bare handles (unchanged)", async () => {
+    let receivedUrl = "";
+    const fakeFetch = (async (url: string) => {
+      receivedUrl = url;
+      return new Response(
+        JSON.stringify({ messageId: "ok", contextId: "ctx-2", role: "agent", parts: [] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const { sendOutbound } = await import("../src/outbound.js");
+    await sendOutbound({
+      peer: "writer",
+      contextId: "ctx-2",
+      text: "hi",
+      self: "quail",
+      deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
+    });
+    expect(new URL(receivedUrl).pathname).toBe("/writer/message:send");
+  });
+
+  it("rejects malformed peer handle (too many slashes)", async () => {
+    const fakeFetch = vi.fn();
+    const { sendOutbound } = await import("../src/outbound.js");
+    await expect(
+      sendOutbound({
+        peer: "a/b/c",
+        contextId: "ctx-3",
+        text: "hi",
+        self: "quail",
+        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
+      }),
+    ).rejects.toThrow();
+    // Should not have made any network call
+    expect(fakeFetch).not.toHaveBeenCalled();
+  });
 });
