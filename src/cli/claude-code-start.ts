@@ -165,6 +165,7 @@ function printLaunchSummary(args: {
     `tidepool · launching Claude Code`,
     `  Agent:        ${agentName}`,
     `  Peer port:    ${serverConfig.server.port} (public mTLS) · ${serverConfig.server.localPort} (local proxy)`,
+    `  Dashboard:    http://127.0.0.1:${serverConfig.server.localPort}/dashboard`,
     `  Fingerprint:  ${fingerprint}`,
     `  Home:         ${configDir}`,
     `  Working dir:  ${cwd}`,
@@ -176,7 +177,7 @@ function printLaunchSummary(args: {
 
 async function defaultDebugServeRunner(configDir: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = nodeSpawn("tidepool", ["serve"], {
+    const child = nodeSpawn("tidepool", ["start"], {
       stdio: "inherit",
       env: { ...process.env, TIDEPOOL_HOME: configDir },
     });
