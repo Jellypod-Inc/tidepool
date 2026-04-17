@@ -32,6 +32,8 @@ import {
   agentScopeDeniedResponse,
   agentTimeoutResponse,
   malformedRequestResponse,
+  peerNotFoundResponse,
+  unsupportedOperationResponse,
   type A2AErrorResponse,
 } from "./errors.js";
 import { proxyUpstreamOrFail, initSSEResponse } from "./streaming.js";
@@ -65,6 +67,19 @@ function makeOriginGuard(port: number) {
     }
     next();
   };
+}
+
+function mountTaskStubs(app: express.Application): void {
+  const stub = (req: express.Request, res: express.Response) => {
+    const method = `${req.method} ${req.route?.path ?? req.path}`;
+    const msgId = req.body?.id ?? "";
+    const err = unsupportedOperationResponse(method, msgId);
+    res.status(err.statusCode).set(err.headers).json(err.body);
+  };
+
+  app.get("/:handle/tasks", stub);
+  app.get("/:handle/tasks/:id", stub);
+  app.post("/:handle/tasks/:id\\:cancel", stub);
 }
 
 export interface StartServerOpts {
@@ -212,6 +227,9 @@ function createPublicApp(
       res.json(card);
     },
   );
+
+  // Stub out tasks/* endpoints with UnsupportedOperationError
+  mountTaskStubs(app);
 
   // A2A proxy endpoint per tenant — full middleware pipeline
   app.post(
@@ -444,14 +462,14 @@ function createLocalApp(
 ): express.Application {
   const app = express();
   app.use(express.json());
+  app.use(makeOriginGuard(port));   // Apply origin guard to ALL local routes
 
   // Dashboard routes must be registered before /:tenant/:action to avoid
   // the parameterized route matching /dashboard/* paths.
   mountDashboard(app, holder, configDir, messageLog, startedAt);
 
-  // Tidepool extensions gated by origin check.
-  const tidepoolGuard = makeOriginGuard(port);
-  app.get("/.well-known/tidepool/peers", tidepoolGuard, (_req, res) => {
+  // Tidepool extensions (origin guard is now global, no per-route guard needed).
+  app.get("/.well-known/tidepool/peers", (_req, res) => {
     const friends = holder.friends();
     const peers = Object.keys(friends.friends)
       .sort()
@@ -525,9 +543,24 @@ function createLocalApp(
     res.status(404).json({ error: "Agent not found" });
   });
 
+  // Stub out tasks/* endpoints with UnsupportedOperationError
+  mountTaskStubs(app);
+
   // Outbound proxy — local agent sends A2A to a remote agent via local handle
   app.post("/:tenant/:action", async (req, res) => {
     const config = holder.server();
+    const { tenant, action } = req.params;
+
+    // Fast-path: if the handle is neither a known local agent nor a remote
+    // agent, return peer_not_found immediately (before checking X-Agent so the
+    // caller gets the most helpful error).
+    const isKnownLocal = !!config.agents[tenant];
+    const isKnownRemote = !!mapLocalTenantToRemote(remoteAgents, tenant);
+    if (!isKnownLocal && !isKnownRemote) {
+      const peerErr = peerNotFoundResponse(tenant);
+      res.status(peerErr.statusCode).set(peerErr.headers).json(peerErr.body);
+      return;
+    }
 
     // Authenticate the sender agent. The local port has no transport-level
     // identity, so we require an X-Agent header naming a locally-registered
@@ -545,8 +578,6 @@ function createLocalApp(
         .json({ error: `unknown agent in X-Agent: ${senderAgent}` });
       return;
     }
-
-    const { tenant, action } = req.params;
 
     const contextId: string | undefined = req.body?.message?.contextId;
     messageLog.record({ contextId, agent: senderAgent });
@@ -609,7 +640,8 @@ function createLocalApp(
         return;
       }
 
-      res.status(404).json({ error: "Agent not found" });
+      // Unreachable: fast-path at the top of this handler guarantees that if
+      // !remote, the tenant is a known local agent (checked above).
       return;
     }
 
