@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildStatusOutput } from "../src/status.js";
-import type { ServerConfig, FriendsConfig } from "../src/types.js";
+import type { ServerConfig, PeersConfig } from "../src/types.js";
 
 const serverConfig: ServerConfig = {
   server: {
@@ -26,24 +26,29 @@ const serverConfig: ServerConfig = {
   discovery: { providers: ["static", "mdns"], cacheTtlSeconds: 300 },
 };
 
-const friendsConfig: FriendsConfig = {
-  friends: {
+const peersConfig: PeersConfig = {
+  peers: {
     "alice-agent": {
       fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      endpoint: "https://alice:9900",
+      agents: ["rust-expert"],
     },
     "carols-ml": {
       fingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      endpoint: "https://carol:9900",
       agents: ["rust-expert"],
     },
     "daves-bot": {
       fingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      endpoint: "https://dave:9900",
+      agents: [],
     },
   },
 };
 
 describe("buildStatusOutput", () => {
   it("includes server configuration", () => {
-    const output = buildStatusOutput(serverConfig, friendsConfig);
+    const output = buildStatusOutput(serverConfig, peersConfig);
 
     expect(output).toContain("Public: https://0.0.0.0:9900");
     expect(output).toContain("Local: http://127.0.0.1:9901");
@@ -52,7 +57,7 @@ describe("buildStatusOutput", () => {
   });
 
   it("lists registered agents with their rate limits", () => {
-    const output = buildStatusOutput(serverConfig, friendsConfig);
+    const output = buildStatusOutput(serverConfig, peersConfig);
 
     expect(output).toContain("rust-expert");
     expect(output).toContain("50/hour");
@@ -60,23 +65,23 @@ describe("buildStatusOutput", () => {
     expect(output).toContain("30/hour");
   });
 
-  it("shows friend count", () => {
-    const output = buildStatusOutput(serverConfig, friendsConfig);
-    expect(output).toContain("3 friends");
+  it("shows peer count", () => {
+    const output = buildStatusOutput(serverConfig, peersConfig);
+    expect(output).toContain("Peers (3)");
   });
 
   it("shows connection request mode", () => {
-    const output = buildStatusOutput(serverConfig, friendsConfig);
+    const output = buildStatusOutput(serverConfig, peersConfig);
     expect(output).toContain("auto");
   });
 
   it("shows discovery providers", () => {
-    const output = buildStatusOutput(serverConfig, friendsConfig);
+    const output = buildStatusOutput(serverConfig, peersConfig);
     expect(output).toContain("static");
     expect(output).toContain("mdns");
   });
 
-  it("handles zero agents and zero friends", () => {
+  it("handles zero agents and zero peers", () => {
     const emptyConfig: ServerConfig = {
       server: {
         port: 9900,
@@ -89,12 +94,12 @@ describe("buildStatusOutput", () => {
       connectionRequests: { mode: "deny" },
       discovery: { providers: ["static"], cacheTtlSeconds: 300 },
     };
-    const emptyFriends: FriendsConfig = { friends: {} };
+    const emptyPeers: PeersConfig = { peers: {} };
 
-    const output = buildStatusOutput(emptyConfig, emptyFriends);
+    const output = buildStatusOutput(emptyConfig, emptyPeers);
 
     expect(output).toContain("No agents registered");
-    expect(output).toContain("0 friends");
+    expect(output).toContain("Peers (0)");
   });
 });
 

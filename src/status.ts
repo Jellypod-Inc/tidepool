@@ -1,8 +1,8 @@
-import type { ServerConfig, FriendsConfig } from "./types.js";
+import type { ServerConfig, PeersConfig } from "./types.js";
 
 export function buildStatusOutput(
   config: ServerConfig,
-  friends: FriendsConfig,
+  peersCfg: PeersConfig,
 ): string {
   const lines: string[] = [];
 
@@ -31,17 +31,12 @@ export function buildStatusOutput(
     }
   }
 
+  const peers = Object.entries(peersCfg.peers);
   lines.push("");
-  const friendCount = Object.keys(friends.friends).length;
-  lines.push(`${friendCount} friends`);
-
-  if (friendCount > 0) {
-    for (const [handle, entry] of Object.entries(friends.friends)) {
-      const scope = entry.agents
-        ? ` (scoped: ${entry.agents.join(", ")})`
-        : " (all agents)";
-      lines.push(`  ${handle}${scope}`);
-    }
+  lines.push(`Peers (${peers.length})`);
+  for (const [handle, entry] of peers) {
+    lines.push(`  ${handle}  ${entry.endpoint}  (${entry.agents.length} agents)`);
+    for (const a of entry.agents) lines.push(`    - ${a}`);
   }
 
   return lines.join("\n");

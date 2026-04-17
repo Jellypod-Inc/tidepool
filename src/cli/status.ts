@@ -1,5 +1,6 @@
 import path from "path";
-import { loadServerConfig, loadFriendsConfig } from "../config.js";
+import { loadServerConfig } from "../config.js";
+import { loadPeersConfig } from "../peers/config.js";
 import { buildStatusOutput } from "../status.js";
 import { isServeRunning } from "./serve-daemon.js";
 
@@ -11,8 +12,8 @@ interface RunStatusOpts {
 
 export async function runStatus(opts: RunStatusOpts): Promise<string> {
   const server = loadServerConfig(path.join(opts.configDir, "server.toml"));
-  const friends = loadFriendsConfig(path.join(opts.configDir, "friends.toml"));
-  const base = buildStatusOutput(server, friends);
+  const peersCfg = loadPeersConfig(path.join(opts.configDir, "peers.toml"));
+  const base = buildStatusOutput(server, peersCfg);
 
   const daemon = await isServeRunning({
     configDir: opts.configDir,
