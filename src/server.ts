@@ -197,7 +197,7 @@ function createPublicApp(
   getOrCreateAgentBucket: (name: string) => TokenBucket | null,
   remoteAgents: RemoteAgent[],
   messageLog: MessageLog,
-  _sessionRegistry: SessionRegistry,
+  sessionRegistry: SessionRegistry,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -335,9 +335,12 @@ function createPublicApp(
         return;
       }
 
-      // --- Step 4: Resolve tenant ---
-      const agent = resolveTenant(config, tenant);
-      if (!agent) {
+      // --- Step 4: Resolve tenant via session registry ---
+      // Instead of resolving the agent config, look up the active session.
+      // Falls back to agentNotFoundResponse when no adapter is currently registered
+      // for this handle, preserving the A2A envelope shape remote peers expect.
+      const session = sessionRegistry.get(tenant);
+      if (!session) {
         sendA2AError(res, agentNotFoundResponse(tenant, messageId));
         return;
       }
@@ -383,9 +386,10 @@ function createPublicApp(
         return;
       }
 
-      // --- Step 7: Forward to local agent ---
-      const targetUrl = `${agent.localEndpoint}/${action}`;
-      const timeoutMs = agent.timeoutSeconds * 1000;
+      // --- Step 7: Forward to registered session endpoint ---
+      const targetUrl = `${session.endpoint}/${action}`;
+      const timeoutSeconds = config.agents[tenant]?.timeoutSeconds ?? 30;
+      const timeoutMs = timeoutSeconds * 1000;
 
       // Streaming branch
       if (action === "message:stream") {
@@ -410,7 +414,7 @@ function createPublicApp(
           if (!res.headersSent) {
             sendA2AError(
               res,
-              agentTimeoutResponse(tenant, agent.timeoutSeconds, messageId),
+              agentTimeoutResponse(tenant, timeoutSeconds, messageId),
             );
           }
         }
@@ -438,7 +442,7 @@ function createPublicApp(
         if (err instanceof Error && err.name === "AbortError") {
           sendA2AError(
             res,
-            agentTimeoutResponse(tenant, agent.timeoutSeconds, messageId),
+            agentTimeoutResponse(tenant, timeoutSeconds, messageId),
           );
         } else {
           const message = err instanceof Error ? err.message : "Agent unreachable";
