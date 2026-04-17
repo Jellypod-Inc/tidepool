@@ -11,7 +11,7 @@ export type EnsureMcpJsonResult =
   | { action: "updated"; previousAgent: string | null }
   | { action: "unchanged"; previousAgent: string };
 
-const ADAPTER_COMMAND = "a2a-claude-code-adapter";
+const ADAPTER_COMMAND = "tidepool-claude-code";
 const MCP_SERVER_KEY = "tidepool";
 
 export async function ensureMcpJsonEntry(
@@ -39,15 +39,12 @@ export async function ensureMcpJsonEntry(
   }
 
   const mcpServers = (parsed.mcpServers as Record<string, unknown> | undefined) ?? {};
-  // Back-compat: if the old "a2a" key exists, drop it in favor of "tidepool".
-  const legacy = mcpServers["a2a"] as { command?: string; args?: unknown[] } | undefined;
-  const existing =
-    (mcpServers[MCP_SERVER_KEY] as { command?: string; args?: unknown[] } | undefined) ??
-    legacy;
+  const existing = mcpServers[MCP_SERVER_KEY] as
+    | { command?: string; args?: unknown[] }
+    | undefined;
   const previousAgent = extractAgent(existing?.args);
 
   const alreadyCorrect =
-    !legacy &&
     existing?.command === ADAPTER_COMMAND &&
     Array.isArray(existing?.args) &&
     existing!.args!.length === desiredArgs.length &&
@@ -57,7 +54,6 @@ export async function ensureMcpJsonEntry(
     return { action: "unchanged", previousAgent };
   }
 
-  if (legacy) delete mcpServers["a2a"];
   mcpServers[MCP_SERVER_KEY] = { command: ADAPTER_COMMAND, args: desiredArgs };
   parsed.mcpServers = mcpServers;
   fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + "\n");

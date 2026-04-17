@@ -16,10 +16,9 @@ describe("ensureMcpJsonEntry", () => {
 
     const content = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
     expect(content.mcpServers["tidepool"]).toEqual({
-      command: "a2a-claude-code-adapter",
+      command: "tidepool-claude-code",
       args: ["--agent", "donkey"],
     });
-    expect(content.mcpServers.a2a).toBeUndefined();
   });
 
   it("preserves other mcpServers when merging", async () => {
@@ -36,7 +35,7 @@ describe("ensureMcpJsonEntry", () => {
     const content = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
     expect(content.mcpServers.other).toEqual({ command: "foo", args: ["bar"] });
     expect(content.mcpServers["tidepool"]).toEqual({
-      command: "a2a-claude-code-adapter",
+      command: "tidepool-claude-code",
       args: ["--agent", "donkey"],
     });
   });
@@ -48,7 +47,7 @@ describe("ensureMcpJsonEntry", () => {
       JSON.stringify({
         mcpServers: {
           "tidepool": {
-            command: "a2a-claude-code-adapter",
+            command: "tidepool-claude-code",
             args: ["--agent", "zebra"],
           },
         },
@@ -60,29 +59,6 @@ describe("ensureMcpJsonEntry", () => {
     expect(content.mcpServers["tidepool"].args).toEqual(["--agent", "donkey"]);
   });
 
-  it("migrates a legacy `a2a` entry to `tidepool`", async () => {
-    const cwd = tmp();
-    fs.writeFileSync(
-      path.join(cwd, ".mcp.json"),
-      JSON.stringify({
-        mcpServers: {
-          a2a: {
-            command: "a2a-claude-code-adapter",
-            args: ["--agent", "donkey"],
-          },
-        },
-      }),
-    );
-    const result = await ensureMcpJsonEntry({ cwd, agentName: "donkey" });
-    expect(result).toEqual({ action: "updated", previousAgent: "donkey" });
-    const content = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf-8"));
-    expect(content.mcpServers.a2a).toBeUndefined();
-    expect(content.mcpServers["tidepool"]).toEqual({
-      command: "a2a-claude-code-adapter",
-      args: ["--agent", "donkey"],
-    });
-  });
-
   it("no-ops when args already match under the tidepool key", async () => {
     const cwd = tmp();
     fs.writeFileSync(
@@ -90,7 +66,7 @@ describe("ensureMcpJsonEntry", () => {
       JSON.stringify({
         mcpServers: {
           "tidepool": {
-            command: "a2a-claude-code-adapter",
+            command: "tidepool-claude-code",
             args: ["--agent", "donkey"],
           },
         },
