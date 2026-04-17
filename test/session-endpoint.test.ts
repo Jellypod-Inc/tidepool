@@ -5,7 +5,7 @@ import { createSessionRegistry } from "../src/session/registry.js";
 import { mountSessionEndpoint } from "../src/session/endpoint.js";
 
 describe("mountSessionEndpoint — happy path", () => {
-  it("returns text/event-stream and emits session.registered + peers.snapshot", async () => {
+  it("returns text/event-stream and emits session.registered but not peers.snapshot", async () => {
     const registry = createSessionRegistry();
     const app = express();
     app.use(express.json());
@@ -16,7 +16,6 @@ describe("mountSessionEndpoint — happy path", () => {
     mountSessionEndpoint(app, {
       registry,
       port,
-      friendsSnapshot: () => [{ handle: "bob", did: null }],
     });
 
     try {
@@ -42,7 +41,7 @@ describe("mountSessionEndpoint — happy path", () => {
       const decoder = new TextDecoder();
       let buf = "";
       const deadline = Date.now() + 500;
-      while (!buf.includes("peers.snapshot") && Date.now() < deadline) {
+      while (!buf.includes("session.registered") && Date.now() < deadline) {
         const { value, done } = await Promise.race([
           reader.read(),
           new Promise<{ value: undefined; done: true }>((r) =>
@@ -53,8 +52,7 @@ describe("mountSessionEndpoint — happy path", () => {
         buf += decoder.decode(value);
       }
       expect(buf).toContain("event: session.registered");
-      expect(buf).toContain("event: peers.snapshot");
-      expect(buf).toContain('"handle":"bob"');
+      expect(buf).not.toContain("event: peers.snapshot");
 
       expect(registry.get("alice")?.endpoint).toBe("http://127.0.0.1:54312");
 
@@ -76,7 +74,6 @@ describe("mountSessionEndpoint — happy path", () => {
     mountSessionEndpoint(app, {
       registry,
       port,
-      friendsSnapshot: () => [],
     });
 
     try {
@@ -110,7 +107,6 @@ describe("mountSessionEndpoint — happy path", () => {
     mountSessionEndpoint(app, {
       registry,
       port,
-      friendsSnapshot: () => [],
     });
 
     try {
@@ -143,7 +139,6 @@ describe("mountSessionEndpoint — conflict", () => {
     mountSessionEndpoint(app, {
       registry,
       port,
-      friendsSnapshot: () => [],
     });
 
     try {
@@ -186,7 +181,6 @@ describe("mountSessionEndpoint — cleanup", () => {
     mountSessionEndpoint(app, {
       registry,
       port,
-      friendsSnapshot: () => [],
     });
 
     try {
@@ -222,76 +216,3 @@ describe("mountSessionEndpoint — cleanup", () => {
   });
 });
 
-describe("mountSessionEndpoint — peers.snapshot fanout", () => {
-  it("emits an updated peers.snapshot when friends directory changes", async () => {
-    const registry = createSessionRegistry();
-    const app = express();
-    app.use(express.json());
-    const server = await new Promise<http.Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    let friends: Array<{ handle: string; did: string | null }> = [
-      { handle: "bob", did: null },
-    ];
-    const { notifyFriendsChanged } = mountSessionEndpoint(app, {
-      registry,
-      port,
-      friendsSnapshot: () => friends,
-    });
-
-    try {
-      const controller = new AbortController();
-      const res = await fetch(
-        `http://127.0.0.1:${port}/.well-known/tidepool/agents/alice/session`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            endpoint: "http://127.0.0.1:99",
-            card: {},
-          }),
-          signal: controller.signal,
-        },
-      );
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      // Drain initial session.registered + first peers.snapshot
-      while (!buf.includes("peers.snapshot")) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value);
-      }
-      buf = ""; // reset buffer to watch for the *next* snapshot
-
-      // Friends change externally
-      friends = [
-        { handle: "bob", did: null },
-        { handle: "carol", did: null },
-      ];
-      notifyFriendsChanged();
-
-      // Read the new peers.snapshot
-      const deadline = Date.now() + 500;
-      while (!buf.includes("carol") && Date.now() < deadline) {
-        const { value, done } = await Promise.race([
-          reader.read(),
-          new Promise<{ value: undefined; done: true }>((r) =>
-            setTimeout(() => r({ value: undefined, done: true }), 100),
-          ),
-        ]);
-        if (done || !value) break;
-        buf += decoder.decode(value);
-      }
-      expect(buf).toContain("carol");
-      controller.abort();
-    } finally {
-      server.closeAllConnections();
-      await new Promise((r) => server.close(() => r(null)));
-    }
-  });
-});

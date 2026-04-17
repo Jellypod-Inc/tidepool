@@ -7,14 +7,9 @@ export interface MountSessionOpts {
   registry: SessionRegistry;
   /** Daemon's local port; used for Origin/Host validation. */
   port: number;
-  /** Callable returning current friends directory for peers.snapshot events. */
-  friendsSnapshot: () => Array<{ handle: string; did: string | null }>;
 }
 
-export interface MountedSession {
-  /** Broadcast a fresh peers.snapshot to all connected adapters. */
-  notifyFriendsChanged(): void;
-}
+export interface MountedSession {}
 
 const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -32,19 +27,6 @@ export function mountSessionEndpoint(
   app: Express,
   opts: MountSessionOpts,
 ): MountedSession {
-  const subscribers = new Set<Response>();
-
-  const broadcastFriends = () => {
-    const snap = opts.friendsSnapshot();
-    for (const res of subscribers) {
-      try {
-        writeEvent(res, "peers.snapshot", snap);
-      } catch {
-        // socket is dying; cleanup handler will remove it
-      }
-    }
-  };
-
   app.post(
     "/.well-known/tidepool/agents/:name/session",
     (req: Request, res: Response) => {
@@ -100,9 +82,6 @@ export function mountSessionEndpoint(
       res.flushHeaders?.();
 
       writeEvent(res, "session.registered", { sessionId: result.session.sessionId });
-      writeEvent(res, "peers.snapshot", opts.friendsSnapshot());
-
-      subscribers.add(res);
 
       const keepalive = setInterval(() => {
         try {
@@ -112,17 +91,14 @@ export function mountSessionEndpoint(
         }
       }, 15_000);
 
-      const cleanup = () => {
-        clearInterval(keepalive);
-        subscribers.delete(res);
-        opts.registry.deregister(result.session.sessionId);
-      };
-
       // Use res.on("close") which fires when the underlying TCP socket is closed,
       // not when the request body stream is exhausted (which req.on("close") does).
-      res.on("close", cleanup);
+      res.on("close", () => {
+        clearInterval(keepalive);
+        opts.registry.deregister(result.session.sessionId);
+      });
     },
   );
 
-  return { notifyFriendsChanged: broadcastFriends };
+  return {};
 }
