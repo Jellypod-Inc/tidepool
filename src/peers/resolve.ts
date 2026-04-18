@@ -83,6 +83,10 @@ export function resolveHandle(
  * fingerprint plus the agent name. Stable across daemons.
  *
  * Shape: `${peerDid}::${agent}` for remote, `self::${agent}` for local.
+ *
+ * Invariant: neither peerDid nor agent may contain `::`. Common DID methods
+ * (did:key, did:web, did:peer) satisfy this; local agent names are validated
+ * elsewhere.
  */
 export type AgentDid = string;
 
@@ -121,8 +125,10 @@ export function agentDidToHandle(
   if (peerId === "self") {
     if (!localAgents.includes(agent)) throw new Error(`unknown local agent: ${agent}`);
     const view = projectHandles(peers, localAgents);
-    return view.find((h) => h === agent || h === `self/${agent}`)
-      ?? `self/${agent}`;
+    // Invariant: projectHandles always includes every local agent, either bare or as self/<agent>
+    const found = view.find((h) => h === agent || h === `self/${agent}`);
+    if (!found) throw new Error(`projectHandles missing local agent ${agent}`);
+    return found;
   }
 
   const entryByPeer = Object.entries(peers.peers).find(
@@ -130,9 +136,11 @@ export function agentDidToHandle(
   );
   if (!entryByPeer) throw new Error(`unknown peer identity: ${peerId}`);
   const [peerName, entry] = entryByPeer;
-  if (!entry.agents.includes(agent)) throw new Error(`unknown agent on peer`);
+  if (!entry.agents.includes(agent)) throw new Error(`unknown agent ${agent} on peer ${peerName}`);
 
   const view = projectHandles(peers, localAgents);
-  return view.find((h) => h === agent || h === `${peerName}/${agent}`)
-    ?? `${peerName}/${agent}`;
+  // Invariant: projectHandles always includes every agent of every peer, either bare or scoped
+  const found = view.find((h) => h === agent || h === `${peerName}/${agent}`);
+  if (!found) throw new Error(`projectHandles missing ${peerName}/${agent}`);
+  return found;
 }

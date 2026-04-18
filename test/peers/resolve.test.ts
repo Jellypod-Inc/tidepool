@@ -3,6 +3,9 @@ import {
   parseScoped,
   projectHandles,
   resolveHandle,
+  handleToAgentDid,
+  agentDidToHandle,
+  peerDid,
 } from "../../src/peers/resolve.js";
 import type { PeersConfig } from "../../src/types.js";
 
@@ -130,12 +133,6 @@ describe("resolveHandle", () => {
     expect(() => resolveHandle("alice/trader", peers, [])).toThrow(/no agent .* on peer/);
   });
 });
-
-import {
-  handleToAgentDid,
-  agentDidToHandle,
-  peerDid,
-} from "../../src/peers/resolve.js";
 
 const didPeers: PeersConfig = {
   peers: {
