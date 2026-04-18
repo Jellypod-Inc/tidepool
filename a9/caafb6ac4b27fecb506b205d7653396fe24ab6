@@ -1,0 +1,55 @@
+test/e2e-multi-party-envelope.test.ts
+  f05e844afe5a49b3 1-424
+test/server-broadcast.test.ts
+  f05e844afe5a49b3 195-196,198,262,264
+src/server.ts
+  f05e844afe5a49b3 552,567-580,585,676
+src/broadcast.ts
+  f05e844afe5a49b3 33,131,148,167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "a9caafb6ac4b27fecb506b205d7653396fe24ab6",
+  "prompts": {
+    "3b3e52d822895f52": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c2662761-d6fd-4442-be4c-60d55227aa77",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    },
+    "687858472e2bbe7d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3969194b-d207-4981-bb5d-5a4b922ff43e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 406,
+      "overriden_lines": 0
+    },
+    "f05e844afe5a49b3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1df1bf9-b568-49d1-9147-26be3331d6d5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 450,
+      "total_deletions": 8,
+      "accepted_lines": 629,
+      "overriden_lines": 0
+    }
+  }
+}
