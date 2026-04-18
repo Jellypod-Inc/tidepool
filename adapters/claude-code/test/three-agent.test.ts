@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll, vi } from "vitest";
 import express from "express";
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -28,37 +29,69 @@ function startMockRelay(adapters: Record<string, { httpPort: number }>) {
       Object.keys(adapters).map((h) => ({ handle: h, did: null })),
     );
   });
-  app.post("/:tenant/message\\:send", async (req, res) => {
-    // Identify sender from session token
+  app.post("/message\\:broadcast", async (req, res) => {
     const sessionId = req.header("x-session-id") ?? "";
     const sender = sessionToName[sessionId];
     if (!sender) {
       res.status(403).json({ error: { code: "origin_denied", message: "Session not recognized" } });
       return;
     }
-    const tenant = req.params.tenant;
-    const target = adapters[tenant];
-    if (!target) {
-      res.status(404).json({ error: { code: "peer_not_found", message: `No peer named "${tenant}"` } });
-      return;
-    }
-    const body = {
-      ...req.body,
-      message: {
-        ...req.body.message,
-        metadata: { ...(req.body.message?.metadata ?? {}), from: sender },
-      },
+
+    const { peers, text, thread, addressed_to, in_reply_to } = req.body as {
+      peers: string[];
+      text: string;
+      thread?: string;
+      addressed_to?: string[];
+      in_reply_to?: string;
     };
-    const upstream = await fetch(
-      `http://127.0.0.1:${target.httpPort}/message:send`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
-    const json = await upstream.json();
-    res.status(upstream.status).json(json);
+
+    const contextId = thread ?? randomUUID();
+    const messageId = randomUUID();
+    const participants = peers.length > 1 ? [sender, ...peers] : undefined;
+
+    const results: Array<{ peer: string; delivery: "accepted" | "failed"; reason?: { kind: string; message: string } }> = [];
+
+    for (const peer of peers) {
+      const target = adapters[peer];
+      if (!target) {
+        results.push({
+          peer,
+          delivery: "failed",
+          reason: { kind: "peer-not-registered", message: `No peer named "${peer}"` },
+        });
+        continue;
+      }
+      const message: Record<string, unknown> = {
+        messageId,
+        contextId,
+        parts: [{ kind: "text", text }],
+        metadata: {
+          from: sender,
+          ...(participants ? { participants } : {}),
+          ...(addressed_to ? { addressed_to } : {}),
+          ...(in_reply_to ? { in_reply_to } : {}),
+        },
+      };
+      try {
+        const upstream = await fetch(
+          `http://127.0.0.1:${target.httpPort}/message:send`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message }),
+          },
+        );
+        if (upstream.ok) {
+          results.push({ peer, delivery: "accepted" });
+        } else {
+          results.push({ peer, delivery: "failed", reason: { kind: "other", message: `HTTP ${upstream.status}` } });
+        }
+      } catch {
+        results.push({ peer, delivery: "failed", reason: { kind: "peer-unreachable", message: "fetch failed" } });
+      }
+    }
+
+    res.status(200).json({ context_id: contextId, message_id: messageId, results });
   });
   return new Promise<{ port: number; close: () => Promise<void> }>((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => {

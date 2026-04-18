@@ -3,23 +3,24 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { InboundInfo } from "./http.js";
 import type { ThreadStore } from "./thread-store.js";
-import { SendError } from "./outbound.js";
+import type { BroadcastResponse } from "./outbound.js";
+import { BroadcastError } from "./outbound.js";
 import { ADAPTER_VERSION } from "./version.js";
 
 export type CreateChannelOpts = {
   self: string;
   store: ThreadStore;
   listPeers: () => Promise<string[]>;
-  send: (args: {
-    peer: string;
-    contextId: string;
+  broadcast: (args: {
+    peers: string[];
     text: string;
-    participants?: string[];
-  }) => Promise<{ messageId: string }>;
+    thread?: string;
+    addressed_to?: string[];
+    in_reply_to?: string;
+  }) => Promise<BroadcastResponse>;
   serverName?: string;
 };
 
@@ -37,6 +38,8 @@ const SendArgsSchema = z.object({
   peers: z.array(z.string().min(1)).min(1),
   text: z.string().min(1),
   thread: z.string().optional(),
+  addressed_to: z.array(z.string().min(1)).optional(),
+  in_reply_to: z.string().min(1).optional(),
 });
 
 const ListThreadsArgsSchema = z.object({
@@ -83,8 +86,15 @@ export function createChannel(opts: CreateChannelOpts) {
     tools: [
       {
         name: "send",
-        description:
-          "Send one message to one or more peers. Returns `{context_id, results: [{peer, message_id?, error?}]}` — a peer's reply (if any) arrives later as a separate <channel source=\"tidepool\"> event with the same context_id. Pass `thread=<context_id>` to continue an existing conversation; omit to start a new one. Multi-peer sends share one context_id and stamp a participants list onto every outbound so receivers know who else is in the thread — recipients are free to reply-all, reply-to-one, or branch to a new thread. Always call `list_peers` before guessing handles.",
+        description: [
+          "Send a message to one or more tidepool peers. Returns the shared message_id plus per-peer delivery outcomes.",
+          "",
+          "peers: handles (bare or peer/agent scoped).",
+          "text: prose content.",
+          "thread: optional context_id to continue an existing thread.",
+          "addressed_to: optional subset of peers to hint who the message is directed at (broadcast recipients see this).",
+          "in_reply_to: optional message_id being replied to (must be visible in the same thread).",
+        ].join("\n"),
         inputSchema: {
           type: "object",
           properties: {
@@ -100,6 +110,17 @@ export function createChannel(opts: CreateChannelOpts) {
               type: "string",
               description:
                 "context_id to continue a thread; omit to start a new one",
+            },
+            addressed_to: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "optional subset of peers to hint who the message is directed at",
+            },
+            in_reply_to: {
+              type: "string",
+              description:
+                "optional message_id being replied to (must be visible in the same thread)",
             },
           },
           required: ["peers", "text"],
@@ -162,76 +183,66 @@ export function createChannel(opts: CreateChannelOpts) {
         ],
       };
     }
-    const { peers, text, thread } = parsed.data;
-    // Dedupe peers in input order so fan-out doesn't double-send.
+    const { peers, text, thread, addressed_to, in_reply_to } = parsed.data;
+    // Dedupe peers in input order so fanout doesn't double-send.
     const uniquePeers = Array.from(new Set(peers));
-    const contextId = thread ?? randomUUID();
-    const isMultiParty = uniquePeers.length > 1;
-    const participants = isMultiParty
-      ? [opts.self, ...uniquePeers]
-      : undefined;
 
-    type SendResult =
-      | { peer: string; message_id: string }
-      | {
-          peer: string;
-          error: { kind: string; message: string; hint: string };
+    let resp: BroadcastResponse;
+    try {
+      resp = await opts.broadcast({
+        peers: uniquePeers,
+        text,
+        thread,
+        addressed_to,
+        in_reply_to,
+      });
+    } catch (err) {
+      if (err instanceof BroadcastError) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: {
+                  status: err.status,
+                  detail: err.detail,
+                  message: err.message,
+                },
+              }),
+            },
+          ],
         };
-    const results: SendResult[] = [];
-    const successfulPeers: string[] = [];
-    let firstSuccessMessageId: string | undefined;
-
-    // Sequential fan-out: keeps results[] in input order and keeps error
-    // classification simple. If peer counts grow large or remote peers add real
-    // latency, switch to Promise.allSettled with a result-collation pass.
-    for (const peer of uniquePeers) {
-      try {
-        const { messageId } = await opts.send({
-          peer,
-          contextId,
-          text,
-          participants,
-        });
-        results.push({ peer, message_id: messageId });
-        successfulPeers.push(peer);
-        if (!firstSuccessMessageId) firstSuccessMessageId = messageId;
-      } catch (err) {
-        if (err instanceof SendError) {
-          results.push({
-            peer,
-            error: { kind: err.kind, message: err.message, hint: err.hint },
-          });
-        } else {
-          throw err;
-        }
       }
+      throw err;
     }
 
-    // Record one store entry per send tool call (not per peer) — thread-store
-    // tracks the message once, peers union into the thread's member set. The
-    // first successful message_id becomes the canonical id for local
-    // bookkeeping; per-peer message_ids are still surfaced in the response's
-    // results[] for callers that need per-recipient tracking.
-    if (successfulPeers.length > 0 && firstSuccessMessageId) {
+    // Record the shared outbound message in thread-store keyed by shared message_id.
+    // Participants are daemon-stamped — we only track which peers we sent to.
+    const acceptedPeers = resp.results
+      .filter((r) => r.delivery === "accepted")
+      .map((r) => r.peer);
+    if (acceptedPeers.length > 0) {
       opts.store.record({
-        contextId,
-        peers: successfulPeers,
-        messageId: firstSuccessMessageId,
+        contextId: resp.context_id,
+        peers: acceptedPeers,
+        messageId: resp.message_id,
         from: opts.self,
         text,
         sentAt: Date.now(),
       });
     }
 
-    const allFailed = results.every((r) => "error" in r);
+    const allFailed = resp.results.every((r) => r.delivery === "failed");
     return {
       isError: allFailed,
       content: [
         {
           type: "text",
           text: JSON.stringify({
-            context_id: contextId,
-            results,
+            context_id: resp.context_id,
+            message_id: resp.message_id,
+            results: resp.results,
           }),
         },
       ],

@@ -8,12 +8,13 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { start } from "../src/start.js";
 
+import { randomUUID } from "node:crypto";
+
 /**
- * Mock relay that stands in for tidepool.
- * - Listens on a random port.
- * - Validates X-Agent header.
- * - Forwards POST /:tenant/message:send to the tenant's adapter HTTP port,
- *   injecting metadata.from = X-Agent value.
+ * Mock relay that stands in for the tidepool daemon.
+ * - Implements POST /message:broadcast (the new single-call endpoint).
+ * - Fans out to each peer's adapter HTTP port and returns a BroadcastResponse.
+ * - Injects metadata.from = sender handle derived from X-Session-Id.
  */
 function startMockRelay(adapters: Record<string, { httpPort: number }>) {
   // Session registry: sessionId → agent name
@@ -35,37 +36,70 @@ function startMockRelay(adapters: Record<string, { httpPort: number }>) {
       Object.keys(adapters).map((h) => ({ handle: h, did: null })),
     );
   });
-  app.post("/:tenant/message\\:send", async (req, res) => {
-    // Identify sender from session token
+  app.post("/message\\:broadcast", async (req, res) => {
     const sessionId = req.header("x-session-id") ?? "";
     const sender = sessionToName[sessionId];
     if (!sender) {
       res.status(403).json({ error: { code: "origin_denied", message: "Session not recognized" } });
       return;
     }
-    const tenant = req.params.tenant;
-    const target = adapters[tenant];
-    if (!target) {
-      res.status(404).json({ error: { code: "peer_not_found", message: `No peer named "${tenant}"` } });
-      return;
-    }
-    const body = {
-      ...req.body,
-      message: {
-        ...req.body.message,
-        metadata: { ...(req.body.message?.metadata ?? {}), from: sender },
-      },
+
+    const { peers, text, thread, addressed_to, in_reply_to } = req.body as {
+      peers: string[];
+      text: string;
+      thread?: string;
+      addressed_to?: string[];
+      in_reply_to?: string;
     };
-    const upstream = await fetch(
-      `http://127.0.0.1:${target.httpPort}/message:send`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
-    const json = await upstream.json();
-    res.status(upstream.status).json(json);
+
+    const contextId = thread ?? randomUUID();
+    const messageId = randomUUID();
+    // Build participants list for multi-party sends (all senders + recipients)
+    const participants = peers.length > 1 ? [sender, ...peers] : undefined;
+
+    const results: Array<{ peer: string; delivery: "accepted" | "failed"; reason?: { kind: string; message: string } }> = [];
+
+    for (const peer of peers) {
+      const target = adapters[peer];
+      if (!target) {
+        results.push({
+          peer,
+          delivery: "failed",
+          reason: { kind: "peer-not-registered", message: `No peer named "${peer}"` },
+        });
+        continue;
+      }
+      const message: Record<string, unknown> = {
+        messageId,
+        contextId,
+        parts: [{ kind: "text", text }],
+        metadata: {
+          from: sender,
+          ...(participants ? { participants } : {}),
+          ...(addressed_to ? { addressed_to } : {}),
+          ...(in_reply_to ? { in_reply_to } : {}),
+        },
+      };
+      try {
+        const upstream = await fetch(
+          `http://127.0.0.1:${target.httpPort}/message:send`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message }),
+          },
+        );
+        if (upstream.ok) {
+          results.push({ peer, delivery: "accepted" });
+        } else {
+          results.push({ peer, delivery: "failed", reason: { kind: "other", message: `HTTP ${upstream.status}` } });
+        }
+      } catch {
+        results.push({ peer, delivery: "failed", reason: { kind: "peer-unreachable", message: "fetch failed" } });
+      }
+    }
+
+    res.status(200).json({ context_id: contextId, message_id: messageId, results });
   });
   return new Promise<{ port: number; close: () => Promise<void> }>((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => {
@@ -170,9 +204,10 @@ describe("symmetric round-trip via mock relay", () => {
     const sendData = JSON.parse((sendResult.content as any)[0].text);
     const ctx = sendData.context_id;
     expect(ctx).toBeTruthy();
+    expect(typeof sendData.message_id).toBe("string");
     expect(sendData.results).toHaveLength(1);
     expect(sendData.results[0].peer).toBe("bob");
-    expect(typeof sendData.results[0].message_id).toBe("string");
+    expect(sendData.results[0].delivery).toBe("accepted");
 
     await vi.waitFor(() => expect(bobEvents).toHaveLength(1));
     expect(bobEvents[0]).toMatchObject({
@@ -202,7 +237,7 @@ describe("symmetric round-trip via mock relay", () => {
     });
   });
 
-  it("send returns isError result when relay returns 404 (unknown tenant)", async () => {
+  it("send returns isError result when peer is unknown (failed delivery)", async () => {
     const result = await aliceClient.callTool({
       name: "send",
       arguments: { peers: ["nonexistent"], text: "hi" },
@@ -210,6 +245,7 @@ describe("symmetric round-trip via mock relay", () => {
     expect(result.isError).toBe(true);
     const data = JSON.parse((result.content as any)[0].text);
     expect(data.results).toHaveLength(1);
-    expect(data.results[0].error.kind).toBe("peer-not-registered");
+    expect(data.results[0].delivery).toBe("failed");
+    expect(data.results[0].reason.kind).toBe("peer-not-registered");
   });
 });
