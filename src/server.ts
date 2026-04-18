@@ -46,6 +46,7 @@ import { buildFailedStatusEvent, MessageSchema } from "./a2a.js";
 import { validateWire } from "./wire-validation.js";
 import {
   injectMetadataFrom,
+  stampInboundMetadata,
   stripMetadataFrom,
   resolveLocalHandleForRemoteSender,
 } from "./identity-injection.js";
@@ -153,6 +154,7 @@ export async function startServer(opts: StartServerOpts) {
     messageLog,
     messageTap,
     sessionRegistry,
+    threadIndex,
   );
   // Graceful shutdown — closes listeners and stops config watcher. Exposed
   // via POST /internal/shutdown so `tidepool stop` can terminate the daemon
@@ -224,6 +226,7 @@ function createPublicApp(
   messageLog: MessageLog,
   messageTap: MessageTap,
   sessionRegistry: SessionRegistry,
+  threadIndex: ThreadIndex,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -432,7 +435,13 @@ function createPublicApp(
           const upstreamResponse = await fetch(targetUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(injectMetadataFrom(req.body, localHandle)),
+            body: JSON.stringify(stampInboundMetadata(req.body, {
+              from: localHandle,
+              self: tenant,
+              peers: holder.peers(),
+              localAgents: Object.keys(config.agents),
+              threadIndex,
+            })),
           });
 
           await proxyUpstreamOrFail({
@@ -460,7 +469,13 @@ function createPublicApp(
         const response = await fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(injectMetadataFrom(req.body, localHandle)),
+          body: JSON.stringify(stampInboundMetadata(req.body, {
+            from: localHandle,
+            self: tenant,
+            peers: holder.peers(),
+            localAgents: Object.keys(config.agents),
+            threadIndex,
+          })),
           signal: controller.signal,
         });
 
@@ -1032,7 +1047,13 @@ function createLocalApp(
           const upstreamResponse = await fetch(targetUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(injectMetadataFrom(req.body, senderAgent)),
+            body: JSON.stringify(stampInboundMetadata(req.body, {
+              from: senderAgent,
+              self: tenant,
+              peers: holder.peers(),
+              localAgents: Object.keys(config.agents),
+              threadIndex,
+            })),
           });
 
           await proxyUpstreamOrFail({
@@ -1054,7 +1075,13 @@ function createLocalApp(
         const response = await fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(injectMetadataFrom(req.body, senderAgent)),
+          body: JSON.stringify(stampInboundMetadata(req.body, {
+            from: senderAgent,
+            self: tenant,
+            peers: holder.peers(),
+            localAgents: Object.keys(config.agents),
+            threadIndex,
+          })),
         });
         const data = await response.json();
         res.status(response.status).json(data);
