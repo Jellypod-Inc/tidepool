@@ -25,7 +25,7 @@ import {
 import { handleConnectionRequest } from "./handshake.js";
 import { writePeersConfig } from "./peers/config.js";
 import { projectHandles } from "./peers/resolve.js";
-import { createDefaultThreadIndex } from "./thread-index.js";
+import { createDefaultThreadIndex, ThreadIndex } from "./thread-index.js";
 import { BroadcastHandler, BroadcastValidationError, type DeliveryOutcome } from "./broadcast.js";
 import { BroadcastRequestSchema } from "./schemas.js";
 import { TokenBucket, parseRateLimit } from "./rate-limiter.js";
@@ -505,7 +505,7 @@ function createLocalApp(
   port: number,
   sessionRegistry: SessionRegistry,
   shutdown: () => Promise<void>,
-  threadIndex: ReturnType<typeof createDefaultThreadIndex>,
+  threadIndex: ThreadIndex,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -596,25 +596,11 @@ function createLocalApp(
         },
       };
     }
-    const synthRemote: RemoteAgent = {
-      localHandle: peerName,
-      remoteEndpoint: peerEntry.endpoint,
-      remoteTenant: agentName,
-      certFingerprint: peerEntry.fingerprint ?? "",
-    };
-    const targetUrl = buildOutboundUrl(
-      synthRemote.remoteEndpoint,
-      synthRemote.remoteTenant,
-      "/message:send",
-    );
+    const targetUrl = buildOutboundUrl(peerEntry.endpoint, agentName, "/message:send");
     const certPath = peerCertPath(configDir);
     const keyPath = peerKeyPath(configDir);
     try {
-      const dispatcher = buildPinnedDispatcher(
-        certPath,
-        keyPath,
-        synthRemote.certFingerprint,
-      );
+      const dispatcher = buildPinnedDispatcher(certPath, keyPath, peerEntry.fingerprint ?? "");
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -647,6 +633,7 @@ function createLocalApp(
   // --- Broadcast endpoint ---
   const broadcastHandler = new BroadcastHandler({
     peers: () => holder.peers(),
+    // used by broadcast handler to include local agents in handle resolution
     localAgents: () => {
       const agentSet = new Set<string>();
       for (const name of Object.keys(holder.server().agents)) agentSet.add(name);

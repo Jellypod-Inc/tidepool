@@ -92,7 +92,7 @@ export class BroadcastHandler {
       }
     }
 
-    // Validate in_reply_to if provided (fail-open on unknown thread)
+    // Validate in_reply_to if provided (fail-open on unknown context)
     if (input.in_reply_to) {
       const presence = this.deps.threadIndex.has(contextId, input.in_reply_to);
       if (presence === "absent") {
@@ -108,6 +108,10 @@ export class BroadcastHandler {
     this.deps.threadIndex.record(contextId, messageId);
 
     // Build canonical participants list: sender + all recipients (as DIDs)
+    // TODO: sender identity should travel as this peer's real DID once
+    // a "self" peer entry exists. For now "self::" is a local-only marker;
+    // receiver-side re-projection (inbound stamping) will stamp the correct
+    // sender handle in the recipient's view.
     const senderDid: string = `self::${input.senderAgent}`;
     const participantDids = [senderDid, ...recipients.map((r) => r.did)];
 
