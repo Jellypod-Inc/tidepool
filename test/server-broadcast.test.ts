@@ -192,9 +192,10 @@ describe("POST /message:broadcast", () => {
     // Multi-party envelope extension is declared
     expect(msg.extensions).toContain("https://tidepool.dev/ext/multi-party-envelope/v1");
 
-    // Participants list includes sender and recipient DIDs
+    // Participants list includes sender and recipient projected as handles
+    // (stampInboundMetadata re-projects self::<agent> DIDs to bare handles)
     const metadata = msg.metadata as { participants: string[] };
-    expect(metadata.participants).toContain("self::alice");
+    expect(metadata.participants).toContain("alice");
   });
 
   it("aggregates per-peer results for multiple local peers", async () => {
@@ -258,9 +259,9 @@ describe("POST /message:broadcast", () => {
     expect(carolMsg.contextId).toBe(body.context_id);
     expect(daveMsg.contextId).toBe(body.context_id);
 
-    // Participants list on each message includes all three agents
+    // Participants list on each message includes all three agents projected as handles
     const carolParticipants = (carolMsg.metadata as { participants: string[] }).participants;
-    expect(carolParticipants).toContain("self::alice");
+    expect(carolParticipants).toContain("alice");
   });
 
   it("rejects addressed_to containing an unknown handle (invalid_addressed_to)", async () => {

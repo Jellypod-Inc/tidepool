@@ -30,7 +30,7 @@ export interface BroadcastDeps {
     agentName: string,
     body: unknown,
   ) => Promise<DeliveryOutcome>;
-  deliverLocal: (agentName: string, body: unknown) => Promise<DeliveryOutcome>;
+  deliverLocal: (agentName: string, senderAgent: string, body: unknown) => Promise<DeliveryOutcome>;
 }
 
 export interface BroadcastInput extends BroadcastRequest {
@@ -128,6 +128,7 @@ export class BroadcastHandler {
             participantDids,
             addressedTo: addressedDids,
             inReplyTo: input.in_reply_to,
+            senderAgent: input.senderAgent,
           }),
       ),
     );
@@ -144,6 +145,7 @@ export class BroadcastHandler {
     participantDids: string[];
     addressedTo?: string[];
     inReplyTo?: string;
+    senderAgent: string;
   }): Promise<BroadcastResultItem> {
     const body = {
       message: {
@@ -162,7 +164,7 @@ export class BroadcastHandler {
 
     const outcome =
       ctx.resolved.kind === "local"
-        ? await this.deps.deliverLocal(ctx.resolved.agent, body)
+        ? await this.deps.deliverLocal(ctx.resolved.agent, ctx.senderAgent, body)
         : await this.deps.deliverRemote(
             ctx.resolved.peer,
             ctx.resolved.agent,

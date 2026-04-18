@@ -549,6 +549,7 @@ function createLocalApp(
    */
   async function deliverToLocalAgent(
     agentName: string,
+    senderAgent: string,
     messageBody: unknown,
   ): Promise<DeliveryOutcome> {
     const session = sessionRegistry.get(agentName);
@@ -563,11 +564,25 @@ function createLocalApp(
       };
     }
     const targetUrl = `${session.endpoint}/message:send`;
+    // Stamp self + from for local delivery (broadcast path). Re-project
+    // participant DIDs to receiver-view handles and record into thread-index.
+    const config = holder.server();
+    const stamped = stampInboundMetadata(messageBody as Record<string, unknown>, {
+      from: senderAgent,
+      self: agentName,
+      peers: holder.peers(),
+      localAgents: (() => {
+        const set = new Set<string>(Object.keys(config.agents));
+        for (const s of sessionRegistry.list()) set.add(s.name);
+        return Array.from(set);
+      })(),
+      threadIndex,
+    });
     try {
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messageBody),
+        body: JSON.stringify(stamped),
       });
       if (response.ok) {
         return { delivery: "accepted" };
@@ -658,7 +673,7 @@ function createLocalApp(
     threadIndex,
     deliverRemote: (peerName, agentName, body) =>
       deliverToRemotePeer(peerName, agentName, body),
-    deliverLocal: (agentName, body) => deliverToLocalAgent(agentName, body),
+    deliverLocal: (agentName, senderAgent, body) => deliverToLocalAgent(agentName, senderAgent, body),
   });
 
   // POST /message:broadcast — must be registered BEFORE the generic /:peer/:agent/:action
