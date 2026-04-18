@@ -77,3 +77,62 @@ export function resolveHandle(
   if (localMatch) return { kind: "local", agent };
   return { kind: "remote", peer: remoteMatches[0], agent };
 }
+
+/**
+ * Canonical per-agent identity: opaque string derived from a peer's DID or
+ * fingerprint plus the agent name. Stable across daemons.
+ *
+ * Shape: `${peerDid}::${agent}` for remote, `self::${agent}` for local.
+ */
+export type AgentDid = string;
+
+/** Peer identity: prefer DID, fall back to fingerprint. Throws on missing both. */
+export function peerDid(entry: { did?: string; fingerprint?: string }): string {
+  const id = entry.did ?? entry.fingerprint;
+  if (!id) throw new Error("peer entry missing did and fingerprint");
+  return id;
+}
+
+/** Local handle (in *viewer* projection) → canonical AgentDid. */
+export function handleToAgentDid(
+  handle: string,
+  peers: PeersConfig,
+  localAgents: string[],
+): AgentDid {
+  const resolved = resolveHandle(handle, peers, localAgents);
+  if (resolved.kind === "local") return `self::${resolved.agent}`;
+  const entry = peers.peers[resolved.peer];
+  return `${peerDid(entry)}::${resolved.agent}`;
+}
+
+/**
+ * Canonical AgentDid → handle in *viewer* projection. `viewer` is the
+ * PeersConfig + localAgents of the daemon doing the projection; self-agents
+ * on that daemon become `self/<agent>` when collision exists, otherwise bare.
+ */
+export function agentDidToHandle(
+  did: AgentDid,
+  peers: PeersConfig,
+  localAgents: string[],
+): string {
+  const [peerId, agent] = did.split("::");
+  if (!peerId || !agent) throw new Error(`invalid AgentDid: ${did}`);
+
+  if (peerId === "self") {
+    if (!localAgents.includes(agent)) throw new Error(`unknown local agent: ${agent}`);
+    const view = projectHandles(peers, localAgents);
+    return view.find((h) => h === agent || h === `self/${agent}`)
+      ?? `self/${agent}`;
+  }
+
+  const entryByPeer = Object.entries(peers.peers).find(
+    ([, p]) => (p.did ?? p.fingerprint) === peerId,
+  );
+  if (!entryByPeer) throw new Error(`unknown peer identity: ${peerId}`);
+  const [peerName, entry] = entryByPeer;
+  if (!entry.agents.includes(agent)) throw new Error(`unknown agent on peer`);
+
+  const view = projectHandles(peers, localAgents);
+  return view.find((h) => h === agent || h === `${peerName}/${agent}`)
+    ?? `${peerName}/${agent}`;
+}
