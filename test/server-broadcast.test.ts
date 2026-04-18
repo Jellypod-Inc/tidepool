@@ -262,4 +262,98 @@ describe("POST /message:broadcast", () => {
     const carolParticipants = (carolMsg.metadata as { participants: string[] }).participants;
     expect(carolParticipants).toContain("self::alice");
   });
+
+  it("rejects addressed_to containing an unknown handle (invalid_addressed_to)", async () => {
+    const dir = tmp("bc-invalid-at-");
+    await setupDaemon(dir);
+
+    let bobReceived: unknown = null;
+    const { server: bobServer, port: bobPort } = await listenOn((req, res) => {
+      bobReceived = req.body;
+      res.status(200).json({ id: "t", status: { state: "completed" }, artifacts: [] });
+    });
+    closers.push(bobServer);
+
+    const handle = await startServer({ configDir: dir });
+    closers.push({ close: () => handle.close() });
+    const port = (handle.localServer.address() as { port: number }).port;
+
+    const aliceSess = await registerTestSession(port, "alice", `http://127.0.0.1:19991`);
+    sessions.push(aliceSess);
+    const bobSess = await registerTestSession(port, "bob", `http://127.0.0.1:${bobPort}`);
+    sessions.push(bobSess);
+
+    // "ghost" is not a known local agent or peer — handleToAgentDid throws →
+    // BroadcastHandler wraps it in BroadcastValidationError("invalid_addressed_to")
+    const res = await fetch(`http://127.0.0.1:${port}/message:broadcast`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-Id": aliceSess.sessionId,
+      },
+      body: JSON.stringify({
+        peers: ["bob"],
+        text: "hi",
+        addressed_to: ["ghost"],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json() as { code: string };
+    // Either code is a legitimate validation failure for an unresolvable addressed_to
+    expect(["invalid_addressed_to", "unknown_peer"]).toContain(body.code);
+
+    // Ensure bob was NOT called (request rejected before fan-out)
+    expect(bobReceived).toBeNull();
+  });
+
+  it("rejects in_reply_to referencing a message id not in the known thread", async () => {
+    const dir = tmp("bc-invalid-irt-");
+    await setupDaemon(dir);
+
+    const { server: bobServer, port: bobPort } = await listenOn((_req, res) => {
+      res.status(200).json({ id: "t", status: { state: "completed" }, artifacts: [] });
+    });
+    closers.push(bobServer);
+
+    const handle = await startServer({ configDir: dir });
+    closers.push({ close: () => handle.close() });
+    const port = (handle.localServer.address() as { port: number }).port;
+
+    const aliceSess = await registerTestSession(port, "alice", `http://127.0.0.1:19990`);
+    sessions.push(aliceSess);
+    const bobSess = await registerTestSession(port, "bob", `http://127.0.0.1:${bobPort}`);
+    sessions.push(bobSess);
+
+    // Step 1: Establish a known thread by sending a first message
+    const firstRes = await fetch(`http://127.0.0.1:${port}/message:broadcast`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-Id": aliceSess.sessionId,
+      },
+      body: JSON.stringify({ peers: ["bob"], text: "first message" }),
+    });
+    expect(firstRes.status).toBe(200);
+    const { context_id } = await firstRes.json() as { context_id: string };
+
+    // Step 2: Reply to the SAME thread but reference an id that was never recorded
+    const res = await fetch(`http://127.0.0.1:${port}/message:broadcast`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-Id": aliceSess.sessionId,
+      },
+      body: JSON.stringify({
+        peers: ["bob"],
+        text: "second message",
+        thread: context_id,
+        in_reply_to: "00000000-0000-4000-8000-000000000999",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json() as { code: string };
+    expect(body.code).toBe("invalid_in_reply_to");
+  });
 });
