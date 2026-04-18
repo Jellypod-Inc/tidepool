@@ -25,6 +25,9 @@ import {
 import { handleConnectionRequest } from "./handshake.js";
 import { writePeersConfig } from "./peers/config.js";
 import { projectHandles } from "./peers/resolve.js";
+import { createDefaultThreadIndex } from "./thread-index.js";
+import { BroadcastHandler, BroadcastValidationError, type DeliveryOutcome } from "./broadcast.js";
+import { BroadcastRequestSchema } from "./schemas.js";
 import { TokenBucket, parseRateLimit } from "./rate-limiter.js";
 import {
   rateLimitResponse,
@@ -124,6 +127,7 @@ export async function startServer(opts: StartServerOpts) {
   const messageTap = new MessageTap(50);
   const startedAt = new Date();
   const sessionRegistry = createSessionRegistry();
+  const threadIndex = createDefaultThreadIndex();
 
   // Public interface: mTLS
   const tlsOpts = buildTlsOptions(opts.configDir);
@@ -165,7 +169,7 @@ export async function startServer(opts: StartServerOpts) {
     setTimeout(() => process.exit(0), 50).unref();
   };
 
-  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, messageTap, startedAt, localPort, sessionRegistry, shutdown);
+  const localApp = createLocalApp(holder, remoteAgents, opts.configDir, messageLog, messageTap, startedAt, localPort, sessionRegistry, shutdown, threadIndex);
 
   publicServer.on("request", publicApp);
   localServer.on("request", localApp);
@@ -501,6 +505,7 @@ function createLocalApp(
   port: number,
   sessionRegistry: SessionRegistry,
   shutdown: () => Promise<void>,
+  threadIndex: ReturnType<typeof createDefaultThreadIndex>,
 ): express.Application {
   const app = express();
   app.use(express.json());
@@ -519,6 +524,186 @@ function createLocalApp(
   mountSessionEndpoint(app, {
     registry: sessionRegistry,
     port,
+  });
+
+  // --- Delivery helpers (shared by legacy endpoints and broadcast handler) ---
+
+  /**
+   * Deliver a non-streaming message:send to a local agent via its session endpoint.
+   * Returns DeliveryOutcome (never throws).
+   */
+  async function deliverToLocalAgent(
+    agentName: string,
+    messageBody: unknown,
+  ): Promise<DeliveryOutcome> {
+    const session = sessionRegistry.get(agentName);
+    if (!session) {
+      return {
+        delivery: "failed",
+        reason: {
+          kind: "peer-not-registered",
+          message: `Agent "${agentName}" has no active session`,
+          hint: "Ensure the agent's adapter is running and has opened a session.",
+        },
+      };
+    }
+    const targetUrl = `${session.endpoint}/message:send`;
+    try {
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(messageBody),
+      });
+      if (response.ok) {
+        return { delivery: "accepted" };
+      }
+      const text = await response.text().catch(() => "");
+      return {
+        delivery: "failed",
+        reason: {
+          kind: "other",
+          message: `Agent endpoint returned HTTP ${response.status}${text ? `: ${text}` : ""}`,
+        },
+      };
+    } catch (err) {
+      return {
+        delivery: "failed",
+        reason: {
+          kind: "peer-unreachable",
+          message: err instanceof Error ? err.message : "Local agent unreachable",
+        },
+      };
+    }
+  }
+
+  /**
+   * Deliver a non-streaming message:send to a remote peer via mTLS.
+   * Returns DeliveryOutcome (never throws).
+   */
+  async function deliverToRemotePeer(
+    peerName: string,
+    agentName: string,
+    messageBody: unknown,
+  ): Promise<DeliveryOutcome> {
+    const peers = holder.peers();
+    const peerEntry = peers.peers[peerName];
+    if (!peerEntry) {
+      return {
+        delivery: "failed",
+        reason: {
+          kind: "peer-not-registered",
+          message: `Peer "${peerName}" not found in peers.toml`,
+        },
+      };
+    }
+    const synthRemote: RemoteAgent = {
+      localHandle: peerName,
+      remoteEndpoint: peerEntry.endpoint,
+      remoteTenant: agentName,
+      certFingerprint: peerEntry.fingerprint ?? "",
+    };
+    const targetUrl = buildOutboundUrl(
+      synthRemote.remoteEndpoint,
+      synthRemote.remoteTenant,
+      "/message:send",
+    );
+    const certPath = peerCertPath(configDir);
+    const keyPath = peerKeyPath(configDir);
+    try {
+      const dispatcher = buildPinnedDispatcher(
+        certPath,
+        keyPath,
+        synthRemote.certFingerprint,
+      );
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(messageBody),
+        // @ts-expect-error — Node fetch supports dispatcher for custom TLS
+        dispatcher,
+      });
+      if (response.ok) {
+        return { delivery: "accepted" };
+      }
+      const text = await response.text().catch(() => "");
+      return {
+        delivery: "failed",
+        reason: {
+          kind: "other",
+          message: `Remote peer returned HTTP ${response.status}${text ? `: ${text}` : ""}`,
+        },
+      };
+    } catch (err) {
+      return {
+        delivery: "failed",
+        reason: {
+          kind: "peer-unreachable",
+          message: err instanceof Error ? err.message : "Remote peer unreachable",
+        },
+      };
+    }
+  }
+
+  // --- Broadcast endpoint ---
+  const broadcastHandler = new BroadcastHandler({
+    peers: () => holder.peers(),
+    localAgents: () => {
+      const agentSet = new Set<string>();
+      for (const name of Object.keys(holder.server().agents)) agentSet.add(name);
+      for (const sess of sessionRegistry.list()) agentSet.add(sess.name);
+      return Array.from(agentSet);
+    },
+    threadIndex,
+    deliverRemote: (peerName, agentName, body) =>
+      deliverToRemotePeer(peerName, agentName, body),
+    deliverLocal: (agentName, body) => deliverToLocalAgent(agentName, body),
+  });
+
+  // POST /message:broadcast — must be registered BEFORE the generic /:peer/:agent/:action
+  // and /:tenant/:action catches so this path matches first.
+  app.post("/message\\:broadcast", async (req, res) => {
+    const sessionId = req.header("x-session-id");
+    if (!sessionId) {
+      const err = structuredError(
+        403,
+        "invalid_request",
+        "X-Session-Id header required",
+        "Open a session via POST /.well-known/tidepool/agents/<name>/session and pass the returned sessionId as X-Session-Id on subsequent requests.",
+      );
+      res.status(err.statusCode).json(err.body);
+      return;
+    }
+    const session = sessionRegistry.getBySessionId(sessionId);
+    if (!session) {
+      const err = structuredError(
+        403,
+        "invalid_request",
+        "X-Session-Id does not match any active session",
+        "The session may have been closed. Re-open via POST /.well-known/tidepool/agents/<name>/session.",
+      );
+      res.status(err.statusCode).json(err.body);
+      return;
+    }
+
+    const parsed = BroadcastRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ code: "invalid_body", detail: parsed.error.issues });
+      return;
+    }
+
+    try {
+      const result = await broadcastHandler.run({
+        senderAgent: session.name,
+        ...parsed.data,
+      });
+      res.status(200).json(result);
+    } catch (e) {
+      if (e instanceof BroadcastValidationError) {
+        res.status(400).json({ code: e.code, detail: e.detail });
+        return;
+      }
+      throw e;
+    }
   });
 
   // Tidepool extensions (origin guard is now global, no per-route guard needed).
