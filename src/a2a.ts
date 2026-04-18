@@ -184,6 +184,16 @@ export const PartSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+export const TidepoolMetadataSchema = z
+  .object({
+    from: z.string().optional(),
+    participants: z.array(z.string()).optional(),
+    addressed_to: z.array(z.string()).optional(),
+    in_reply_to: z.string().optional(),
+    self: z.string().optional(),
+  })
+  .loose();
+
 export const MessageSchema = z
   .object({
     messageId: z.string().min(1),
@@ -192,7 +202,7 @@ export const MessageSchema = z
     contextId: z.string().optional(),
     taskId: z.string().optional(),
     extensions: z.array(z.string()).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: TidepoolMetadataSchema.optional(),
   })
   .loose();
 
