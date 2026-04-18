@@ -57,7 +57,9 @@ describe("channel notifyInbound", () => {
       contextId: "C1",
       messageId: "M1",
       peer: "bob",
+      self: "alice",
       participants: ["bob"],
+      parts: [],
       text: "hello",
     });
     expect(calls).toHaveLength(1);
@@ -93,13 +95,64 @@ describe("channel notifyInbound", () => {
       contextId: "C1",
       messageId: "M1",
       peer: "alice",
+      self: "wolverine",
       participants: ["alice", "wolverine", "bobby"],
+      parts: [],
       text: "hi all",
     });
     expect(calls[0].params.meta.participants).toBe("alice wolverine bobby");
     // Store records every non-self participant (alice, bobby).
     const summaries = store.listThreads();
     expect(summaries[0].peers).toEqual(["alice", "bobby"]);
+  });
+
+  it("renders self, addressed_to, in_reply_to on the channel tag", async () => {
+    const { ch } = setup({ self: "bob" });
+    const calls: any[] = [];
+    (ch.server as any).notification = async (n: unknown) => {
+      calls.push(n);
+    };
+    await ch.notifyInbound({
+      taskId: "t",
+      contextId: "c",
+      messageId: "m",
+      peer: "alice",
+      self: "bob",
+      participants: ["alice", "bob", "carol"],
+      addressedTo: ["bob"],
+      inReplyTo: "m-prev",
+      parts: [],
+      text: "hi",
+    });
+    expect(calls).toHaveLength(1);
+    const meta = calls[0].params.meta;
+    expect(meta.self).toBe("bob");
+    expect(meta.participants).toBe("alice bob carol");
+    expect(meta.addressed_to).toBe("bob");
+    expect(meta.in_reply_to).toBe("m-prev");
+  });
+
+  it("omits self/addressed_to/in_reply_to when not set", async () => {
+    const { ch } = setup({ self: "bob" });
+    const calls: any[] = [];
+    (ch.server as any).notification = async (n: unknown) => {
+      calls.push(n);
+    };
+    await ch.notifyInbound({
+      taskId: "t",
+      contextId: "c",
+      messageId: "m",
+      peer: "alice",
+      self: "", // pre-v1 sender — daemon did not stamp self
+      participants: ["alice", "bob"],
+      parts: [],
+      text: "hi",
+    });
+    expect(calls).toHaveLength(1);
+    const meta = calls[0].params.meta;
+    expect(meta.self).toBeUndefined();
+    expect(meta.addressed_to).toBeUndefined();
+    expect(meta.in_reply_to).toBeUndefined();
   });
 });
 

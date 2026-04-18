@@ -383,11 +383,28 @@ export function createChannel(opts: CreateChannelOpts) {
       task_id: info.taskId,
       message_id: info.messageId,
     };
+
+    // self: always present when daemon stamped it (v1 adapters get it;
+    // pre-v1 senders via A2A-compatible daemons won't stamp it, so omit)
+    if (info.self) {
+      meta.self = info.self;
+    }
+
     // Surface participants on the channel block only when multi-party.
     if (info.participants.length > 1) {
       // Space-separated string — renders cleanly as a <channel …> attribute and
       // is trivial to split on the agent side.
       meta.participants = info.participants.join(" ");
+    }
+
+    // Optional addressed_to (space-separated)
+    if (info.addressedTo && info.addressedTo.length > 0) {
+      meta.addressed_to = info.addressedTo.join(" ");
+    }
+
+    // Optional in_reply_to
+    if (info.inReplyTo) {
+      meta.in_reply_to = info.inReplyTo;
     }
 
     await server.notification({

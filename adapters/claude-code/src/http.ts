@@ -12,7 +12,10 @@ export type InboundInfo = {
   contextId: string;
   messageId: string;
   peer: string;
+  self: string;           // receiver-view handle of the local agent (stamped by daemon; empty string for pre-v1 senders)
   participants: string[];
+  addressedTo?: string[]; // optional addressed_to hint from sender
+  inReplyTo?: string;     // optional in_reply_to message ID
   parts: A2APart[];
   text: string; // first text part, or empty string — kept for convenience
 };
@@ -81,6 +84,15 @@ export async function startHttp(opts: StartHttpOpts) {
 
     const participants = parseParticipants(msg?.metadata?.participants, peer);
 
+    const self =
+      typeof msg?.metadata?.self === "string" ? msg.metadata.self : "";
+    const addressedToRaw = msg?.metadata?.addressed_to;
+    const addressedTo = Array.isArray(addressedToRaw)
+      ? addressedToRaw.filter((v): v is string => typeof v === "string" && v.length > 0)
+      : undefined;
+    const inReplyTo =
+      typeof msg?.metadata?.in_reply_to === "string" ? msg.metadata.in_reply_to : undefined;
+
     const taskId = randomUUID();
     const contextId =
       typeof msg.contextId === "string" ? msg.contextId : randomUUID();
@@ -94,7 +106,10 @@ export async function startHttp(opts: StartHttpOpts) {
         contextId,
         messageId,
         peer,
+        self,
         participants,
+        addressedTo,
+        inReplyTo,
         parts,
         text,
       });
