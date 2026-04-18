@@ -4,6 +4,7 @@ import {
 } from "./a2a.js";
 import type { AgentCard } from "./a2a.js";
 import { CONNECTION_EXTENSION_URL } from "./middleware.js";
+import { MULTI_PARTY_ENVELOPE_V1_URL } from "./extensions.js";
 import type { RemoteAgent } from "./types.js";
 
 export type { AgentCard };
@@ -37,6 +38,11 @@ export function buildLocalAgentCard(opts: BuildLocalOpts): AgentCard {
       extensions: [
         declareExtension(CONNECTION_EXTENSION_URL, {
           description: "Tidepool peer friending handshake",
+          required: false,
+        }),
+        declareExtension(MULTI_PARTY_ENVELOPE_V1_URL, {
+          description:
+            "Multi-party envelope v1: self, addressed_to, in_reply_to, shared message_id, delivery acks",
           required: false,
         }),
       ],

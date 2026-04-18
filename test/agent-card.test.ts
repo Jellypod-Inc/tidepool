@@ -47,6 +47,22 @@ describe("buildLocalAgentCard", () => {
       description: expect.any(String),
     });
   });
+
+  it("advertises multi-party-envelope/v1 extension as optional", () => {
+    const card = buildLocalAgentCard({
+      name: "rust-expert",
+      description: "Expert in Rust and systems programming",
+      publicUrl: "https://example.com:9900",
+      tenant: "rust-expert",
+    });
+
+    const ext = card.capabilities.extensions?.find(
+      (e) => e.uri === "https://tidepool.dev/ext/multi-party-envelope/v1",
+    );
+    expect(ext).toBeDefined();
+    expect(ext?.required).toBe(false);
+    expect(ext?.description).toMatch(/multi-party/i);
+  });
 });
 
 describe("buildRemoteAgentCard", () => {
