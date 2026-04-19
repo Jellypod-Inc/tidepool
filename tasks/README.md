@@ -39,3 +39,5 @@ Ordered roughly by effort / readiness, not priority.
 | 6 | [Web dashboard](./07-web-dashboard.md) | M |
 | 7 | [Framework-agnostic adapter](./08-framework-agnostic-adapter.md) | M |
 | 8 | [NAT traversal and WireGuard transport](./09-wireguard-transport.md) | Phased: docs (S) → relay (M) → WireGuard (L) |
+| 11 | [Thread-canonical participants + reply_all (P3)](./11-thread-canonical-participants.md) | M |
+| 12 | [Outbound-dispatch helper extraction](./12-outbound-dispatch-extraction.md) | S |
