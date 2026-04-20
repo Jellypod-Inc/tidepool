@@ -88,7 +88,6 @@ export async function sendBroadcast(opts: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Origin: "tidepool-adapter",
         "X-Session-Id": deps.sessionId,
       },
       body: JSON.stringify(body),
