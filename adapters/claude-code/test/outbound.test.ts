@@ -1,345 +1,137 @@
-import { describe, expect, it, vi } from "vitest";
-import { SendError, sendOutbound } from "../src/outbound.js";
+import { describe, it, expect } from "vitest";
+import { sendBroadcast, BroadcastError } from "../src/outbound.js";
 
-function okAck() {
-  return new Response(
-    JSON.stringify({
-      id: "T-from-peer",
-      contextId: "ctx-from-peer",
-      status: { state: "completed" },
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
-}
-
-describe("sendOutbound", () => {
-  it("posts to /:peer/message:send with Origin header and supplied contextId", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(okAck());
-    const result = await sendOutbound({
-      peer: "bob",
-      contextId: "C-test",
-      text: "hi",
-      self: "alice",
-      deps: { localPort: 9901, fetchImpl },
-    });
-    expect(result.messageId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(fetchImpl).toHaveBeenCalledOnce();
-    const [url, init] = fetchImpl.mock.calls[0];
-    expect(url).toBe("http://127.0.0.1:9901/bob/message:send");
-    expect((init as RequestInit).headers).toMatchObject({
-      "Content-Type": "application/json",
-      Origin: "http://127.0.0.1:9901",
-    });
-    expect(((init as RequestInit).headers as Record<string, string>)["X-Agent"]).toBeUndefined();
-    const body = JSON.parse((init as RequestInit).body as string);
-    expect(body.message).toMatchObject({
-      messageId: result.messageId,
-      contextId: "C-test",
-      parts: [{ kind: "text", text: "hi" }],
-    });
-    expect(body.message.metadata).toBeUndefined();
-  });
-
-  it("uses caller-supplied contextId in message", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(okAck());
-    const result = await sendOutbound({
-      peer: "bob",
-      contextId: "ctx-existing",
-      text: "hi",
-      self: "alice",
-      deps: { localPort: 9901, fetchImpl },
-    });
-    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
-    expect(body.message.contextId).toBe("ctx-existing");
-  });
-
-  it("returns a structured error result when daemon is down (ECONNREFUSED)", async () => {
-    const err: any = new Error("fetch failed");
-    err.cause = { code: "ECONNREFUSED" };
-    const fetchImpl = vi.fn().mockRejectedValue(err);
-    await expect(
-      sendOutbound({
-        peer: "bob",
-        contextId: "C-test",
-        text: "hi",
-        self: "alice",
-        deps: { localPort: 9901, fetchImpl },
-      }),
-    ).rejects.toMatchObject({ kind: "daemon-down" });
-  });
-
-  it("rejects with peer-not-registered on structured peer_not_found error", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { code: "peer_not_found", message: `No peer named "bob"` } }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    await expect(
-      sendOutbound({
-        peer: "bob",
-        contextId: "C-test",
-        text: "hi",
-        self: "alice",
-        deps: { localPort: 9901, fetchImpl },
-      }),
-    ).rejects.toMatchObject({ kind: "peer-not-registered" });
-  });
-
-  it("rejects with peer-unreachable on structured peer_unreachable error", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: { code: "peer_unreachable", message: `"bob" unreachable` } }),
-        { status: 502, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    await expect(
-      sendOutbound({
-        peer: "bob",
-        contextId: "C-test",
-        text: "hi",
-        self: "alice",
-        deps: { localPort: 9901, fetchImpl },
-      }),
-    ).rejects.toMatchObject({ kind: "peer-unreachable" });
-  });
-
-  it("rejected errors are SendError instances (and Error instances) with stack traces", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      new Response("nope", { status: 404 }),
-    );
-    try {
-      await sendOutbound({
-        peer: "bob",
-        contextId: "C-test",
-        text: "hi",
-        self: "alice",
-        deps: { localPort: 9901, fetchImpl },
-      });
-      throw new Error("expected send to throw");
-    } catch (err) {
-      expect(err).toBeInstanceOf(SendError);
-      expect(err).toBeInstanceOf(Error);
-      expect((err as SendError).stack).toBeTruthy();
-      expect((err as SendError).name).toBe("SendError");
-    }
-  });
-
-  it("embeds message.metadata.participants when participants is supplied", async () => {
-    let captured: any;
-    const fetchImpl = (async (_url: any, init: any) => {
-      captured = JSON.parse(init.body);
-      return new Response(
-        JSON.stringify({ id: "T1", contextId: "C1", status: { state: "completed" } }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+describe("sendBroadcast", () => {
+  it("serializes body with optional fields", async () => {
+    let capturedBody: any;
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      expect(url).toMatch(/\/message:broadcast$/);
+      capturedBody = JSON.parse(init!.body as string);
+      return new Response(JSON.stringify({
+        context_id: "00000000-0000-4000-8000-000000000001",
+        message_id: "00000000-0000-4000-8000-000000000002",
+        results: [{ peer: "alice", delivery: "accepted" }],
+      }), { status: 200 });
     }) as typeof fetch;
-    await sendOutbound({
-      peer: "bob",
-      contextId: "C1",
-      text: "hi all",
-      self: "alice",
-      participants: ["alice", "bob", "carol"],
-      deps: { localPort: 9901, fetchImpl },
+
+    const resp = await sendBroadcast({
+      peers: ["alice", "bob"],
+      text: "hi",
+      addressed_to: ["alice"],
+      in_reply_to: "msg-1",
+      deps: { localPort: 8080, sessionId: "s", fetchImpl },
     });
-    expect(captured.message.metadata).toEqual({
-      participants: ["alice", "bob", "carol"],
+
+    expect(capturedBody).toEqual({
+      peers: ["alice", "bob"],
+      text: "hi",
+      addressed_to: ["alice"],
+      in_reply_to: "msg-1",
     });
+    expect(resp.message_id).toBe("00000000-0000-4000-8000-000000000002");
   });
 
-  it("omits message.metadata when participants is not supplied", async () => {
-    let captured: any;
-    const fetchImpl = (async (_url: any, init: any) => {
-      captured = JSON.parse(init.body);
-      return new Response(
-        JSON.stringify({ id: "T1", contextId: "C1", status: { state: "completed" } }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+  it("omits optional fields when not provided", async () => {
+    let capturedBody: any;
+    const fetchImpl = (async (_: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(init!.body as string);
+      return new Response(JSON.stringify({
+        context_id: "ctx",
+        message_id: "msg",
+        results: [],
+      }), { status: 200 });
     }) as typeof fetch;
-    await sendOutbound({
-      peer: "bob",
-      contextId: "C1",
-      text: "hi",
-      self: "alice",
-      deps: { localPort: 9901, fetchImpl },
-    });
-    expect(captured.message).not.toHaveProperty("metadata");
-  });
-});
-
-describe("sendOutbound — A2A-native headers", () => {
-  it("POSTs without X-Agent, with Origin, to /{peer}/message:send", async () => {
-    const captured: { url: string; headers: Record<string, string>; body: any } = {
-      url: "", headers: {}, body: null,
-    };
-    const fakeFetch = (async (url: string, init: RequestInit) => {
-      captured.url = url;
-      captured.headers = {} as Record<string, string>;
-      const hdrs = (init.headers as any) ?? {};
-      for (const [k, v] of Object.entries(hdrs)) captured.headers[k] = String(v);
-      captured.body = JSON.parse(init.body as string);
-      return new Response(
-        JSON.stringify({ id: "t-1", status: { state: "completed" } }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    }) as unknown as typeof fetch;
-
-    const { sendOutbound } = await import("../src/outbound.js");
-    await sendOutbound({
-      peer: "bob",
-      contextId: "ctx-1",
-      text: "hi",
-      self: "alice",
-      deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
-    });
-    expect(captured.url).toBe("http://127.0.0.1:4443/bob/message:send");
-    expect(captured.headers["X-Agent"]).toBeUndefined();
-    expect(captured.headers["x-agent"]).toBeUndefined();
-    // Origin header present and matches daemon URL
-    expect(captured.headers.Origin ?? captured.headers.origin).toBe(
-      "http://127.0.0.1:4443",
-    );
-    expect(captured.body.message.parts[0].text).toBe("hi");
+    await sendBroadcast({ peers: ["x"], text: "y", deps: { localPort: 1, sessionId: "s", fetchImpl } });
+    expect(Object.keys(capturedBody).sort()).toEqual(["peers", "text"]);
   });
 
-  it("maps structured peer_not_found error to SendError(peer-not-registered)", async () => {
-    const fakeFetch = (async () =>
-      new Response(
-        JSON.stringify({
-          error: {
-            code: "peer_not_found",
-            message: `No peer named "charlie"`,
-            hint: "call list_peers",
-          },
-        }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
-      )) as unknown as typeof fetch;
-
-    const { sendOutbound, SendError } = await import("../src/outbound.js");
-    await expect(
-      sendOutbound({
-        peer: "charlie",
-        contextId: "ctx-1",
-        text: "hi",
-        self: "alice",
-        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
-      }),
-    ).rejects.toMatchObject({
-      kind: "peer-not-registered",
-      hint: "call list_peers",
-    });
+  it("includes thread when provided", async () => {
+    let capturedBody: any;
+    const fetchImpl = (async (_: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(init!.body as string);
+      return new Response(JSON.stringify({ context_id: "ctx", message_id: "msg", results: [] }), { status: 200 });
+    }) as typeof fetch;
+    await sendBroadcast({ peers: ["x"], text: "y", thread: "thread-1", deps: { localPort: 1, sessionId: "s", fetchImpl } });
+    expect(capturedBody.thread).toBe("thread-1");
   });
 
-  it("maps structured peer_unreachable error to SendError(peer-unreachable)", async () => {
-    const fakeFetch = (async () =>
-      new Response(
-        JSON.stringify({
-          error: {
-            code: "peer_unreachable",
-            message: `"bob" unreachable`,
-            hint: "peer may be offline",
-          },
-        }),
-        { status: 502, headers: { "Content-Type": "application/json" } },
-      )) as unknown as typeof fetch;
-
-    const { sendOutbound, SendError } = await import("../src/outbound.js");
-    await expect(
-      sendOutbound({
-        peer: "bob",
-        contextId: "ctx-1",
-        text: "hi",
-        self: "alice",
-        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
-      }),
-    ).rejects.toMatchObject({
-      kind: "peer-unreachable",
-    });
+  it("throws BroadcastError on HTTP 400 with parsed body", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ code: "invalid_addressed_to", detail: { handle: "ghost" } }), { status: 400 })
+    ) as typeof fetch;
+    await expect(sendBroadcast({
+      peers: ["alice"], text: "hi", addressed_to: ["ghost"],
+      deps: { localPort: 1, sessionId: "s", fetchImpl },
+    })).rejects.toBeInstanceOf(BroadcastError);
   });
 
-  it("maps structured agent_offline error to SendError(peer-not-registered)", async () => {
-    // agent_offline from remote daemon ≈ "peer not currently accepting" from
-    // caller's POV. Classify as peer-not-registered for retry/hint purposes.
-    const fakeFetch = (async () =>
-      new Response(
-        JSON.stringify({
-          error: {
-            code: "agent_offline",
-            message: `"bob" offline`,
-          },
-        }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      )) as unknown as typeof fetch;
-
-    const { sendOutbound } = await import("../src/outbound.js");
-    await expect(
-      sendOutbound({
-        peer: "bob",
-        contextId: "ctx-1",
-        text: "hi",
-        self: "alice",
-        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
-      }),
-    ).rejects.toMatchObject({
-      kind: "peer-not-registered",
-    });
+  it("throws BroadcastError(status=0, daemon-down) on connection refused", async () => {
+    const fetchImpl = (async () => {
+      const e: any = new Error("fetch failed");
+      e.cause = { code: "ECONNREFUSED" };
+      throw e;
+    }) as typeof fetch;
+    const thrown = await sendBroadcast({
+      peers: ["alice"], text: "hi",
+      deps: { localPort: 1, sessionId: "s", fetchImpl },
+    }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(BroadcastError);
+    expect(thrown.status).toBe(0);
   });
 
-  it("POSTs to /peer/agent/message:send for scoped handles", async () => {
-    let receivedUrl = "";
-    const fakeFetch = (async (url: string) => {
-      receivedUrl = url;
-      return new Response(
-        JSON.stringify({ messageId: "ok", contextId: "ctx-1", role: "agent", parts: [] }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    }) as unknown as typeof fetch;
-
-    const { sendOutbound } = await import("../src/outbound.js");
-    await sendOutbound({
-      peer: "bob/writer",
-      contextId: "ctx-1",
-      text: "hi",
-      self: "quail",
-      deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
-    });
-    expect(new URL(receivedUrl).pathname).toBe("/bob/writer/message:send");
+  it("rejects empty peers array", async () => {
+    await expect(sendBroadcast({
+      peers: [], text: "hi",
+      deps: { localPort: 1, sessionId: "s" },
+    })).rejects.toBeInstanceOf(BroadcastError);
   });
 
-  it("POSTs to /<bare>/message:send for bare handles (unchanged)", async () => {
-    let receivedUrl = "";
-    const fakeFetch = (async (url: string) => {
-      receivedUrl = url;
-      return new Response(
-        JSON.stringify({ messageId: "ok", contextId: "ctx-2", role: "agent", parts: [] }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-    }) as unknown as typeof fetch;
-
-    const { sendOutbound } = await import("../src/outbound.js");
-    await sendOutbound({
-      peer: "writer",
-      contextId: "ctx-2",
-      text: "hi",
-      self: "quail",
-      deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
-    });
-    expect(new URL(receivedUrl).pathname).toBe("/writer/message:send");
+  it("uses X-Session-Id header", async () => {
+    let capturedHeaders: any;
+    const fetchImpl = (async (_: string, init?: RequestInit) => {
+      capturedHeaders = init!.headers;
+      return new Response(JSON.stringify({ context_id: "c", message_id: "m", results: [] }), { status: 200 });
+    }) as typeof fetch;
+    await sendBroadcast({ peers: ["x"], text: "y", deps: { localPort: 1, sessionId: "SESSION-123", fetchImpl } });
+    const headerValue = (capturedHeaders as Record<string, string>)["X-Session-Id"] ?? (capturedHeaders as Record<string, string>)["x-session-id"];
+    expect(headerValue).toBe("SESSION-123");
   });
 
-  it("rejects malformed peer handle (too many slashes)", async () => {
-    const fakeFetch = vi.fn();
-    const { sendOutbound } = await import("../src/outbound.js");
-    await expect(
-      sendOutbound({
-        peer: "a/b/c",
-        contextId: "ctx-3",
-        text: "hi",
-        self: "quail",
-        deps: { localPort: 4443, host: "127.0.0.1", fetchImpl: fakeFetch },
-      }),
-    ).rejects.toThrow();
-    // Should not have made any network call
-    expect(fakeFetch).not.toHaveBeenCalled();
+  it("BroadcastError has status and detail fields", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ code: "bad" }), { status: 500 })
+    ) as typeof fetch;
+    const thrown = await sendBroadcast({
+      peers: ["x"], text: "y",
+      deps: { localPort: 1, sessionId: "s", fetchImpl },
+    }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(BroadcastError);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(typeof thrown.status).toBe("number");
+    expect(thrown.status).toBe(500);
+    expect(thrown.detail).toBeDefined();
+    expect(thrown.name).toBe("BroadcastError");
+  });
+
+  it("uses custom host when provided", async () => {
+    let capturedUrl = "";
+    const fetchImpl = (async (url: string) => {
+      capturedUrl = url;
+      return new Response(JSON.stringify({ context_id: "c", message_id: "m", results: [] }), { status: 200 });
+    }) as typeof fetch;
+    await sendBroadcast({
+      peers: ["x"], text: "y",
+      deps: { localPort: 4000, sessionId: "s", host: "10.0.0.1", fetchImpl },
+    });
+    expect(capturedUrl).toBe("http://10.0.0.1:4000/message:broadcast");
+  });
+
+  it("rethrows non-connection errors unchanged", async () => {
+    const weirdError = new Error("something unexpected");
+    const fetchImpl = (async () => { throw weirdError; }) as typeof fetch;
+    await expect(sendBroadcast({
+      peers: ["x"], text: "y",
+      deps: { localPort: 1, sessionId: "s", fetchImpl },
+    })).rejects.toBe(weirdError);
   });
 });

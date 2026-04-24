@@ -215,6 +215,52 @@ describe("startHttp inbound endpoint", () => {
     expect(received[0].participants).toEqual(["alice", "bob"]);
   });
 
+  it("extracts self, addressed_to, in_reply_to from metadata", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "m1",
+          contextId: "c1",
+          parts: [{ kind: "text", text: "hello" }],
+          metadata: {
+            from: "alice",
+            self: "bob",
+            participants: ["alice", "bob", "carol"],
+            addressed_to: ["bob"],
+            in_reply_to: "m0",
+          },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].self).toBe("bob");
+    expect(received[0].addressedTo).toEqual(["bob"]);
+    expect(received[0].inReplyTo).toBe("m0");
+  });
+
+  it("self defaults to empty string when metadata.self is absent (pre-v1 sender)", async () => {
+    const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          messageId: "m2",
+          contextId: "c2",
+          parts: [{ kind: "text", text: "hi" }],
+          metadata: { from: "alice" },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].self).toBe("");
+    expect(received[0].addressedTo).toBeUndefined();
+    expect(received[0].inReplyTo).toBeUndefined();
+  });
+
   it("falls back to [peer] when participants array contains only invalid entries", async () => {
     const res = await fetch(`http://127.0.0.1:${server.port}/message:send`, {
       method: "POST",

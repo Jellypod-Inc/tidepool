@@ -3,7 +3,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { loadAgentConfig, loadProxyConfig } from "./config.js";
 import { startHttp, type InboundInfo } from "./http.js";
 import { createChannel } from "./channel.js";
-import { sendOutbound } from "./outbound.js";
+import { sendBroadcast } from "./outbound.js";
 import { createThreadStore } from "./thread-store.js";
 import { openSession } from "./session-client.js";
 import { fetchPeers } from "./peers-client.js";
@@ -41,14 +41,14 @@ export async function start(opts: StartOpts) {
       const peers = await fetchPeers(daemonUrl, agent.agentName);
       return peers.map((p) => p.handle);
     },
-    send: ({ peer, contextId, text, participants }) =>
-      sendOutbound({
-        peer,
-        contextId,
+    broadcast: ({ peers, text, thread, addressed_to, in_reply_to }) =>
+      sendBroadcast({
+        peers,
         text,
-        self: agent.agentName,
-        participants,
-        deps: { localPort: proxy.localPort, host, sessionId: sessionBox.id || undefined },
+        thread,
+        addressed_to,
+        in_reply_to,
+        deps: { localPort: proxy.localPort, host, sessionId: sessionBox.id },
       }),
   });
 

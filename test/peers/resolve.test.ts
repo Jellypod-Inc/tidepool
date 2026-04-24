@@ -3,6 +3,9 @@ import {
   parseScoped,
   projectHandles,
   resolveHandle,
+  handleToAgentDid,
+  agentDidToHandle,
+  peerDid,
 } from "../../src/peers/resolve.js";
 import type { PeersConfig } from "../../src/types.js";
 
@@ -128,5 +131,58 @@ describe("resolveHandle", () => {
 
   it("errors when scoped agent is not in peer's agent list", () => {
     expect(() => resolveHandle("alice/trader", peers, [])).toThrow(/no agent .* on peer/);
+  });
+});
+
+const didPeers: PeersConfig = {
+  peers: {
+    alice: { did: "did:key:alice", endpoint: "https://a", agents: ["writer", "editor"] },
+    bob:   { did: "did:key:bob",   endpoint: "https://b", agents: ["writer"] },
+  },
+};
+
+describe("DID↔handle helpers", () => {
+  it("round-trips a bare handle when globally unique", () => {
+    const localAgents = ["me"];
+    const did = handleToAgentDid("editor", didPeers, localAgents);
+    expect(did).toBe("did:key:alice::editor");
+    expect(agentDidToHandle(did, didPeers, localAgents)).toBe("editor");
+  });
+
+  it("round-trips a scoped handle when agent name collides", () => {
+    const localAgents: string[] = [];
+    const did = handleToAgentDid("bob/writer", didPeers, localAgents);
+    expect(did).toBe("did:key:bob::writer");
+    expect(agentDidToHandle(did, didPeers, localAgents)).toBe("bob/writer");
+  });
+
+  it("round-trips self agents via self:: prefix", () => {
+    const localAgents = ["me"];
+    const did = handleToAgentDid("me", didPeers, localAgents);
+    expect(did).toBe("self::me");
+    expect(agentDidToHandle(did, didPeers, localAgents)).toBe("me");
+  });
+
+  it("re-projects across viewers (same DID, different projections)", () => {
+    const viewerWithCollision: PeersConfig = {
+      peers: {
+        alice: { did: "did:key:alice", endpoint: "https://a", agents: ["writer"] },
+      },
+    };
+    const localAgents = ["writer"]; // collides with alice/writer
+    const did = "did:key:alice::writer";
+    expect(agentDidToHandle(did, viewerWithCollision, localAgents))
+      .toBe("alice/writer");
+  });
+
+  it("peerDid prefers did over fingerprint", () => {
+    expect(peerDid({ did: "did:key:x", fingerprint: "sha256:y" })).toBe("did:key:x");
+    expect(peerDid({ fingerprint: "sha256:y" })).toBe("sha256:y");
+    expect(() => peerDid({})).toThrow();
+  });
+
+  it("rejects unknown handle", () => {
+    expect(() => handleToAgentDid("ghost", didPeers, []))
+      .toThrow(/no agent named ghost/);
   });
 });

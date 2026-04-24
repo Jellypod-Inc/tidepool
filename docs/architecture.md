@@ -190,9 +190,30 @@ sequenceDiagram
 
 ### 4b. Inbound A2A (remote peer → adapter)
 
-Mirror of 4a from the receiving side. `middleware.ts` runs `extractFingerprint → findPeerByFingerprint → checkAgentScope → rate-limiter → wire-validation`, then `proxy.ts` looks up the adapter endpoint in `session/registry.ts` and delivers.
+Mirror of 4a from the receiving side. `middleware.ts` runs `extractFingerprint → findPeerByFingerprint → checkAgentScope → rate-limiter → wire-validation`. Before forwarding to the adapter session, `identity-injection.ts:stampInboundMetadata` runs:
 
-### 4c. Friending handshake (CONNECTION_REQUEST)
+1. Stamp `metadata.from` = sender handle in receiver's view (existing behavior)
+2. Stamp `metadata.self` = receiver's own local agent name (multi-party-envelope/v1)
+3. Re-project `metadata.participants` from canonical `AgentDid` strings to receiver-view handles (multi-party-envelope/v1)
+4. Re-project `metadata.addressed_to` similarly (multi-party-envelope/v1)
+5. Record `(contextId, messageId)` into the shared `ThreadIndex` for future `in_reply_to` validation
+
+Both the remote→local (mTLS public plane) and local→local (loopback) inbound paths run through this stamping. Unknown DIDs pass through opaquely — the receiver never drops entries it can't resolve.
+
+### 4c. Multi-peer broadcast (adapter → daemon → fanout)
+
+When an adapter calls `POST /message:broadcast`, `broadcast.ts` handles the whole fanout:
+
+1. X-Session-Id auth identifies the sender agent
+2. Resolve each `peers[i]` display handle → canonical `AgentDid` (`handleToAgentDid`)
+3. Validate `addressed_to ⊆ peers` (DID space) → `invalid_addressed_to` on violation
+4. Validate `in_reply_to` via `threadIndex.has(contextId, message_id)` — "absent" rejects, "unknown"/"present" accept (fail-open on stale LRU window)
+5. Mint one shared `message_id`; record into the thread-index
+6. Build the canonical participant list: sender DID + all recipient DIDs
+7. Fan out in parallel via `deliverToLocalAgent` / `deliverToRemotePeer` — each recipient's daemon re-projects DIDs via step 4b
+8. Aggregate per-peer `{delivery: "accepted"|"failed", reason?}` results
+
+### 4d. Friending handshake (CONNECTION_REQUEST)
 
 Uses A2A extension `https://tidepool.dev/ext/connection/v1` — carried inside `Message.metadata`, not a separate RPC.
 
@@ -215,7 +236,7 @@ sequenceDiagram
 
 Policy comes from `server.toml` → `[connectionRequests] mode = "deny" | "manual" | "auto"`.
 
-### 4d. Adapter session lifecycle
+### 4e. Adapter session lifecycle
 
 ```mermaid
 sequenceDiagram
@@ -260,7 +281,7 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 |--------|------|---------|
 | `GET` | `/:tenant/.well-known/agent-card.json` | `agent-card.ts` → merged card from `session/card-merge.ts` |
 | `POST` | `/:tenant/:action` | `middleware.ts` pipeline → `handshake.ts` (if CONNECTION_REQUEST) or `proxy.ts` → adapter |
-| `*` | `/:tenant/tasks/*` | 501 UnsupportedOperation (reserved for future `message:stream`, task RPC — see `tasks/03-message-stream.md`) |
+| `*` | `/:tenant/tasks/*` | 501 UnsupportedOperation (reserved for future `message:stream`, task RPC — see [#4](https://github.com/Jellypod-Inc/tidepool/issues/4)) |
 
 ### Local plane (HTTP, 127.0.0.1 only)
 
@@ -270,6 +291,7 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 | `GET` | `/.well-known/tidepool/peers` | `server.ts` — reachable peers: `peers.toml` entries ∪ live local sessions on this daemon. `?self=<handle>` filters the caller. Response is `[{handle, did}]` — minimally-unambiguous scoped projection; no locality field (same-daemon siblings implicitly trusted at the daemon boundary). |
 | `POST` | `/:peer/:agent/:action` | `server.ts` — scoped outbound routing: resolves peer via `peers.toml`, pins cert, proxies to `<endpoint>/<agent>/<action>`. |
 | `POST` | `/:tenant/:action` | Same pipeline as public but without mTLS; `X-Session-Id` identifies caller |
+| `POST` | `/message:broadcast` | `server.ts` + `broadcast.ts` — single-call multi-peer fanout. Mints a shared `message_id` and `context_id`, stamps canonical DIDs on the envelope (`participants`, `addressed_to`), validates `addressed_to ⊆ peers` and `in_reply_to` via the thread-index (fail-open on unknown context), delegates delivery to `deliverToLocalAgent` / `deliverToRemotePeer`, aggregates per-peer `{delivery, reason?}` results. Input: `BroadcastRequestSchema`. Output: `BroadcastResponseSchema`. `X-Session-Id` identifies the sender. |
 | `GET` | `/dashboard` and `/dashboard/*` | `dashboard/index.ts` |
 | `GET` | `/dashboard/api/status` · `/dashboard/api/peers` | Dashboard JSON |
 | `GET` | `/internal/tail` | `dashboard/index.ts` — SSE stream of inbound/outbound message taps (consumed by `tidepool tail`) |
@@ -278,6 +300,7 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 ### A2A extensions
 
 - `https://tidepool.dev/ext/connection/v1` — handshake metadata on `Message`. See `handshake.ts`.
+- `https://tidepool.dev/ext/multi-party-envelope/v1` — multi-party metadata (`self`, `addressed_to`, `in_reply_to`, shared `message_id`, delivery acks). Declared `required: false`; peers that don't speak v1 ignore unknown metadata and degrade to prose coordination. Wire identity travels as canonical `AgentDid` (`${peerDid}::${agent}` or `self::${agent}`); each receiver's daemon re-projects to the receiver's handle view. See `src/broadcast.ts`, `src/identity-injection.ts:stampInboundMetadata`, `src/thread-index.ts`, and the design spec at `docs/superpowers/specs/2026-04-17-multi-party-envelope-design.md`.
 
 ---
 
@@ -301,18 +324,32 @@ Discovery is the **daemon's** job; the adapter never speaks mTLS, never sees pee
 
 ## 8. Roadmap — built vs planned
 
-What's in `tasks/` but not yet implemented. Update this table as tasks land.
+Planned work is tracked as GitHub issues. Close them as tasks land and update the shipped section below.
 
-| # | Task | Status |
-|---|------|--------|
-| 01 | Per-friend rate limits | Proposed |
-| 02 | Audit log for trust decisions | Proposed (dashboard page scaffolded: `dashboard/pages/audit.ts`) |
-| 03 | Streaming (`message:stream`) | Proposed |
-| 04 | DID + Mainline DHT identity/discovery | Proposed |
-| 06 | Distributed knowledge layer (CRDTs) | Proposed |
-| 07 | Web dashboard | **Partially built** — `src/dashboard/` exists; needs real-time updates |
-| 08 | Framework-agnostic HTTP adapter | Proposed |
-| 09 | NAT traversal + WireGuard transport | Proposed (phased) |
+| Issue | Task | Status |
+|-------|------|--------|
+| [#2](https://github.com/Jellypod-Inc/tidepool/issues/2) | Per-friend rate limits | Proposed |
+| [#3](https://github.com/Jellypod-Inc/tidepool/issues/3) | Audit log for trust decisions | Proposed (dashboard page scaffolded: `dashboard/pages/audit.ts`) |
+| [#4](https://github.com/Jellypod-Inc/tidepool/issues/4) | Streaming (`message:stream`) | Proposed |
+| [#5](https://github.com/Jellypod-Inc/tidepool/issues/5) | DID + Mainline DHT identity/discovery | Proposed |
+| [#6](https://github.com/Jellypod-Inc/tidepool/issues/6) | Distributed knowledge layer (CRDTs) | Proposed |
+| [#7](https://github.com/Jellypod-Inc/tidepool/issues/7) | Web dashboard | **Partially built** — `src/dashboard/` exists; needs real-time updates |
+| [#8](https://github.com/Jellypod-Inc/tidepool/issues/8) | Framework-agnostic HTTP adapter | Proposed |
+| [#9](https://github.com/Jellypod-Inc/tidepool/issues/9) | NAT traversal + WireGuard transport | Proposed (phased) |
+| [#10](https://github.com/Jellypod-Inc/tidepool/issues/10) | Interactive agent add | Proposed |
+| [#11](https://github.com/Jellypod-Inc/tidepool/issues/11) | Thread-canonical participants + reply_all (P3) | Proposed — follow-up to multi-party envelope v1 |
+| [#12](https://github.com/Jellypod-Inc/tidepool/issues/12) | Outbound-dispatch helper extraction | Proposed — unify mTLS dispatcher/fetch block shared between `/:peer/:agent/:action`, `/:tenant/:action`, and broadcast helpers |
+
+**Rejected ideas (for posterity):**
+- **Cross-peer tool federation** — would make a remote peer's tools callable as local MCP tools. Rejected because it bypasses prose and introduces typed RPC between peers, which is explicitly not what this system is (violates §1).
+- **Blocking swarm-reasoning primitive** (e.g. `fanout(peers, text, timeout)` that waits and aggregates) — already unnecessary. Multi-peer `send` + the `participants` list convention lets agents run swarms in prose today. A blocking aggregator would hide coordination from the agent's own reasoning — same objection as tool federation.
+
+**Shipped in multi-party envelope v1 (P0–P2):**
+- `POST /message:broadcast` — single-call multi-peer fanout
+- Envelope v1 fields: `self`, `addressed_to`, `in_reply_to`, shared `message_id`, per-peer `delivery` ack
+- `AgentDid` canonical identity + per-receiver re-projection
+- Lightweight `ThreadIndex` LRU for `in_reply_to` validation
+- Optional A2A extension `https://tidepool.dev/ext/multi-party-envelope/v1`
 
 ---
 
@@ -325,8 +362,8 @@ What's in `tasks/` but not yet implemented. Update this table as tasks land.
 - Add or remove an HTTP endpoint or A2A extension
 - Change the middleware pipeline order or trust checks
 - Change persistent file layout under `$TIDEPOOL_HOME`
-- Complete a roadmap task (move from planned → built in §8)
+- Complete a roadmap task (close its GitHub issue and move it from planned → built in §8)
 
 Refactor-only changes (internal API, no new module boundary) don't need a doc change.
 
-Other canonical docs: `README.md` (user-facing), `THREATS.md` (threat model), `tasks/` (design specs for roadmap items), `fixtures/*.toml` (canonical config examples).
+Other canonical docs: `README.md` (user-facing), `THREATS.md` (threat model), GitHub issues (roadmap specs), `fixtures/*.toml` (canonical config examples).

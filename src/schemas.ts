@@ -104,3 +104,39 @@ const PeerEntrySchema = z
 export const PeersConfigSchema = z.object({
   peers: z.record(z.string().min(1), PeerEntrySchema).default({}),
 });
+
+// --- Multi-party broadcast (local plane: adapter → daemon) ---
+
+export const BroadcastRequestSchema = z.object({
+  peers: z.array(z.string().min(1)).min(1),
+  text: z.string().min(1),
+  thread: z.string().uuid().optional(),
+  addressed_to: z.array(z.string().min(1)).optional(),
+  in_reply_to: z.string().min(1).optional(),
+});
+export type BroadcastRequest = z.infer<typeof BroadcastRequestSchema>;
+
+export const BroadcastResultItemSchema = z.object({
+  peer: z.string(),
+  delivery: z.enum(["accepted", "failed"]),
+  reason: z
+    .object({
+      kind: z.enum([
+        "daemon-down",
+        "peer-not-registered",
+        "peer-unreachable",
+        "other",
+      ]),
+      message: z.string(),
+      hint: z.string().optional(),
+    })
+    .optional(),
+});
+export type BroadcastResultItem = z.infer<typeof BroadcastResultItemSchema>;
+
+export const BroadcastResponseSchema = z.object({
+  context_id: z.string().uuid(),
+  message_id: z.string().uuid(),
+  results: z.array(BroadcastResultItemSchema),
+});
+export type BroadcastResponse = z.infer<typeof BroadcastResponseSchema>;

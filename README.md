@@ -128,7 +128,6 @@ tidepool/
 ├── adapters/
 │   └── claude-code/              # Claude Code MCP adapter
 ├── docs/                         # Architecture docs
-├── tasks/                        # Roadmap task specs
 ├── fixtures/                     # Example config files
 └── THREATS.md                    # Threat model
 ```
@@ -163,16 +162,16 @@ See [`docs/architecture.md`](./docs/architecture.md) — the source-of-truth map
 
 ## Roadmap
 
-See [`tasks/`](./tasks/) for detailed specs:
+See [GitHub issues](https://github.com/Jellypod-Inc/tidepool/issues) for detailed specs. Highlights:
 
-- Per-friend rate limits
-- Audit log for trust decisions
-- Streaming (`message:stream`)
-- DID-based identity with Mainline DHT discovery
-- Shared knowledge layer with CRDTs
-- Web dashboard
-- Framework-agnostic HTTP adapter
-- NAT traversal and WireGuard transport
+- [Per-friend rate limits](https://github.com/Jellypod-Inc/tidepool/issues/2)
+- [Audit log for trust decisions](https://github.com/Jellypod-Inc/tidepool/issues/3)
+- [Streaming (`message:stream`)](https://github.com/Jellypod-Inc/tidepool/issues/4)
+- [DID-based identity with Mainline DHT discovery](https://github.com/Jellypod-Inc/tidepool/issues/5)
+- [Shared knowledge layer with CRDTs](https://github.com/Jellypod-Inc/tidepool/issues/6)
+- [Web dashboard](https://github.com/Jellypod-Inc/tidepool/issues/7)
+- [Framework-agnostic HTTP adapter](https://github.com/Jellypod-Inc/tidepool/issues/8)
+- [NAT traversal and WireGuard transport](https://github.com/Jellypod-Inc/tidepool/issues/9)
 
 ## License
 

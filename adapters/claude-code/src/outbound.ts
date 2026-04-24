@@ -1,27 +1,43 @@
-import { randomUUID } from "node:crypto";
-
 export type OutboundDeps = {
   localPort: number;
   host?: string;
   fetchImpl?: typeof fetch;
-  /** Session token returned by the daemon on registration; sent as X-Session-Id. */
-  sessionId?: string;
+  /** Session token from daemon registration; sent as X-Session-Id. */
+  sessionId: string;
 };
 
-export type SendErrorKind =
+export type BroadcastErrorKind =
   | "daemon-down"
   | "peer-not-registered"
   | "peer-unreachable"
   | "other";
 
-export class SendError extends Error {
-  readonly kind: SendErrorKind;
-  readonly hint: string;
-  constructor(kind: SendErrorKind, message: string, hint: string) {
-    super(message);
-    this.name = "SendError";
-    this.kind = kind;
-    this.hint = hint;
+/** Mirror of daemon BroadcastResultItem. Keep in sync with src/schemas.ts. */
+export interface BroadcastResultItem {
+  peer: string;
+  delivery: "accepted" | "failed";
+  reason?: {
+    kind: BroadcastErrorKind;
+    message: string;
+    hint?: string;
+  };
+}
+
+/** Mirror of daemon BroadcastResponse. */
+export interface BroadcastResponse {
+  context_id: string;
+  message_id: string;
+  results: BroadcastResultItem[];
+}
+
+export class BroadcastError extends Error {
+  readonly status: number;
+  readonly detail: unknown;
+  constructor(status: number, detail: unknown, message?: string) {
+    super(message ?? `broadcast_failed:${status}`);
+    this.name = "BroadcastError";
+    this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -33,112 +49,60 @@ function isConnectionRefused(err: unknown): boolean {
 }
 
 /**
- * POST one message to one peer via the tidepool daemon's local proxy.
+ * Single-call multi-peer send. The daemon mints the shared message_id and
+ * context_id, handles per-peer fanout, stamps envelope metadata (participants,
+ * self, etc.) as canonical DIDs re-projected per recipient.
  *
- * The caller (channel.ts) owns contextId minting so a fan-out to N peers
- * shares one id. When `participants` is supplied (length >= 2 by convention),
- * it rides on message.metadata.participants and is preserved by the daemon's
- * metadata injection — receivers read it to know who else is in the thread.
- *
- * Returns {messageId} on success. Throws SendError on failure.
+ * Throws BroadcastError with status=0 on daemon-down (connection refused),
+ * status=non-2xx with parsed body on HTTP error, or rethrown on unexpected
+ * transport errors.
  */
-export async function sendOutbound(args: {
-  peer: string;
-  contextId: string;
+export async function sendBroadcast(opts: {
+  peers: string[];
   text: string;
-  self: string;
-  participants?: string[];
+  thread?: string;
+  addressed_to?: string[];
+  in_reply_to?: string;
   deps: OutboundDeps;
-}): Promise<{ messageId: string }> {
-  const { peer, contextId, text, self: _self, participants, deps } = args;
-  const messageId = randomUUID();
+}): Promise<BroadcastResponse> {
+  const { peers, text, thread, addressed_to, in_reply_to, deps } = opts;
+  if (peers.length === 0) {
+    throw new BroadcastError(400, { code: "invalid_body" }, "peers must be non-empty");
+  }
+
   const host = deps.host ?? "127.0.0.1";
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const segments = peer.split("/").map(encodeURIComponent);
-  if (segments.length < 1 || segments.length > 2 || segments.some((s) => !s)) {
-    throw new SendError("other", `invalid peer handle: ${peer}`, "handle must be 'name' or 'peer/name'");
-  }
-  const url = `http://${host}:${deps.localPort}/${segments.join("/")}/message:send`;
+  const url = `http://${host}:${deps.localPort}/message:broadcast`;
 
-  const message: {
-    messageId: string;
-    contextId: string;
-    parts: Array<{ kind: "text"; text: string }>;
-    metadata?: { participants: string[] };
-  } = {
-    messageId,
-    contextId,
-    parts: [{ kind: "text", text }],
+  const body = {
+    peers,
+    text,
+    ...(thread ? { thread } : {}),
+    ...(addressed_to ? { addressed_to } : {}),
+    ...(in_reply_to ? { in_reply_to } : {}),
   };
-  if (participants && participants.length > 0) {
-    message.metadata = { participants };
-  }
-
-  const daemonOrigin = `http://${host}:${deps.localPort}`;
 
   let res: Response;
   try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Origin: daemonOrigin,
-    };
-    if (deps.sessionId) {
-      headers["X-Session-Id"] = deps.sessionId;
-    }
     res = await fetchImpl(url, {
       method: "POST",
-      headers,
-      body: JSON.stringify({ message }),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-Id": deps.sessionId,
+      },
+      body: JSON.stringify(body),
     });
-  } catch (err) {
-    if (isConnectionRefused(err)) {
-      throw new SendError(
-        "daemon-down",
-        "the tidepool daemon isn't running",
-        "Ask the user to run `tidepool claude-code:start` (or `tidepool start &`) and retry.",
-      );
+  } catch (e) {
+    if (isConnectionRefused(e)) {
+      throw new BroadcastError(0, { code: "daemon-down" }, "daemon not reachable on loopback");
     }
-    throw new SendError(
-      "other",
-      err instanceof Error ? err.message : String(err),
-      "Ask the user to check `tidepool status` and the daemon log at ~/.config/tidepool/logs/.",
-    );
+    throw e;
   }
 
   if (!res.ok) {
-    const detail = await res.json().catch(() => null as unknown);
-    const code = (detail as { error?: { code?: string } })?.error?.code;
-    const serverMessage = (detail as { error?: { message?: string } })?.error?.message;
-    const hint = (detail as { error?: { hint?: string } })?.error?.hint ?? "";
-
-    if (code === "peer_not_found" || code === "agent_offline") {
-      throw new SendError(
-        "peer-not-registered",
-        serverMessage ?? `no agent named "${peer}"`,
-        hint || "Call list_peers to see who's reachable. If the peer should exist, ask the user to confirm their session is running.",
-      );
-    }
-    if (code === "peer_unreachable" || code === "peer_timeout") {
-      throw new SendError(
-        "peer-unreachable",
-        serverMessage ?? `"${peer}" unreachable`,
-        hint || `Check that "${peer}"'s session is still running.`,
-      );
-    }
-    if (code === "origin_denied") {
-      throw new SendError(
-        "other",
-        serverMessage ?? "origin rejected by daemon",
-        hint || "This is a bug — the adapter should be sending a valid Origin header.",
-      );
-    }
-
-    throw new SendError(
-      "other",
-      serverMessage ?? `HTTP ${res.status}`,
-      hint || "Ask the user to check `tidepool status` and the daemon log.",
-    );
+    const detail = await res.json().catch(() => null);
+    throw new BroadcastError(res.status, detail);
   }
 
-  return { messageId };
+  return (await res.json()) as BroadcastResponse;
 }
