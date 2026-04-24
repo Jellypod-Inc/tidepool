@@ -1,0 +1,29 @@
+docs/architecture.md
+  3b0b7724c7564feb 284,327-347,365,369
+CLAUDE.md
+  3b0b7724c7564feb 22
+README.md
+  3b0b7724c7564feb 165,167-174
+adapters/claude-code/README.md
+  3b0b7724c7564feb 217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "e38544166992dcfdae61befaad0ce2ffed041bec",
+  "prompts": {
+    "3b0b7724c7564feb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a9f2d20-8cee-4761-a4c6-c1816f9d3173",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 36,
+      "overriden_lines": 0
+    }
+  }
+}
