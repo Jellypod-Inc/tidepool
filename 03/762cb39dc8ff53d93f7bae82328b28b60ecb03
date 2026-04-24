@@ -1,0 +1,36 @@
+.gitignore
+  3b0b7724c7564feb 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "03762cb39dc8ff53d93f7bae82328b28b60ecb03",
+  "prompts": {
+    "3b0b7724c7564feb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a9f2d20-8cee-4761-a4c6-c1816f9d3173",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 34,
+      "total_deletions": 1493,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    },
+    "5a4e096ba97502d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "182bc1eb-1be3-44bf-9e31-80906f616651",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Pierson Marks",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
