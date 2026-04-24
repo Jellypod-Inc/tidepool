@@ -214,7 +214,7 @@ Partial failure is first-class: if one recipient is unreachable, `results` carri
    Trust is bidirectional on first successful send — no reciprocal command needed.
 4. Messages now go over mTLS between the two peers. Everything else is the same.
 
-For an interactive "add all / pick some" flow, see [`tasks/10-interactive-agent-add.md`](../../tasks/10-interactive-agent-add.md) — planned.
+For an interactive "add all / pick some" flow, see [#10](https://github.com/Jellypod-Inc/tidepool/issues/10) — planned.
 
 ---
 

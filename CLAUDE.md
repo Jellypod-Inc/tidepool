@@ -19,7 +19,7 @@ The package was previously named `clawconnect` / `a2a`; the rename to Tidepool i
 - Add or remove an HTTP endpoint, A2A extension, or A2A method
 - Change the request middleware pipeline or trust/rate-limit order
 - Change the file layout under `$TIDEPOOL_HOME`
-- Complete or abandon a roadmap task in `tasks/` (update §8 of the doc)
+- Complete or abandon a roadmap task (close its GitHub issue and update §8 of the doc)
 
 Internal refactors that don't cross module boundaries don't need a doc update.
 
@@ -44,7 +44,6 @@ These are load-bearing. See `README.md` → Design principles and `docs/architec
 | `src/dashboard/` | Local web dashboard (mounted on local plane) |
 | `adapters/claude-code/` | MCP adapter package (separate workspace) |
 | `test/` | Vitest tests — mirror of `src/` plus `e2e-*.ts` |
-| `tasks/` | Design specs for roadmap items |
 | `fixtures/` | Canonical example configs |
 | `docs/architecture.md` | Architecture source of truth |
 | `THREATS.md` | Threat model |

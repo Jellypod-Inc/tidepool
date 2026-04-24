@@ -281,7 +281,7 @@ All under `$TIDEPOOL_HOME` (default `~/.config/tidepool`).
 |--------|------|---------|
 | `GET` | `/:tenant/.well-known/agent-card.json` | `agent-card.ts` → merged card from `session/card-merge.ts` |
 | `POST` | `/:tenant/:action` | `middleware.ts` pipeline → `handshake.ts` (if CONNECTION_REQUEST) or `proxy.ts` → adapter |
-| `*` | `/:tenant/tasks/*` | 501 UnsupportedOperation (reserved for future `message:stream`, task RPC — see `tasks/03-message-stream.md`) |
+| `*` | `/:tenant/tasks/*` | 501 UnsupportedOperation (reserved for future `message:stream`, task RPC — see [#4](https://github.com/Jellypod-Inc/tidepool/issues/4)) |
 
 ### Local plane (HTTP, 127.0.0.1 only)
 
@@ -324,22 +324,27 @@ Discovery is the **daemon's** job; the adapter never speaks mTLS, never sees pee
 
 ## 8. Roadmap — built vs planned
 
-What's in `tasks/` but not yet implemented. Update this table as tasks land.
+Planned work is tracked as GitHub issues. Close them as tasks land and update the shipped section below.
 
-| # | Task | Status |
-|---|------|--------|
-| 01 | Per-friend rate limits | Proposed |
-| 02 | Audit log for trust decisions | Proposed (dashboard page scaffolded: `dashboard/pages/audit.ts`) |
-| 03 | Streaming (`message:stream`) | Proposed |
-| 04 | DID + Mainline DHT identity/discovery | Proposed |
-| 06 | Distributed knowledge layer (CRDTs) | Proposed |
-| 07 | Web dashboard | **Partially built** — `src/dashboard/` exists; needs real-time updates |
-| 08 | Framework-agnostic HTTP adapter | Proposed |
-| 09 | NAT traversal + WireGuard transport | Proposed (phased) |
-| 11 | Thread-canonical participants + reply_all (P3) | Proposed — follow-up to multi-party envelope v1 |
-| 12 | Outbound-dispatch helper extraction | Proposed — unify mTLS dispatcher/fetch block shared between `/:peer/:agent/:action`, `/:tenant/:action`, and broadcast helpers |
+| Issue | Task | Status |
+|-------|------|--------|
+| [#2](https://github.com/Jellypod-Inc/tidepool/issues/2) | Per-friend rate limits | Proposed |
+| [#3](https://github.com/Jellypod-Inc/tidepool/issues/3) | Audit log for trust decisions | Proposed (dashboard page scaffolded: `dashboard/pages/audit.ts`) |
+| [#4](https://github.com/Jellypod-Inc/tidepool/issues/4) | Streaming (`message:stream`) | Proposed |
+| [#5](https://github.com/Jellypod-Inc/tidepool/issues/5) | DID + Mainline DHT identity/discovery | Proposed |
+| [#6](https://github.com/Jellypod-Inc/tidepool/issues/6) | Distributed knowledge layer (CRDTs) | Proposed |
+| [#7](https://github.com/Jellypod-Inc/tidepool/issues/7) | Web dashboard | **Partially built** — `src/dashboard/` exists; needs real-time updates |
+| [#8](https://github.com/Jellypod-Inc/tidepool/issues/8) | Framework-agnostic HTTP adapter | Proposed |
+| [#9](https://github.com/Jellypod-Inc/tidepool/issues/9) | NAT traversal + WireGuard transport | Proposed (phased) |
+| [#10](https://github.com/Jellypod-Inc/tidepool/issues/10) | Interactive agent add | Proposed |
+| [#11](https://github.com/Jellypod-Inc/tidepool/issues/11) | Thread-canonical participants + reply_all (P3) | Proposed — follow-up to multi-party envelope v1 |
+| [#12](https://github.com/Jellypod-Inc/tidepool/issues/12) | Outbound-dispatch helper extraction | Proposed — unify mTLS dispatcher/fetch block shared between `/:peer/:agent/:action`, `/:tenant/:action`, and broadcast helpers |
 
-**Shipped in this multi-party envelope v1 (P0–P2):**
+**Rejected ideas (for posterity):**
+- **Cross-peer tool federation** — would make a remote peer's tools callable as local MCP tools. Rejected because it bypasses prose and introduces typed RPC between peers, which is explicitly not what this system is (violates §1).
+- **Blocking swarm-reasoning primitive** (e.g. `fanout(peers, text, timeout)` that waits and aggregates) — already unnecessary. Multi-peer `send` + the `participants` list convention lets agents run swarms in prose today. A blocking aggregator would hide coordination from the agent's own reasoning — same objection as tool federation.
+
+**Shipped in multi-party envelope v1 (P0–P2):**
 - `POST /message:broadcast` — single-call multi-peer fanout
 - Envelope v1 fields: `self`, `addressed_to`, `in_reply_to`, shared `message_id`, per-peer `delivery` ack
 - `AgentDid` canonical identity + per-receiver re-projection
@@ -357,8 +362,8 @@ What's in `tasks/` but not yet implemented. Update this table as tasks land.
 - Add or remove an HTTP endpoint or A2A extension
 - Change the middleware pipeline order or trust checks
 - Change persistent file layout under `$TIDEPOOL_HOME`
-- Complete a roadmap task (move from planned → built in §8)
+- Complete a roadmap task (close its GitHub issue and move it from planned → built in §8)
 
 Refactor-only changes (internal API, no new module boundary) don't need a doc change.
 
-Other canonical docs: `README.md` (user-facing), `THREATS.md` (threat model), `tasks/` (design specs for roadmap items), `fixtures/*.toml` (canonical config examples).
+Other canonical docs: `README.md` (user-facing), `THREATS.md` (threat model), GitHub issues (roadmap specs), `fixtures/*.toml` (canonical config examples).
